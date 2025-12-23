@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+.DS_Store
+*.log
+.mvn
+frontend/node_modules
