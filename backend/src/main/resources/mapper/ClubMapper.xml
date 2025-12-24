@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.club.mapper.ClubMapper">
+
+    <resultMap id="ClubResultMap" type="com.example.demo.club.model.Club">
+        <id column="id" property="id" />
+        <result column="name" property="name" />
+        <result column="alias_name" property="aliasName" />
+        <result column="description" property="description" />
+        <result column="category" property="category" />
+        <result column="meeting_schedule" property="meetingSchedule" />
+        <result column="location" property="location" />
+        <result column="contact_email" property="contactEmail" />
+        <result column="advisor" property="advisor" />
+        <result column="image_url" property="imageUrl" />
+        <result column="school_id" property="schoolId" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+    </resultMap>
+
+    <sql id="BaseColumnList">
+        id, name, alias_name, description, category, meeting_schedule, location,
+        contact_email, advisor, image_url, school_id, created_at, updated_at
+    </sql>
+
+    <select id="findAll" resultMap="ClubResultMap">
+        SELECT <include refid="BaseColumnList" />
+        FROM clubs
+        ORDER BY name ASC
+    </select>
+
+    <select id="findById" resultMap="ClubResultMap" parameterType="long">
+        SELECT <include refid="BaseColumnList" />
+        FROM clubs
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="com.example.demo.club.model.Club" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO clubs (name, alias_name, description, category, meeting_schedule, location,
+                           contact_email, advisor, image_url, school_id)
+        VALUES (#{name}, #{aliasName}, #{description}, #{category}, #{meetingSchedule}, #{location},
+                #{contactEmail}, #{advisor}, #{imageUrl}, #{schoolId})
+    </insert>
+
+    <update id="update" parameterType="com.example.demo.club.model.Club">
+        UPDATE clubs
+        SET name = #{name},
+            alias_name = #{aliasName},
+            description = #{description},
+            category = #{category},
+            meeting_schedule = #{meetingSchedule},
+            location = #{location},
+            contact_email = #{contactEmail},
+            advisor = #{advisor},
+            image_url = #{imageUrl},
+            school_id = #{schoolId}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="delete" parameterType="long">
+        DELETE FROM clubs WHERE id = #{id}
+    </delete>
+
+</mapper>
