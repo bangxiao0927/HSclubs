@@ -5,6 +5,7 @@ import com.example.demo.club.model.Club;
 import com.example.demo.school.mapper.SchoolMapper;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -28,6 +29,7 @@ public class ClubService {
 
     public Club create(Club club) {
         ensureSchoolExists(club.getSchoolId());
+        normalizeClub(club);
         club.setId(null);
         clubMapper.insert(club);
         return club;
@@ -35,6 +37,7 @@ public class ClubService {
 
     public Club update(Long id, Club club) {
         ensureSchoolExists(club.getSchoolId());
+        normalizeClub(club);
         club.setId(id);
         clubMapper.update(club);
         return club;
@@ -47,6 +50,15 @@ public class ClubService {
     private void ensureSchoolExists(Long schoolId) {
         if (schoolId == null || schoolMapper.findById(schoolId) == null) {
             throw new IllegalArgumentException("Invalid schoolId");
+        }
+    }
+
+    private void normalizeClub(Club club) {
+        if (club.getAchievements() == null) {
+            club.setAchievements(Collections.emptyList());
+        }
+        if (club.getMemberCount() == null) {
+            club.setMemberCount(0);
         }
     }
 }

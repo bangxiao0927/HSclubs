@@ -45,6 +45,14 @@ const route = useRoute()
         </div>
 
         <div class="header-right">
+          <RouterLink to="/profile" class="profile-link">
+            <span class="profile-icon">👤</span>
+            <span>Profile</span>
+          </RouterLink>
+          <div class="auth-actions">
+            <RouterLink to="/profile?mode=login" class="auth-btn ghost">Log in</RouterLink>
+            <RouterLink to="/profile?mode=register" class="auth-btn primary">Register</RouterLink>
+          </div>
         </div>
       </div>
     </header>
@@ -173,6 +181,58 @@ const route = useRoute()
 .header-right {
   display: flex;
   align-items: center;
+  gap: 1rem;
+}
+
+.profile-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(254, 252, 232, 0.25);
+  text-decoration: none;
+  color: rgba(254, 252, 232, 0.85);
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.profile-link:hover {
+  border-color: rgba(253, 224, 71, 0.8);
+  background: rgba(253, 224, 71, 0.08);
+}
+
+.profile-icon {
+  font-size: 1.1rem;
+}
+
+.auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.auth-btn {
+  padding: 0.45rem 1.15rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.auth-btn.ghost {
+  border: 1px solid rgba(254, 252, 232, 0.4);
+  color: rgba(254, 252, 232, 0.9);
+}
+
+.auth-btn.primary {
+  background: #fde047;
+  color: #111;
+  box-shadow: 0 10px 20px rgba(253, 224, 71, 0.35);
+}
+
+.auth-btn:hover {
+  transform: translateY(-1px);
 }
 
 .view-container {

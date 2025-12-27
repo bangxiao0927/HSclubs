@@ -1,6 +1,7 @@
 package com.example.demo.club.model;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Represents an extracurricular club that students can explore or join.
@@ -17,6 +18,8 @@ public class Club {
     private String contactEmail;
     private String advisor;
     private String imageUrl;
+    private Integer memberCount;
+    private List<String> achievements;
     private Long schoolId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -99,6 +102,22 @@ public class Club {
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public Integer getMemberCount() {
+        return memberCount;
+    }
+
+    public void setMemberCount(Integer memberCount) {
+        this.memberCount = memberCount;
+    }
+
+    public List<String> getAchievements() {
+        return achievements;
+    }
+
+    public void setAchievements(List<String> achievements) {
+        this.achievements = achievements;
     }
 
     public Long getSchoolId() {
