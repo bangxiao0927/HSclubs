@@ -1,0 +1,148 @@
+export type Club = {
+  id: string
+  name: string
+  category: string
+  members: number
+  advisor: string
+  meeting: string
+  description: string
+  achievements: string[]
+  contact: string
+}
+
+export const clubs: Club[] = [
+  {
+    id: 'spartan-robotics',
+    name: 'Spartan Robotics',
+    category: 'STEM & Innovation',
+    members: 72,
+    advisor: 'Dr. Patel',
+    meeting: 'Thu · Innovation Lab',
+    description: 'Competition-ready robotics team covering CAD, fabrication, and autonomous driving stacks.',
+    achievements: ['2024 NorCal Regional finalist', 'NASA grant recipient', 'Hosts middle school scrimmages'],
+    contact: 'mvrobotics@mvla.net',
+  },
+  {
+    id: 'trail-stewards',
+    name: 'Trail Stewards',
+    category: 'Service & Leadership',
+    members: 64,
+    advisor: 'Ms. Gomez',
+    meeting: 'Sat · Shoreline Trail',
+    description: 'Weekend restoration crews partnering with the City of Mountain View Parks department.',
+    achievements: ['2.3 miles of trail restored', 'Quarterly city collaboration award', 'Leads volunteer onboarding'],
+    contact: 'trailstewards@mvla.net',
+  },
+  {
+    id: 'golden-sound-collective',
+    name: 'Golden Sound Collective',
+    category: 'Creative Arts & Media',
+    members: 58,
+    advisor: 'Mr. Rios',
+    meeting: 'Tue · Studio 204',
+    description: 'Student-run media studio producing podcasts, live streams, and halftime shows.',
+    achievements: ['Weekly Spartan Stories podcast', 'Live-stream crew for athletics', 'Adobe Youth Voices finalist'],
+    contact: 'gsc@mvla.net',
+  },
+  {
+    id: 'deca-spartans',
+    name: 'DECA Spartans',
+    category: 'Business & Entrepreneurship',
+    members: 52,
+    advisor: 'Mrs. Liu',
+    meeting: 'Wed · Room 118',
+    description: 'Competitive business team focusing on marketing strategy, finance, and innovation pitches.',
+    achievements: ['State qualifiers x7', 'Bay Area innovation sprint champs', 'Mentors feeder school teams'],
+    contact: 'decasp@mvla.net',
+  },
+  {
+    id: 'girls-who-code',
+    name: 'Girls Who Code',
+    category: 'STEM & Innovation',
+    members: 47,
+    advisor: 'Ms. Nguyen',
+    meeting: 'Mon · Lab 3',
+    description: 'Inclusive coding collective focusing on full-stack projects and mentorship.',
+    achievements: ['Shipped 4 community apps', 'Silicon Valley Demo Day finalist', 'Peer mentor network'],
+    contact: 'gwc@mvla.net',
+  },
+  {
+    id: 'bioresearch-league',
+    name: 'BioResearch League',
+    category: 'STEM & Innovation',
+    members: 43,
+    advisor: 'Dr. Ahmed',
+    meeting: 'Fri · Science 2',
+    description: 'Lab teams running wet-lab experiments, data analysis, and science fair mentoring.',
+    achievements: ['3 Synopsys fair medals', 'Stanford lab partnership', 'Weekly lab notebook reviews'],
+    contact: 'biolab@mvla.net',
+  },
+  {
+    id: 'spartan-studio-theater',
+    name: 'Spartan Studio Theater',
+    category: 'Creative Arts & Media',
+    members: 39,
+    advisor: 'Mr. Ellis',
+    meeting: 'Mon · Black Box',
+    description: 'Contemporary theater troupe managing original works, lighting design, and touring sets.',
+    achievements: ['Spring showcase sell-out', 'CETA award winner', 'Joint productions with feeder schools'],
+    contact: 'theater@mvla.net',
+  },
+  {
+    id: 'mv-finance-society',
+    name: 'MV Finance Society',
+    category: 'Business & Entrepreneurship',
+    members: 35,
+    advisor: 'Mr. Ortega',
+    meeting: 'Thu · Room 210',
+    description: 'Markets, investing, and fintech research club running mock portfolios and guest talks.',
+    achievements: ['Placed top 10 in Wharton challenge', 'Quarterly community workshops', 'Internship pipeline partners'],
+    contact: 'finance@mvla.net',
+  },
+  {
+    id: 'model-united-nations',
+    name: 'Model United Nations',
+    category: 'Service & Leadership',
+    members: 33,
+    advisor: 'Ms. Chandra',
+    meeting: 'Wed · Library',
+    description: 'Delegations researching global issues, drafting resolutions, and hosting local conferences.',
+    achievements: ['Best Delegate @ UC Berkeley MUN', 'Hosted district diplomacy night', 'Partners with city youth council'],
+    contact: 'mun@mvla.net',
+  },
+  {
+    id: 'cultural-fusion-dance',
+    name: 'Cultural Fusion Dance',
+    category: 'Athletics & Wellness',
+    members: 31,
+    advisor: 'Ms. Ruiz',
+    meeting: 'Tue · Gym Annex',
+    description: 'Multicultural dance collective blending hip-hop, classical, and contemporary choreography.',
+    achievements: ['Opened district heritage night', 'Residency with MVCPA artists', 'Annual choreography lab'],
+    contact: 'fusiondance@mvla.net',
+  },
+  {
+    id: 'gaming-strategy-lab',
+    name: 'Gaming Strategy Lab',
+    category: 'Creative Arts & Media',
+    members: 29,
+    advisor: 'Mr. Walters',
+    meeting: 'Fri · Room 132',
+    description: 'Game design and esports strategy team running scrims, analytics, and shoutcasting.',
+    achievements: ['CIF esports playoff run', 'Unity game jam finalist', 'Shoutcasted district finals'],
+    contact: 'gsl@mvla.net',
+  },
+  {
+    id: 'wellness-ambassadors',
+    name: 'Wellness Ambassadors',
+    category: 'Athletics & Wellness',
+    members: 26,
+    advisor: 'Ms. Porter',
+    meeting: 'Thu · Counseling Hub',
+    description: 'Peer wellness leaders hosting mindfulness labs, resource drives, and advisory visits.',
+    achievements: ['Monthly wellness workshops', 'District wellness summit host', 'Collaborates with counseling team'],
+    contact: 'wellness@mvla.net',
+  },
+]
+
+export const getClubById = (id: string) => clubs.find((club) => club.id === id)
