@@ -128,7 +128,7 @@ const activeCategoryClubs = computed(() =>
         <article v-if="!activeCategoryClubs.length" class="empty-card">
           <p>No clubs have been tagged for this category yet.</p>
         </article>
-        <article v-for="club in activeCategoryClubs" :key="club.id" class="top-card">
+        <RouterLink v-for="club in activeCategoryClubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
           <div class="club-avatar large">
             <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
           </div>
@@ -136,15 +136,13 @@ const activeCategoryClubs = computed(() =>
             <p class="club-category">{{ club.category }}</p>
             <span class="member-count">{{ club.memberCount }} members</span>
           </div>
-          <RouterLink :to="`/clubs/${club.id}`">
-            <h3>{{ club.name }}</h3>
-          </RouterLink>
+          <h3>{{ club.name }}</h3>
           <p>{{ club.description }}</p>
           <div class="card-meta">
             <span>{{ club.advisor }}</span>
             <span>{{ club.meetingSchedule }}</span>
           </div>
-        </article>
+        </RouterLink>
       </div>
     </section>
   </section>
@@ -242,18 +240,30 @@ const activeCategoryClubs = computed(() =>
   flex-direction: column;
   gap: 0.8rem;
   box-shadow: 0 25px 40px rgba(0, 0, 0, 0.35);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
 .top-card h3 {
   margin: 0;
 }
 
-.top-card a {
-  color: inherit;
+.top-card:hover h3,
+.top-card:focus-visible h3 {
+  color: var(--mv-gold);
 }
 
-.top-card a:hover h3 {
-  color: var(--mv-gold);
+.top-card:hover,
+.top-card:focus-visible {
+  border-color: rgba(250, 204, 21, 0.45);
+  transform: translateY(-2px);
+}
+
+.top-card:focus-visible {
+  outline: 2px solid var(--mv-gold);
+  outline-offset: 4px;
 }
 
 .club-avatar {

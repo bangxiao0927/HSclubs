@@ -61,7 +61,7 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
         <p class="section-subtitle">Sorted automatically from roster submissions.</p>
       </div>
       <div class="top-grid">
-        <article v-for="club in topClubs" :key="club.id" class="top-card">
+        <RouterLink v-for="club in topClubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
           <div class="club-avatar large">
             <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
           </div>
@@ -69,14 +69,12 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
             <p class="club-category">{{ club.category }}</p>
             <span class="member-count">{{ club.memberCount }} members</span>
           </div>
-          <RouterLink :to="`/clubs/${club.id}`">
-            <h3>{{ club.name }}</h3>
-          </RouterLink>
+          <h3>{{ club.name }}</h3>
           <div class="card-meta">
             <span>{{ club.advisor }}</span>
             <span>{{ club.meetingSchedule }}</span>
           </div>
-        </article>
+        </RouterLink>
       </div>
     </section>
 
@@ -86,15 +84,13 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
         <h2>All clubs</h2>
       </div>
       <div class="club-directory">
-        <article v-for="club in clubs" :key="club.id" class="club-row">
+        <RouterLink v-for="club in clubs" :key="club.id" class="club-row" :to="`/clubs/${club.id}`">
           <div class="club-main">
             <div class="club-avatar">
               <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
             </div>
             <div class="club-info">
-              <RouterLink :to="`/clubs/${club.id}`" class="club-link">
-                <h3>{{ club.name }}</h3>
-              </RouterLink>
+              <h3>{{ club.name }}</h3>
               <p>{{ club.category }}</p>
             </div>
           </div>
@@ -103,7 +99,7 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
             <span>{{ club.advisor }}</span>
             <span>{{ club.meetingSchedule }}</span>
           </div>
-        </article>
+        </RouterLink>
       </div>
     </section>
   </div>
@@ -200,6 +196,10 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   flex-direction: column;
   gap: 0.8rem;
   box-shadow: 0 25px 40px rgba(0, 0, 0, 0.35);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
 .club-avatar {
@@ -229,12 +229,15 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   margin: 0;
 }
 
-.top-card a {
-  color: inherit;
+.top-card:hover h3,
+.top-card:focus-visible h3 {
+  color: var(--mv-gold);
 }
 
-.top-card a:hover h3 {
-  color: var(--mv-gold);
+.top-card:hover,
+.top-card:focus-visible {
+  border-color: rgba(250, 204, 21, 0.45);
+  transform: translateY(-2px);
 }
 
 .card-head {
@@ -271,6 +274,9 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   gap: 1rem;
   padding: 1.25rem 1.75rem;
   border-bottom: 1px solid rgba(254, 252, 232, 0.05);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .club-main {
@@ -287,12 +293,20 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   margin: 0;
 }
 
-.club-link {
-  color: inherit;
+.club-row:hover h3,
+.club-row:focus-visible h3 {
+  color: var(--mv-gold);
 }
 
-.club-link:hover h3 {
-  color: var(--mv-gold);
+.club-row:hover,
+.club-row:focus-visible {
+  background: rgba(253, 224, 71, 0.05);
+}
+
+.top-card:focus-visible,
+.club-row:focus-visible {
+  outline: 2px solid var(--mv-gold);
+  outline-offset: 4px;
 }
 
 .club-info p {
