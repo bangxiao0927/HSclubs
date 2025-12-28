@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
+
+import { useAuthStore } from './stores/auth'
 
 const searchQuery = ref('')
 const route = useRoute()
+const authStore = useAuthStore()
+const { isAuthenticated } = storeToRefs(authStore)
+
+const handleLogout = () => {
+  authStore.logout()
+}
 </script>
 
 <template>
@@ -45,14 +54,20 @@ const route = useRoute()
         </div>
 
         <div class="header-right">
-          <RouterLink to="/profile" class="profile-link">
+          <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link">
             <span class="profile-icon">👤</span>
             <span>Profile</span>
           </RouterLink>
-          <div class="auth-actions">
+          <div v-if="!isAuthenticated" class="auth-actions">
             <RouterLink to="/profile?mode=login" class="auth-btn ghost">Log in</RouterLink>
             <RouterLink to="/profile?mode=register" class="auth-btn primary">Register</RouterLink>
           </div>
+          <button
+            v-else
+            type="button"
+            class="auth-btn ghost logout-btn"
+            @click="handleLogout"
+          >Log out</button>
         </div>
       </div>
     </header>
