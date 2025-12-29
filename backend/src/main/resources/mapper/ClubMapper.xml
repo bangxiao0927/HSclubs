@@ -15,6 +15,8 @@
         <result column="contact_email" property="contactEmail" />
         <result column="advisor" property="advisor" />
         <result column="image_url" property="imageUrl" />
+        <result column="member_count" property="memberCount" />
+        <result column="achievements" property="achievements" typeHandler="com.example.demo.club.mapper.AchievementsTypeHandler" />
         <result column="school_id" property="schoolId" />
         <result column="created_at" property="createdAt" />
         <result column="updated_at" property="updatedAt" />
@@ -22,7 +24,7 @@
 
     <sql id="BaseColumnList">
         id, name, alias_name, description, category, meeting_schedule, location,
-        contact_email, advisor, image_url, school_id, created_at, updated_at
+        contact_email, advisor, image_url, member_count, achievements, school_id, created_at, updated_at
     </sql>
 
     <select id="findAll" resultMap="ClubResultMap">
@@ -39,23 +41,26 @@
 
     <insert id="insert" parameterType="com.example.demo.club.model.Club" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO clubs (name, alias_name, description, category, meeting_schedule, location,
-                           contact_email, advisor, image_url, school_id)
+                           contact_email, advisor, image_url, member_count, achievements, school_id)
         VALUES (#{name}, #{aliasName}, #{description}, #{category}, #{meetingSchedule}, #{location},
-                #{contactEmail}, #{advisor}, #{imageUrl}, #{schoolId})
+                #{contactEmail}, #{advisor}, #{imageUrl}, #{memberCount},
+                #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler}, #{schoolId})
     </insert>
 
     <update id="update" parameterType="com.example.demo.club.model.Club">
         UPDATE clubs
-        SET name = #{name},
-            alias_name = #{aliasName},
-            description = #{description},
-            category = #{category},
-            meeting_schedule = #{meetingSchedule},
-            location = #{location},
-            contact_email = #{contactEmail},
-            advisor = #{advisor},
-            image_url = #{imageUrl},
-            school_id = #{schoolId}
+            SET name = #{name},
+                alias_name = #{aliasName},
+                description = #{description},
+                category = #{category},
+                meeting_schedule = #{meetingSchedule},
+                location = #{location},
+                contact_email = #{contactEmail},
+                advisor = #{advisor},
+                image_url = #{imageUrl},
+                member_count = #{memberCount},
+                achievements = #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
+                school_id = #{schoolId}
         WHERE id = #{id}
     </update>
 

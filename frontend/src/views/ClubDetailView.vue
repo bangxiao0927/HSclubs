@@ -1,39 +1,86 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
-import { clubs, getClubById } from '../data/clubs'
+import { fetchClubById, fetchClubs } from '../services/clubService'
+import type { Club } from '../types/club'
 
 const route = useRoute()
-const club = computed(() => getClubById(route.params.id as string))
-const relatedClubs = computed(() => clubs.filter((item) => item.id !== club.value?.id).slice(0, 3))
+const club = ref<Club | null>(null)
+const relatedClubs = ref<Club[]>([])
+const loading = ref(true)
+const error = ref('')
+
+const clubImage = (entity: Club) => entity.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(entity.name)}`
+
+const loadClub = async (id: string) => {
+  loading.value = true
+  error.value = ''
+  club.value = null
+  try {
+    const [clubResponse, allClubs] = await Promise.all([fetchClubById(id), fetchClubs()])
+    club.value = clubResponse
+    relatedClubs.value = allClubs.filter((item) => item.id !== clubResponse.id).slice(0, 3)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load club'
+    relatedClubs.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(
+  () => route.params.id,
+  (newId) => {
+    if (typeof newId === 'string' && newId) {
+      void loadClub(newId)
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
-  <section class="club-detail page-shell" v-if="club">
+  <section v-if="loading" class="club-detail page-shell empty-state">
+    <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
+    <p>Loading club details…</p>
+  </section>
+
+  <section v-else-if="error" class="club-detail page-shell empty-state">
+    <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
+    <h1>Unable to load club</h1>
+    <p>{{ error }}</p>
+  </section>
+
+  <section class="club-detail page-shell" v-else-if="club">
     <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
 
     <header class="club-hero">
-      <div>
-        <p class="section-label">{{ club.category }}</p>
-        <h1>{{ club.name }}</h1>
-        <p class="hero-meta">
-          {{ club.meeting }} · Advisor {{ club.advisor }} · {{ club.members }} members
-        </p>
-        <p class="hero-description">{{ club.description }}</p>
+      <div class="hero-top">
+        <div>
+          <p class="section-label">{{ club.category }}</p>
+          <h1>{{ club.name }}</h1>
+          <p class="hero-meta">
+            {{ club.meetingSchedule }} · Advisor {{ club.advisor || 'TBD' }} · {{ club.memberCount }} members
+          </p>
+          <p class="hero-description">{{ club.description }}</p>
+        </div>
+        <div class="club-avatar xlarge">
+          <img :src="clubImage(club)" :alt="`${club.name} avatar`" />
+        </div>
       </div>
       <div class="hero-stats">
         <div class="stat-card">
           <span class="stat-label">Members</span>
-          <p class="stat-value">{{ club.members }}</p>
+          <p class="stat-value">{{ club.memberCount }}</p>
         </div>
         <div class="stat-card">
           <span class="stat-label">Primary advisor</span>
-          <p class="stat-value">{{ club.advisor }}</p>
+          <p class="stat-value">{{ club.advisor || 'Unassigned' }}</p>
         </div>
         <div class="stat-card">
           <span class="stat-label">Contact</span>
-          <p class="stat-value">{{ club.contact }}</p>
+          <p class="stat-value">{{ club.contactEmail || 'Not provided' }}</p>
         </div>
       </div>
     </header>
@@ -42,25 +89,33 @@ const relatedClubs = computed(() => clubs.filter((item) => item.id !== club.valu
       <div class="spotlight">
         <h2>What we run</h2>
         <p>
-          {{ club.description }} Use this guide to align with Mountain View's activities office, track recruiting, and
-          prep for showcases.
+          {{ club.description }} Use this guide to align with Mountain View's activities office, track recruiting, and prep
+          for showcases.
         </p>
         <h3>Recent achievements</h3>
-        <ul>
+        <ul v-if="club.achievements && club.achievements.length">
           <li v-for="achievement in club.achievements" :key="achievement">
             {{ achievement }}
           </li>
         </ul>
-        <button type="button">Email {{ club.contact }} →</button>
+        <p v-else>No achievements logged yet.</p>
+        <button type="button" :disabled="!club.contactEmail">
+          Email {{ club.contactEmail || 'advisor' }} →
+        </button>
       </div>
 
       <aside class="related" v-if="relatedClubs.length">
         <h3>Also trending</h3>
         <ul>
           <li v-for="item in relatedClubs" :key="item.id">
-            <RouterLink :to="`/clubs/${item.id}`">
-              <span>{{ item.name }}</span>
-              <small>{{ item.members }} members</small>
+            <RouterLink :to="`/clubs/${item.id}`" class="related-link">
+              <div class="club-avatar small">
+                <img :src="clubImage(item)" :alt="`${item.name} avatar`" loading="lazy" />
+              </div>
+              <div>
+                <span>{{ item.name }}</span>
+                <small>{{ item.memberCount }} members</small>
+              </div>
             </RouterLink>
           </li>
         </ul>
@@ -98,6 +153,14 @@ const relatedClubs = computed(() => clubs.filter((item) => item.id !== club.valu
   gap: 1.25rem;
 }
 
+.hero-top {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .club-hero h1 {
   margin: 0.25rem 0 0.5rem;
   font-size: clamp(2rem, 4vw, 3.2rem);
@@ -110,6 +173,35 @@ const relatedClubs = computed(() => clubs.filter((item) => item.id !== club.valu
 
 .hero-description {
   color: var(--mv-text-muted);
+}
+
+.club-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  background: rgba(253, 224, 71, 0.08);
+  flex-shrink: 0;
+}
+
+.club-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.club-avatar.xlarge {
+  width: 120px;
+  height: 120px;
+  border-radius: 28px;
+}
+
+.club-avatar.small {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
 }
 
 .hero-stats {
@@ -174,6 +266,11 @@ const relatedClubs = computed(() => clubs.filter((item) => item.id !== club.valu
   cursor: pointer;
 }
 
+.spotlight button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .related {
   border-radius: 24px;
   border: 1px solid rgba(250, 204, 21, 0.2);
@@ -190,9 +287,11 @@ const relatedClubs = computed(() => clubs.filter((item) => item.id !== club.valu
   gap: 0.75rem;
 }
 
-.related a {
+
+.related-link {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
   color: inherit;
 }
 

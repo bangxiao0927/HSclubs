@@ -1,12 +1,32 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
-import { clubs as clubList } from '../data/clubs'
+import { fetchClubs } from '../services/clubService'
+import type { Club } from '../types/club'
 
-const clubs = clubList
-const totalMembers = clubs.reduce((sum, club) => sum + club.members, 0)
-const topClubs = computed(() => [...clubs].sort((a, b) => b.members - a.members).slice(0, 4))
+const clubs = ref<Club[]>([])
+const loading = ref(true)
+const error = ref('')
+
+const loadClubs = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    clubs.value = await fetchClubs()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load clubs'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadClubs)
+
+const totalMembers = computed(() => clubs.value.reduce((sum, club) => sum + (club.memberCount ?? 0), 0))
+const topClubs = computed(() => [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4))
+
+const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(club.name)}`
 </script>
 
 <template>
@@ -31,6 +51,9 @@ const topClubs = computed(() => [...clubs].sort((a, b) => b.members - a.members)
       </div>
     </section>
 
+    <section v-if="loading" class="status-banner">Loading clubs…</section>
+    <section v-else-if="error" class="status-banner error">{{ error }}</section>
+
     <section class="top-clubs-section page-shell">
       <div class="section-heading">
         <p class="section-label">Top enrollment</p>
@@ -38,19 +61,20 @@ const topClubs = computed(() => [...clubs].sort((a, b) => b.members - a.members)
         <p class="section-subtitle">Sorted automatically from roster submissions.</p>
       </div>
       <div class="top-grid">
-        <article v-for="club in topClubs" :key="club.id" class="top-card">
+        <RouterLink v-for="club in topClubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
+          <div class="club-avatar large">
+            <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
+          </div>
           <div class="card-head">
             <p class="club-category">{{ club.category }}</p>
-            <span class="member-count">{{ club.members }} members</span>
+            <span class="member-count">{{ club.memberCount }} members</span>
           </div>
-          <RouterLink :to="`/clubs/${club.id}`">
-            <h3>{{ club.name }}</h3>
-          </RouterLink>
+          <h3>{{ club.name }}</h3>
           <div class="card-meta">
             <span>{{ club.advisor }}</span>
-            <span>{{ club.meeting }}</span>
+            <span>{{ club.meetingSchedule }}</span>
           </div>
-        </article>
+        </RouterLink>
       </div>
     </section>
 
@@ -60,19 +84,22 @@ const topClubs = computed(() => [...clubs].sort((a, b) => b.members - a.members)
         <h2>All clubs</h2>
       </div>
       <div class="club-directory">
-        <article v-for="club in clubs" :key="club.id" class="club-row">
-          <div class="club-info">
-            <RouterLink :to="`/clubs/${club.id}`" class="club-link">
+        <RouterLink v-for="club in clubs" :key="club.id" class="club-row" :to="`/clubs/${club.id}`">
+          <div class="club-main">
+            <div class="club-avatar">
+              <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
+            </div>
+            <div class="club-info">
               <h3>{{ club.name }}</h3>
-            </RouterLink>
-            <p>{{ club.category }}</p>
+              <p>{{ club.category }}</p>
+            </div>
           </div>
           <div class="club-details">
-            <span class="badge">{{ club.members }} members</span>
+            <span class="badge">{{ club.memberCount }} members</span>
             <span>{{ club.advisor }}</span>
-            <span>{{ club.meeting }}</span>
+            <span>{{ club.meetingSchedule }}</span>
           </div>
-        </article>
+        </RouterLink>
       </div>
     </section>
   </div>
@@ -169,18 +196,48 @@ const topClubs = computed(() => [...clubs].sort((a, b) => b.members - a.members)
   flex-direction: column;
   gap: 0.8rem;
   box-shadow: 0 25px 40px rgba(0, 0, 0, 0.35);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.club-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  background: rgba(253, 224, 71, 0.08);
+  flex-shrink: 0;
+}
+
+.club-avatar.large {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+}
+
+.club-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .top-card h3 {
   margin: 0;
 }
 
-.top-card a {
-  color: inherit;
+.top-card:hover h3,
+.top-card:focus-visible h3 {
+  color: var(--mv-gold);
 }
 
-.top-card a:hover h3 {
-  color: var(--mv-gold);
+.top-card:hover,
+.top-card:focus-visible {
+  border-color: rgba(250, 204, 21, 0.45);
+  transform: translateY(-2px);
 }
 
 .card-head {
@@ -217,6 +274,15 @@ const topClubs = computed(() => [...clubs].sort((a, b) => b.members - a.members)
   gap: 1rem;
   padding: 1.25rem 1.75rem;
   border-bottom: 1px solid rgba(254, 252, 232, 0.05);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.club-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .club-row:last-of-type {
@@ -227,12 +293,20 @@ const topClubs = computed(() => [...clubs].sort((a, b) => b.members - a.members)
   margin: 0;
 }
 
-.club-link {
-  color: inherit;
+.club-row:hover h3,
+.club-row:focus-visible h3 {
+  color: var(--mv-gold);
 }
 
-.club-link:hover h3 {
-  color: var(--mv-gold);
+.club-row:hover,
+.club-row:focus-visible {
+  background: rgba(253, 224, 71, 0.05);
+}
+
+.top-card:focus-visible,
+.club-row:focus-visible {
+  outline: 2px solid var(--mv-gold);
+  outline-offset: 4px;
 }
 
 .club-info p {
@@ -255,6 +329,21 @@ const topClubs = computed(() => [...clubs].sort((a, b) => b.members - a.members)
   background: rgba(250, 204, 21, 0.15);
   color: var(--mv-gold);
   font-weight: 600;
+}
+
+.status-banner {
+  width: var(--page-content-width);
+  margin: 0 auto;
+  padding: 0.75rem 1.5rem;
+  border-radius: 16px;
+  background: rgba(253, 224, 71, 0.12);
+  border: 1px solid rgba(253, 224, 71, 0.35);
+  color: rgba(254, 252, 232, 0.85);
+}
+
+.status-banner.error {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.45);
 }
 
 @media (max-width: 640px) {
