@@ -1,9 +1,34 @@
+DROP TABLE IF EXISTS calenders;
+DROP TABLE IF EXISTS club_activities;
+DROP TABLE IF EXISTS club_tag;
+DROP TABLE IF EXISTS club_member;
+DROP TABLE IF EXISTS club_social_medias;
+DROP TABLE IF EXISTS club_role;
 DROP TABLE IF EXISTS clubs;
+DROP TABLE IF EXISTS club_category;
 DROP TABLE IF EXISTS schools;
+DROP TABLE IF EXISTS users;
+
+CREATE TABLE IF NOT EXISTS users (
+    uid BIGINT PRIMARY KEY AUTO_INCREMENT,
+    nickname VARCHAR(120) NOT NULL,
+    login_name VARCHAR(120) NOT NULL UNIQUE,
+    email VARCHAR(200) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'student',
+    avatar VARCHAR(300)
+);
 
 CREATE TABLE IF NOT EXISTS schools (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    school_name VARCHAR(200) NOT NULL
+    school_name VARCHAR(200) NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS club_category (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    cate_name VARCHAR(150) NOT NULL UNIQUE,
+    logo VARCHAR(300),
+    description TEXT
 );
 
 CREATE TABLE IF NOT EXISTS clubs (
@@ -11,7 +36,7 @@ CREATE TABLE IF NOT EXISTS clubs (
     name VARCHAR(150) NOT NULL,
     alias_name VARCHAR(150),
     description TEXT,
-    category VARCHAR(100),
+    category VARCHAR(150),
     meeting_schedule VARCHAR(150),
     location VARCHAR(150),
     contact_email VARCHAR(150),
@@ -22,5 +47,58 @@ CREATE TABLE IF NOT EXISTS clubs (
     school_id BIGINT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_clubs_school FOREIGN KEY (school_id) REFERENCES schools(id)
+    CONSTRAINT fk_clubs_school FOREIGN KEY (school_id) REFERENCES schools(id),
+    CONSTRAINT fk_clubs_category FOREIGN KEY (category) REFERENCES club_category(cate_name)
+);
+
+CREATE TABLE IF NOT EXISTS club_role (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    club_id BIGINT NOT NULL,
+    role_name VARCHAR(120) NOT NULL,
+    club_permission JSON NOT NULL DEFAULT (JSON_ARRAY()),
+    CONSTRAINT fk_club_role_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    CONSTRAINT uq_club_role_name UNIQUE (club_id, role_name)
+);
+
+CREATE TABLE IF NOT EXISTS club_social_medias (
+    club_id BIGINT NOT NULL,
+    social_type VARCHAR(50) NOT NULL,
+    link_name VARCHAR(150) NOT NULL,
+    link_url VARCHAR(500) NOT NULL,
+    PRIMARY KEY (club_id, link_name),
+    CONSTRAINT fk_social_media_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS club_member (
+    club_id BIGINT NOT NULL,
+    uid BIGINT NOT NULL,
+    club_role_id BIGINT,
+    PRIMARY KEY (club_id, uid),
+    CONSTRAINT fk_member_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    CONSTRAINT fk_member_user FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
+    CONSTRAINT fk_member_role FOREIGN KEY (club_role_id) REFERENCES club_role(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS club_tag (
+    club_id BIGINT NOT NULL,
+    tag VARCHAR(80) NOT NULL,
+    PRIMARY KEY (club_id, tag),
+    CONSTRAINT fk_tag_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS club_activities (
+    activity_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    club_id BIGINT NOT NULL,
+    activity_pic VARCHAR(400),
+    activity_result VARCHAR(200),
+    activity_description TEXT,
+    CONSTRAINT fk_activity_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS calenders (
+    club_id BIGINT NOT NULL,
+    week_day VARCHAR(20) NOT NULL,
+    meeting_time VARCHAR(50) NOT NULL,
+    PRIMARY KEY (club_id, week_day),
+    CONSTRAINT fk_calender_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
 );
