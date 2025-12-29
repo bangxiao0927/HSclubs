@@ -59,8 +59,8 @@ const handleLogout = () => {
             <span>Profile</span>
           </RouterLink>
           <div v-if="!isAuthenticated" class="auth-actions">
-            <RouterLink to="/profile?mode=login" class="auth-btn ghost">Log in</RouterLink>
-            <RouterLink to="/profile?mode=register" class="auth-btn primary">Register</RouterLink>
+            <RouterLink to="/auth?intent=login" class="auth-btn ghost">Log in</RouterLink>
+            <RouterLink to="/auth?intent=register" class="auth-btn primary">Register</RouterLink>
           </div>
           <button
             v-else

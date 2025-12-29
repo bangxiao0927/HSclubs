@@ -1,9 +1,8 @@
 import type { Club } from '../types/club'
-
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+import { buildApiUrl } from './httpClient'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = apiBaseUrl ? `${apiBaseUrl}${path}` : path
+  const url = buildApiUrl(path)
   const response = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',

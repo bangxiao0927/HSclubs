@@ -32,6 +32,16 @@ const router = createRouter({
       name: 'profile',
       component: () => import('../views/ProfileView.vue'),
     },
+    {
+      path: '/auth',
+      name: 'auth-choice',
+      component: () => import('../views/AuthChoiceView.vue'),
+    },
+    {
+      path: '/auth/callback',
+      name: 'auth-callback',
+      component: () => import('../views/AuthCallbackView.vue'),
+    },
   ],
 })
 
