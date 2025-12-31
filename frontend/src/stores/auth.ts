@@ -1,38 +1,87 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-const AUTH_STORAGE_KEY = 'hsclubs-auth'
-
-const getInitialAuthState = () => {
-  if (typeof window === 'undefined') {
-    return false
-  }
-  return window.localStorage.getItem(AUTH_STORAGE_KEY) === 'true'
-}
+import type { AuthProvider, AuthUser } from '../types/auth'
+import { fetchAuthProviders, fetchAuthenticatedUser, logout as apiLogout } from '../services/authService'
+import { buildApiUrl } from '../services/httpClient'
 
 export const useAuthStore = defineStore('auth', () => {
-  const isAuthenticated = ref(getInitialAuthState())
+  const currentUser = ref<AuthUser | null>(null)
+  const providers = ref<AuthProvider[]>([])
+  const providersLoading = ref(false)
+  const providersLoaded = ref(false)
+  const providersError = ref<string | null>(null)
+  const userLoading = ref(false)
+  const userError = ref<string | null>(null)
+  const hasCheckedSession = ref(false)
 
-  const persistState = (state: boolean) => {
-    if (typeof window === 'undefined') {
+  const isAuthenticated = computed(() => currentUser.value !== null)
+
+  const ensureProvidersLoaded = async () => {
+    if (providersLoaded.value || providersLoading.value) {
       return
     }
-    if (state) {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, 'true')
-    } else {
-      window.localStorage.removeItem(AUTH_STORAGE_KEY)
+
+    providersLoading.value = true
+    try {
+      providers.value = await fetchAuthProviders()
+      providersError.value = null
+      providersLoaded.value = true
+    } catch (error) {
+      providersError.value = error instanceof Error ? error.message : 'Unable to load providers'
+    } finally {
+      providersLoading.value = false
     }
   }
 
-  const login = () => {
-    isAuthenticated.value = true
-    persistState(true)
+  const refreshUser = async () => {
+    userLoading.value = true
+    try {
+      currentUser.value = await fetchAuthenticatedUser()
+      userError.value = null
+    } catch (error) {
+      userError.value = error instanceof Error ? error.message : 'Unable to verify session'
+      currentUser.value = null
+    } finally {
+      userLoading.value = false
+      hasCheckedSession.value = true
+    }
   }
 
-  const logout = () => {
-    isAuthenticated.value = false
-    persistState(false)
+  const bootstrap = async () => {
+    await Promise.allSettled([ensureProvidersLoaded(), refreshUser()])
   }
 
-  return { isAuthenticated, login, logout }
+  const beginLogin = (providerId: string) => {
+    const sanitizedId = providerId?.trim()
+    if (!sanitizedId) {
+      providersError.value = 'No OAuth provider was selected. Please refresh and try again.'
+      return
+    }
+
+    const provider = providers.value.find((item) => item.id === sanitizedId)
+    const authorizationPath = provider?.authorizationUrl ?? `/oauth2/authorization/${sanitizedId}`
+    window.location.href = buildApiUrl(authorizationPath)
+  }
+
+  const logout = async () => {
+    await apiLogout()
+    currentUser.value = null
+  }
+
+  return {
+    currentUser,
+    providers,
+    providersLoading,
+    providersError,
+    userLoading,
+    userError,
+    hasCheckedSession,
+    isAuthenticated,
+    ensureProvidersLoaded,
+    refreshUser,
+    bootstrap,
+    beginLogin,
+    logout,
+  }
 })

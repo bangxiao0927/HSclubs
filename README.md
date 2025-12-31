@@ -39,5 +39,17 @@ Once the service is running you can hit:
 - `PUT    http://localhost:8080/api/clubs/{id}` – update a club (include `schoolId`).
 - `DELETE http://localhost:8080/api/clubs/{id}` – delete a club.
 
+### OAuth2 endpoints
+
+The backend now exposes an initial OAuth 2.0 surface backed by Google sign-in.
+
+- `GET  http://localhost:8080/api/auth/providers` – discover available OAuth providers and their authorization URLs.
+- `GET  http://localhost:8080/api/auth/me` – return the currently authenticated user (401 when not logged in).
+- `POST http://localhost:8080/api/auth/logout` – invalidate the Spring Security session cookie.
+
+Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (see `backend/.env` for local development) before starting the backend so Spring Security can complete the OAuth flow. The current configuration expects Google to redirect to `http://localhost:8080/api/auth/google/callback`, matching the OAuth client you shared.
+
 The Vue dev server is already allowed via CORS (`http://localhost:5173`), so the frontend can
 call the backend without extra proxying.
+
+Set `app.security.post-login-redirect-uri` (defaults to `http://localhost:5173/auth/callback`) if you need the backend to send users somewhere else after OAuth success/failure. On the frontend side, `VITE_API_BASE_URL` is optional now—dev builds automatically fall back to `http://localhost:8080`, but you can override it for other environments.

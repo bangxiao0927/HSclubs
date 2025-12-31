@@ -1,7 +1,15 @@
 server:
   port: 8080
 
+app:
+  security:
+    allowed-origins:
+      - http://localhost:5173
+    post-login-redirect-uri: http://localhost:5173/auth/callback
+
 spring:
+  config:
+    import: optional:file:.env[.properties]
   datasource:
     url: jdbc:mysql://localhost:3306/mydb?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
@@ -10,6 +18,18 @@ spring:
   sql:
     init:
       mode: always
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: "{baseUrl}/api/auth/google/callback"
+            scope:
+              - email
+              - profile
+              - openid
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml

@@ -17,39 +17,60 @@ const reminders = [
 ]
 
 const authStore = useAuthStore()
-const { isAuthenticated } = storeToRefs(authStore)
+const { isAuthenticated, currentUser, userLoading, userError } = storeToRefs(authStore)
 
-const handleLogin = () => {
-  authStore.login()
-}
+const handleLogout = () => authStore.logout()
 </script>
 
 <template>
   <div class="profile-view">
+    <div v-if="userError" class="page-shell">
+      <p class="alert error">{{ userError }}</p>
+    </div>
+    <div v-else-if="userLoading" class="page-shell">
+      <p class="alert muted">Checking your session…</p>
+    </div>
+
     <div v-if="isAuthenticated" class="profile page-shell">
       <section class="profile-hero">
         <div class="hero-copy">
           <p class="section-label">Personal hub</p>
-          <h1>Profile hub</h1>
+          <h1>Welcome back, {{ currentUser?.displayName || 'Explorer' }}</h1>
           <p>
-            Keep every club interaction in one place—favorites, applications, reminders, and more. Register or sign in to unlock the personalized experience.
+            You are signed in with {{ currentUser?.provider || 'your OAuth provider' }}. Keep club applications, favorites, and announcements synced
+            everywhere.
           </p>
+          <div class="user-meta">
+            <div>
+              <span>Email</span>
+              <strong>{{ currentUser?.email || 'Not shared' }}</strong>
+            </div>
+            <div>
+              <span>User ID</span>
+              <strong>{{ currentUser?.id }}</strong>
+            </div>
+          </div>
           <div class="cta-group">
-            <RouterLink to="/profile?mode=register" class="btn primary">Create account</RouterLink>
-            <RouterLink to="/profile?mode=login" class="btn ghost">Already a member? Sign in</RouterLink>
+            <RouterLink to="/" class="btn primary">Browse clubs</RouterLink>
+            <button type="button" class="btn ghost" @click="handleLogout">Sign out</button>
           </div>
         </div>
         <div class="hero-card">
-          <div class="avatar">👤</div>
-          <p class="hero-card-label">Welcome back</p>
-          <p class="hero-card-desc">Your profile tools are ready.</p>
+          <div v-if="currentUser?.avatarUrl" class="avatar">
+            <img :src="currentUser.avatarUrl" alt="Profile avatar" />
+          </div>
+          <div v-else class="avatar">👤</div>
+          <p class="hero-card-label">{{ currentUser?.displayName || 'Member' }}</p>
+          <p class="hero-card-desc">
+            {{ currentUser?.provider ? `Signed in with ${currentUser.provider}` : 'Authenticated user' }}
+          </p>
         </div>
       </section>
 
       <section class="profile-grid">
         <article class="card">
           <h2>Shortcuts</h2>
-          <p class="card-subtitle">These actions unlock once you create or access your account.</p>
+          <p class="card-subtitle">These actions stay in sync with your account.</p>
           <ul class="quick-links">
             <li v-for="link in quickLinks" :key="link.label">
               <h3>{{ link.label }}</h3>
@@ -75,8 +96,8 @@ const handleLogin = () => {
           View saved clubs, manage applications, and keep advisors updated once you authenticate. Create an account or sign in to continue.
         </p>
         <div class="cta-group gate-actions">
-          <button type="button" class="btn primary" @click="handleLogin">Sign in with school account</button>
-          <RouterLink to="/profile?mode=register" class="btn ghost">Create account</RouterLink>
+          <RouterLink to="/auth?intent=login" class="btn primary">Sign in options</RouterLink>
+          <RouterLink to="/auth?intent=register" class="btn ghost">Create account</RouterLink>
         </div>
       </div>
       <ul class="gate-benefits">
@@ -115,6 +136,33 @@ const handleLogin = () => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.user-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.user-meta div {
+  padding: 0.75rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(254, 252, 232, 0.15);
+  background: rgba(254, 252, 232, 0.05);
+}
+
+.user-meta span {
+  display: block;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.35rem;
+  color: rgba(254, 252, 232, 0.6);
+}
+
+.user-meta strong {
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .hero-copy h1 {
@@ -161,19 +209,26 @@ const handleLogin = () => {
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .avatar {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
+  width: 120px;
+  height: 120px;
+  border-radius: 25px;
   margin: 0 auto;
   background: rgba(253, 224, 71, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 2rem;
+  overflow: hidden;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .hero-card-label {
@@ -285,6 +340,24 @@ const handleLogin = () => {
 
 .gate-benefits li {
   margin-left: 1rem;
+}
+
+.alert {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
+  border-radius: 16px;
+  border: 1px solid transparent;
+}
+
+.alert.error {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.alert.muted {
+  border-color: rgba(254, 252, 232, 0.15);
+  background: rgba(254, 252, 232, 0.07);
+  color: rgba(254, 252, 232, 0.8);
 }
 
 @media (max-width: 640px) {
