@@ -4,6 +4,7 @@ import com.example.demo.club.mapper.ClubMapper;
 import com.example.demo.club.model.Club;
 import com.example.demo.school.mapper.SchoolMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -25,6 +26,12 @@ public class ClubService {
 
     public Club findById(Long id) {
         return clubMapper.findById(id);
+    }
+
+    public Club findById(Long id, String viewerEmail) {
+        Club club = clubMapper.findById(id);
+        applyViewerPermissions(club, viewerEmail);
+        return club;
     }
 
     public Club create(Club club) {
@@ -60,5 +67,21 @@ public class ClubService {
         if (club.getMemberCount() == null) {
             club.setMemberCount(0);
         }
+    }
+
+    private void applyViewerPermissions(Club club, String viewerEmail) {
+        if (club == null) {
+            return;
+        }
+        if (!StringUtils.hasText(viewerEmail)) {
+            club.setViewerRole(null);
+            club.setCanManage(false);
+            return;
+        }
+
+        String roleName = clubMapper.findMemberRoleByClubAndEmail(club.getId(), viewerEmail);
+        club.setViewerRole(roleName);
+        boolean canManage = roleName != null && "president".equalsIgnoreCase(roleName.trim());
+        club.setCanManage(canManage);
     }
 }

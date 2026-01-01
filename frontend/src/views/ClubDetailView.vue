@@ -66,7 +66,13 @@ watch(
           <p class="hero-description">{{ club.description }}</p>
         </div>
         <div class="hero-side">
-          <RouterLink :to="`/clubs/${club.id}/admin`" class="admin-link">Manage club</RouterLink>
+          <RouterLink
+            v-if="club.canManage"
+            :to="`/clubs/${club.id}/admin`"
+            class="admin-link"
+          >
+            Manage club
+          </RouterLink>
           <div class="club-avatar xlarge">
             <img :src="clubImage(club)" :alt="`${club.name} avatar`" />
           </div>

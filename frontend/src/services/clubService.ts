@@ -3,11 +3,15 @@ import { buildApiUrl } from './httpClient'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = buildApiUrl(path)
+  const headers = new Headers(init?.headers as HeadersInit | undefined)
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+
   const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
     ...init,
+    credentials: init?.credentials ?? 'include',
+    headers,
   })
 
   if (!response.ok) {

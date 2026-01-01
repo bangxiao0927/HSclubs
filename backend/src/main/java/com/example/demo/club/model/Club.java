@@ -23,6 +23,8 @@ public class Club {
     private Long schoolId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String viewerRole;
+    private Boolean canManage;
 
     public Long getId() {
         return id;
@@ -142,5 +144,21 @@ public class Club {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getViewerRole() {
+        return viewerRole;
+    }
+
+    public void setViewerRole(String viewerRole) {
+        this.viewerRole = viewerRole;
+    }
+
+    public Boolean getCanManage() {
+        return canManage;
+    }
+
+    public void setCanManage(Boolean canManage) {
+        this.canManage = canManage;
     }
 }

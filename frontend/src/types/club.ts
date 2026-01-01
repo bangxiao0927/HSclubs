@@ -12,4 +12,6 @@ export interface Club {
   memberCount: number
   achievements: string[]
   schoolId: number
+  viewerRole?: string | null
+  canManage?: boolean
 }

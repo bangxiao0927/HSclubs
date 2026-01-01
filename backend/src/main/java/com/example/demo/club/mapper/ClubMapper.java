@@ -18,4 +18,6 @@ public interface ClubMapper {
     int update(Club club);
 
     int delete(@Param("id") Long id);
+
+    String findMemberRoleByClubAndEmail(@Param("clubId") Long clubId, @Param("email") String email);
 }

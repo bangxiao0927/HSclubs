@@ -3,6 +3,9 @@ package com.example.demo.club.controller;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.service.ClubService;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,8 +37,8 @@ public class ClubController {
     }
 
     @GetMapping("/{id}")
-    public Club get(@PathVariable Long id) {
-        Club club = clubService.findById(id);
+    public Club get(@PathVariable Long id, Authentication authentication) {
+        Club club = clubService.findById(id, resolveViewerEmail(authentication));
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
@@ -71,5 +74,17 @@ public class ClubController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
         clubService.delete(id);
+    }
+
+    private String resolveViewerEmail(Authentication authentication) {
+        if (!(authentication instanceof OAuth2AuthenticationToken token)) {
+            return null;
+        }
+        OAuth2User principal = token.getPrincipal();
+        if (principal == null) {
+            return null;
+        }
+        Object email = principal.getAttributes().get("email");
+        return (email instanceof String str && !str.isBlank()) ? str : null;
     }
 }
