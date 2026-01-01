@@ -65,10 +65,7 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
           <div class="club-avatar large">
             <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
           </div>
-          <div class="card-head">
-            <p class="club-category">{{ club.category }}</p>
-            <span class="member-count">{{ club.memberCount }} members</span>
-          </div>
+          <span class="member-count">{{ club.memberCount }} members</span>
           <h3>{{ club.name }}</h3>
           <div class="card-meta">
             <span>{{ club.advisor }}</span>
@@ -91,7 +88,6 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
             </div>
             <div class="club-info">
               <h3>{{ club.name }}</h3>
-              <p>{{ club.category }}</p>
             </div>
           </div>
           <div class="club-details">
@@ -203,19 +199,19 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
 }
 
 .club-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: rgba(253, 224, 71, 0.08);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  background: rgba(253, 224, 71, 0.12);
   flex-shrink: 0;
 }
 
 .club-avatar.large {
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
+  width: 96px;
+  height: 96px;
+  border-radius: 26px;
 }
 
 .club-avatar img {
@@ -240,16 +236,10 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   transform: translateY(-2px);
 }
 
-.card-head {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.9rem;
-  color: rgba(254, 252, 232, 0.75);
-}
-
 .member-count {
   color: var(--mv-gold);
   font-weight: 600;
+  font-size: 0.95rem;
 }
 
 .card-meta {
@@ -307,12 +297,6 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
 .club-row:focus-visible {
   outline: 2px solid var(--mv-gold);
   outline-offset: 4px;
-}
-
-.club-info p {
-  margin: 0.2rem 0 0;
-  color: rgba(254, 252, 232, 0.65);
-  font-size: 0.9rem;
 }
 
 .club-details {

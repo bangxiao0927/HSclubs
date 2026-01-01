@@ -132,10 +132,7 @@ const activeCategoryClubs = computed(() =>
           <div class="club-avatar large">
             <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
           </div>
-          <div class="card-head">
-            <p class="club-category">{{ club.category }}</p>
-            <span class="member-count">{{ club.memberCount }} members</span>
-          </div>
+          <span class="member-count">{{ club.memberCount }} members</span>
           <h3>{{ club.name }}</h3>
           <p>{{ club.description }}</p>
           <div class="card-meta">
@@ -267,19 +264,19 @@ const activeCategoryClubs = computed(() =>
 }
 
 .club-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: rgba(253, 224, 71, 0.08);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  background: rgba(253, 224, 71, 0.12);
   flex-shrink: 0;
 }
 
 .club-avatar.large {
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
+  width: 96px;
+  height: 96px;
+  border-radius: 26px;
 }
 
 .club-avatar img {
@@ -289,16 +286,10 @@ const activeCategoryClubs = computed(() =>
   display: block;
 }
 
-.card-head {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.9rem;
-  color: rgba(254, 252, 232, 0.75);
-}
-
 .member-count {
   color: var(--mv-gold);
   font-weight: 600;
+  font-size: 0.95rem;
 }
 
 .card-meta {
