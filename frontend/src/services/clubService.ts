@@ -21,3 +21,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const fetchClubs = () => request<Club[]>('/api/clubs')
 
 export const fetchClubById = (id: number | string) => request<Club>(`/api/clubs/${id}`)
+
+export const updateClub = (id: number | string, data: Partial<Club>) =>
+  request<Club>(`/api/clubs/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })

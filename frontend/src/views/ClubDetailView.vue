@@ -65,8 +65,11 @@ watch(
           </p>
           <p class="hero-description">{{ club.description }}</p>
         </div>
-        <div class="club-avatar xlarge">
-          <img :src="clubImage(club)" :alt="`${club.name} avatar`" />
+        <div class="hero-side">
+          <RouterLink :to="`/clubs/${club.id}/admin`" class="admin-link">Manage club</RouterLink>
+          <div class="club-avatar xlarge">
+            <img :src="clubImage(club)" :alt="`${club.name} avatar`" />
+          </div>
         </div>
       </div>
       <div class="hero-stats">
@@ -159,6 +162,22 @@ watch(
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.admin-link {
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  text-decoration: none;
+  color: var(--mv-gold);
+  font-weight: 600;
 }
 
 .club-hero h1 {
@@ -306,6 +325,18 @@ watch(
 @media (max-width: 900px) {
   .club-body {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero-side {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .admin-link {
+    width: 100%;
+    text-align: center;
   }
 }
 </style>
