@@ -34,7 +34,7 @@ const handleLogout = () => {
               to="/about"
               class="nav-link"
               :class="{ active: route.name === 'about' }"
-            >Explore</RouterLink>
+            >Category</RouterLink>
             <RouterLink
               to="/calendar"
               class="nav-link"
