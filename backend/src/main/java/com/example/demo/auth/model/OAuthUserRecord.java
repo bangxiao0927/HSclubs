@@ -10,6 +10,7 @@ public class OAuthUserRecord {
     private String email;
     private String displayName;
     private String avatarUrl;
+    private String role;
     private LocalDateTime createdAt;
     private LocalDateTime lastLoginAt;
 
@@ -59,6 +60,14 @@ public class OAuthUserRecord {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 
     public LocalDateTime getCreatedAt() {

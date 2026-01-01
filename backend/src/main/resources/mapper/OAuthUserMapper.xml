@@ -5,12 +5,13 @@
 <mapper namespace="com.example.demo.auth.mapper.OAuthUserMapper">
 
     <insert id="upsert" parameterType="com.example.demo.auth.model.OAuthUserRecord">
-        INSERT INTO oauth_users (provider, provider_user_id, email, display_name, avatar_url)
-        VALUES (#{provider}, #{providerUserId}, #{email}, #{displayName}, #{avatarUrl})
+        INSERT INTO oauth_users (provider, provider_user_id, email, display_name, avatar_url, role)
+        VALUES (#{provider}, #{providerUserId}, #{email}, #{displayName}, #{avatarUrl}, #{role})
         ON DUPLICATE KEY UPDATE
             email = VALUES(email),
             display_name = VALUES(display_name),
             avatar_url = VALUES(avatar_url),
+            role = VALUES(role),
             last_login_at = CURRENT_TIMESTAMP
     </insert>
 

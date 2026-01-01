@@ -34,6 +34,8 @@ public class OAuthUserService {
         record.setEmail(firstNonBlank(attributes, "email"));
         record.setDisplayName(firstNonBlank(attributes, "name", "displayName", "given_name"));
         record.setAvatarUrl(firstNonBlank(attributes, "picture", "avatar", "avatar_url"));
+        String role = firstNonBlank(attributes, "role");
+        record.setRole(role == null || role.isBlank() ? "student" : role);
 
         oAuthUserMapper.upsert(record);
     }
