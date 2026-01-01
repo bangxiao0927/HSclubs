@@ -21,7 +21,7 @@ const handleLogout = () => {
       <div class="header-inner page-shell">
         <div class="header-left">
           <div class="logo">
-            <div class="logo-icon">🎓</div>
+            <img class="logo-icon" src="/android-chrome-512x512.png" alt="MVHS Clubs logo" />
             <span class="logo-text">MV Clubs</span>
           </div>
           <nav class="nav">
@@ -126,7 +126,7 @@ const handleLogout = () => {
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: #fde047;
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
