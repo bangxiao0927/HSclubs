@@ -17,13 +17,16 @@ import org.springframework.stereotype.Service;
 public class AuthService {
 
     private final Iterable<ClientRegistration> clientRegistrations;
+    private final OAuthUserService oAuthUserService;
 
-    public AuthService(ClientRegistrationRepository clientRegistrationRepository) {
+    public AuthService(ClientRegistrationRepository clientRegistrationRepository,
+                       OAuthUserService oAuthUserService) {
         if (clientRegistrationRepository instanceof Iterable<?>) {
             this.clientRegistrations = (Iterable<ClientRegistration>) clientRegistrationRepository;
         } else {
             throw new IllegalStateException("ClientRegistrationRepository is not iterable");
         }
+        this.oAuthUserService = oAuthUserService;
     }
 
     public List<AuthProvider> getProviders() {
@@ -52,7 +55,9 @@ public class AuthService {
         user.setEmail(stringAttribute(attributes, "email"));
         user.setDisplayName(firstNonBlank(attributes, "name", "given_name"));
         user.setAvatarUrl(stringAttribute(attributes, "picture", "avatar"));
-        user.setProvider(authentication.getAuthorizedClientRegistrationId());
+        String provider = authentication.getAuthorizedClientRegistrationId();
+        user.setProvider(provider);
+        oAuthUserService.recordLogin(provider, attributes);
         return user;
     }
 

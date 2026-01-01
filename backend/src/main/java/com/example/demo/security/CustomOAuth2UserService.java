@@ -12,8 +12,16 @@ import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
+import com.example.demo.auth.service.OAuthUserService;
+
 @Service
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
+
+    private final OAuthUserService oAuthUserService;
+
+    public CustomOAuth2UserService(OAuthUserService oAuthUserService) {
+        this.oAuthUserService = oAuthUserService;
+    }
 
     @Override
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
@@ -22,6 +30,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         Map<String, Object> attributes = new HashMap<>(oauth2User.getAttributes());
         String registrationId = userRequest.getClientRegistration().getRegistrationId();
         normalizeAttributes(attributes, registrationId);
+        oAuthUserService.recordLogin(registrationId, attributes);
 
         String userNameAttribute = userRequest.getClientRegistration()
             .getProviderDetails()

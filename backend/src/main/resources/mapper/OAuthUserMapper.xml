@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.auth.mapper.OAuthUserMapper">
+
+    <insert id="upsert" parameterType="com.example.demo.auth.model.OAuthUserRecord">
+        INSERT INTO oauth_users (provider, provider_user_id, email, display_name, avatar_url)
+        VALUES (#{provider}, #{providerUserId}, #{email}, #{displayName}, #{avatarUrl})
+        ON DUPLICATE KEY UPDATE
+            email = VALUES(email),
+            display_name = VALUES(display_name),
+            avatar_url = VALUES(avatar_url),
+            last_login_at = CURRENT_TIMESTAMP
+    </insert>
+
+</mapper>

@@ -1,5 +1,6 @@
 DROP TABLE IF EXISTS calenders;
 DROP TABLE IF EXISTS club_activities;
+DROP TABLE IF EXISTS oauth_users;
 DROP TABLE IF EXISTS club_tag;
 DROP TABLE IF EXISTS club_member;
 DROP TABLE IF EXISTS club_social_medias;
@@ -17,6 +18,18 @@ CREATE TABLE IF NOT EXISTS users (
     password VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL DEFAULT 'student',
     avatar VARCHAR(300)
+);
+
+CREATE TABLE IF NOT EXISTS oauth_users (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    provider VARCHAR(50) NOT NULL,
+    provider_user_id VARCHAR(255) NOT NULL,
+    email VARCHAR(200),
+    display_name VARCHAR(200),
+    avatar_url VARCHAR(500),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT uq_provider_user UNIQUE (provider, provider_user_id)
 );
 
 CREATE TABLE IF NOT EXISTS schools (
