@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.auth.model.AuthProvider;
 import com.example.demo.auth.model.AuthUser;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -12,21 +13,25 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 @Service
 public class AuthService {
 
     private final Iterable<ClientRegistration> clientRegistrations;
     private final OAuthUserService oAuthUserService;
+    private final SecurityProperties securityProperties;
 
     public AuthService(ClientRegistrationRepository clientRegistrationRepository,
-                       OAuthUserService oAuthUserService) {
+                       OAuthUserService oAuthUserService,
+                       SecurityProperties securityProperties) {
         if (clientRegistrationRepository instanceof Iterable<?>) {
             this.clientRegistrations = (Iterable<ClientRegistration>) clientRegistrationRepository;
         } else {
             throw new IllegalStateException("ClientRegistrationRepository is not iterable");
         }
         this.oAuthUserService = oAuthUserService;
+        this.securityProperties = securityProperties;
     }
 
     public List<AuthProvider> getProviders() {
@@ -57,6 +62,7 @@ public class AuthService {
         user.setAvatarUrl(stringAttribute(attributes, "picture", "avatar"));
         String provider = authentication.getAuthorizedClientRegistrationId();
         user.setProvider(provider);
+        user.setOwner(isOwner(user.getEmail()));
         oAuthUserService.recordLogin(provider, attributes);
         return user;
     }
@@ -77,5 +83,14 @@ public class AuthService {
             }
         }
         return null;
+    }
+
+    private boolean isOwner(String email) {
+        if (!StringUtils.hasText(email)) {
+            return false;
+        }
+        return securityProperties.getOwnerEmails().stream()
+            .filter(StringUtils::hasText)
+            .anyMatch(allowed -> email.equalsIgnoreCase(allowed.trim()));
     }
 }

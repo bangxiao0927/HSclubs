@@ -6,6 +6,7 @@ app:
     allowed-origins:
       - http://localhost:5173
     post-login-redirect-uri: http://localhost:5173/auth/callback
+    owner-emails: ${APP_OWNER_EMAILS}
 
 spring:
   config:

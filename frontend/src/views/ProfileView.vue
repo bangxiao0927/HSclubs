@@ -52,6 +52,11 @@ const handleLogout = () => authStore.logout()
           </div>
           <div class="cta-group">
             <RouterLink to="/" class="btn primary">Browse clubs</RouterLink>
+            <RouterLink
+              v-if="currentUser?.isOwner"
+              to="/admin"
+              class="btn ghost"
+            >Admin dashboard</RouterLink>
             <button type="button" class="btn ghost" @click="handleLogout">Sign out</button>
           </div>
         </div>

@@ -8,7 +8,7 @@ import { useAuthStore } from './stores/auth'
 const searchQuery = ref('')
 const route = useRoute()
 const authStore = useAuthStore()
-const { isAuthenticated } = storeToRefs(authStore)
+const { isAuthenticated, currentUser } = storeToRefs(authStore)
 
 const handleLogout = () => {
   authStore.logout()
@@ -40,6 +40,12 @@ const handleLogout = () => {
               class="nav-link"
               :class="{ active: route.name === 'calendar' }"
             >Calendar</RouterLink>
+            <RouterLink
+              v-if="currentUser?.isOwner"
+              to="/admin"
+              class="nav-link"
+              :class="{ active: route.name === 'owner-clubs' }"
+            >Admin</RouterLink>
           </nav>
         </div>
 

@@ -10,4 +10,5 @@ export interface AuthUser {
   displayName: string
   avatarUrl: string
   provider: string
+  isOwner: boolean
 }

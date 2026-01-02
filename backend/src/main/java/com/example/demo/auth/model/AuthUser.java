@@ -1,5 +1,7 @@
 package com.example.demo.auth.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public class AuthUser {
 
     private String id;
@@ -7,6 +9,8 @@ public class AuthUser {
     private String displayName;
     private String avatarUrl;
     private String provider;
+    @JsonProperty("isOwner")
+    private boolean owner;
 
     public String getId() {
         return id;
@@ -46,5 +50,13 @@ public class AuthUser {
 
     public void setProvider(String provider) {
         this.provider = provider;
+    }
+
+    public boolean isOwner() {
+        return owner;
+    }
+
+    public void setOwner(boolean owner) {
+        this.owner = owner;
     }
 }

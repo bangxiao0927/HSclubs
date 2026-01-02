@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 
 import { fetchClubById, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
 const relatedClubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
+
+const authStore = useAuthStore()
+const { currentUser } = storeToRefs(authStore)
+const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
 
 const clubImage = (entity: Club) => entity.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(entity.name)}`
 
@@ -67,7 +73,7 @@ watch(
         </div>
         <div class="hero-side">
           <RouterLink
-            v-if="club.canManage"
+            v-if="club.canManage || isOwner"
             :to="`/clubs/${club.id}/admin`"
             class="admin-link"
           >

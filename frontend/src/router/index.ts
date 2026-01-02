@@ -33,6 +33,11 @@ const router = createRouter({
       component: () => import('../views/ClubAdminView.vue'),
     },
     {
+      path: '/admin',
+      name: 'owner-clubs',
+      component: () => import('../views/OwnerAdminView.vue'),
+    },
+    {
       path: '/profile',
       name: 'profile',
       component: () => import('../views/ProfileView.vue'),
