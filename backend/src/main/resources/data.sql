@@ -55,26 +55,15 @@ ON DUPLICATE KEY UPDATE
   achievements = VALUES(achievements),
   school_id = VALUES(school_id);
 
-INSERT INTO club_role (id, club_id, role_name, club_permission)
+INSERT INTO club_member (club_id, oauth_user_id, role_name)
 VALUES
-  (1, 1, 'President', JSON_ARRAY('manage_members', 'edit_profile', 'publish_updates')),
-  (2, 1, 'Build Lead', JSON_ARRAY('manage_members')),
-  (3, 2, 'Coordinator', JSON_ARRAY('publish_updates')),
-  (4, 3, 'Producer', JSON_ARRAY('edit_profile')),
-  (5, 4, 'Captain', JSON_ARRAY('manage_members', 'publish_updates'))
+  (1, 1, 'President'),
+  (1, 2, 'Build Lead'),
+  (2, 2, 'Coordinator'),
+  (3, 3, 'Producer'),
+  (4, 4, 'Captain')
 ON DUPLICATE KEY UPDATE
-  role_name = VALUES(role_name),
-  club_permission = VALUES(club_permission);
-
-INSERT INTO club_member (club_id, oauth_user_id, club_role_id)
-VALUES
-  (1, 1, 1),
-  (1, 2, 2),
-  (2, 2, 3),
-  (3, 3, 4),
-  (4, 4, 5)
-ON DUPLICATE KEY UPDATE
-  club_role_id = VALUES(club_role_id);
+  role_name = VALUES(role_name);
 
 INSERT INTO club_social_medias (club_id, social_type, link_name, link_url)
 VALUES

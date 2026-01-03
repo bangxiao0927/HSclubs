@@ -25,5 +25,7 @@ public interface ClubMapper {
 
     List<ClubMemberView> findMembersByClubId(@Param("clubId") Long clubId);
 
-    int insertMember(@Param("clubId") Long clubId, @Param("oauthUserId") Long oauthUserId);
+    int insertMember(@Param("clubId") Long clubId,
+                     @Param("oauthUserId") Long oauthUserId,
+                     @Param("roleName") String roleName);
 }

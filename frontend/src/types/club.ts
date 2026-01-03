@@ -23,5 +23,4 @@ export interface ClubMember {
   email: string
   avatarUrl: string | null
   roleName: string | null
-  clubRoleId: number | null
 }

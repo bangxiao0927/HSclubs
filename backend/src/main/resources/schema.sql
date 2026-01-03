@@ -4,7 +4,6 @@ DROP TABLE IF EXISTS oauth_users;
 DROP TABLE IF EXISTS club_tag;
 DROP TABLE IF EXISTS club_member;
 DROP TABLE IF EXISTS club_social_medias;
-DROP TABLE IF EXISTS club_role;
 DROP TABLE IF EXISTS clubs;
 DROP TABLE IF EXISTS club_category;
 DROP TABLE IF EXISTS schools;
@@ -53,15 +52,6 @@ CREATE TABLE IF NOT EXISTS clubs (
     CONSTRAINT fk_clubs_category FOREIGN KEY (category) REFERENCES club_category(cate_name)
 );
 
-CREATE TABLE IF NOT EXISTS club_role (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    club_id BIGINT NOT NULL,
-    role_name VARCHAR(120) NOT NULL,
-    club_permission JSON NOT NULL DEFAULT (JSON_ARRAY()),
-    CONSTRAINT fk_club_role_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
-    CONSTRAINT uq_club_role_name UNIQUE (club_id, role_name)
-);
-
 CREATE TABLE IF NOT EXISTS club_social_medias (
     club_id BIGINT NOT NULL,
     social_type VARCHAR(50) NOT NULL,
@@ -74,11 +64,10 @@ CREATE TABLE IF NOT EXISTS club_social_medias (
 CREATE TABLE IF NOT EXISTS club_member (
     club_id BIGINT NOT NULL,
     oauth_user_id BIGINT NOT NULL,
-    club_role_id BIGINT,
+    role_name VARCHAR(120) NOT NULL DEFAULT 'member',
     PRIMARY KEY (club_id, oauth_user_id),
     CONSTRAINT fk_member_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
-    CONSTRAINT fk_member_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE,
-    CONSTRAINT fk_member_role FOREIGN KEY (club_role_id) REFERENCES club_role(id) ON DELETE SET NULL
+    CONSTRAINT fk_member_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS club_tag (

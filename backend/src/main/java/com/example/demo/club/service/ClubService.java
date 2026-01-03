@@ -108,6 +108,6 @@ public class ClubService {
         if (oauthUserId == null) {
             throw new IllegalStateException("Viewer is not registered as an OAuth user");
         }
-        clubMapper.insertMember(clubId, oauthUserId);
+        clubMapper.insertMember(clubId, oauthUserId, "member");
     }
 }

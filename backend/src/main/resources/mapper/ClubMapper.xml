@@ -74,7 +74,6 @@
         <result column="email" property="email" />
         <result column="avatar_url" property="avatarUrl" />
         <result column="role_name" property="roleName" />
-        <result column="club_role_id" property="clubRoleId" />
     </resultMap>
 
     <resultMap id="ViewerMembershipStatusMap" type="com.example.demo.club.model.ViewerMembershipStatus">
@@ -87,30 +86,27 @@
                ou.display_name,
                ou.email,
                ou.avatar_url,
-               cm.club_role_id,
-               cr.role_name
+               cm.role_name
         FROM club_member cm
             JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
-            LEFT JOIN club_role cr ON cr.id = cm.club_role_id
         WHERE cm.club_id = #{clubId}
-        ORDER BY COALESCE(cr.role_name, 'member') DESC, ou.display_name
+        ORDER BY COALESCE(cm.role_name, 'member') DESC, ou.display_name
     </select>
 
     <select id="findMembershipStatus" resultMap="ViewerMembershipStatusMap">
         SELECT TRUE AS is_member,
-               cr.role_name
+               cm.role_name
         FROM club_member cm
             JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
-            LEFT JOIN club_role cr ON cr.id = cm.club_role_id
         WHERE cm.club_id = #{clubId}
           AND LOWER(ou.email) = LOWER(#{email})
         LIMIT 1
     </select>
 
     <insert id="insertMember">
-        INSERT INTO club_member (club_id, oauth_user_id, club_role_id)
-        VALUES (#{clubId}, #{oauthUserId}, NULL)
-        ON DUPLICATE KEY UPDATE oauth_user_id = VALUES(oauth_user_id)
+        INSERT INTO club_member (club_id, oauth_user_id, role_name)
+        VALUES (#{clubId}, #{oauthUserId}, #{roleName})
+        ON DUPLICATE KEY UPDATE role_name = VALUES(role_name)
     </insert>
 
 </mapper>

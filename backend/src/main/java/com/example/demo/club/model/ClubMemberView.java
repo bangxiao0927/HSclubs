@@ -10,7 +10,6 @@ public class ClubMemberView {
     private String email;
     private String avatarUrl;
     private String roleName;
-    private Long clubRoleId;
 
     public Long getOauthUserId() {
         return oauthUserId;
@@ -50,13 +49,5 @@ public class ClubMemberView {
 
     public void setRoleName(String roleName) {
         this.roleName = roleName;
-    }
-
-    public Long getClubRoleId() {
-        return clubRoleId;
-    }
-
-    public void setClubRoleId(Long clubRoleId) {
-        this.clubRoleId = clubRoleId;
     }
 }
