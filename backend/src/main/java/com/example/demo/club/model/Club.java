@@ -26,6 +26,7 @@ public class Club {
     private String viewerRole;
     private Boolean viewerIsMember;
     private Boolean canManage;
+    private Boolean viewerHasPendingRequest;
 
     public Long getId() {
         return id;
@@ -169,5 +170,13 @@ public class Club {
 
     public void setCanManage(Boolean canManage) {
         this.canManage = canManage;
+    }
+
+    public Boolean getViewerHasPendingRequest() {
+        return viewerHasPendingRequest;
+    }
+
+    public void setViewerHasPendingRequest(Boolean viewerHasPendingRequest) {
+        this.viewerHasPendingRequest = viewerHasPendingRequest;
     }
 }

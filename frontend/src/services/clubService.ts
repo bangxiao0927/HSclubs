@@ -1,4 +1,4 @@
-import type { Club, ClubMember } from '../types/club'
+import type { Club, ClubMember, ClubMembershipRequest } from '../types/club'
 import { buildApiUrl } from './httpClient'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -42,4 +42,23 @@ export const applyToClub = (id: number | string) =>
   request<void>(`/api/clubs/${id}/members/apply`, {
     method: 'POST',
     body: JSON.stringify({}),
+  })
+
+export const cancelMembershipRequest = (id: number | string) =>
+  request<void>(`/api/clubs/${id}/members/apply`, {
+    method: 'DELETE',
+  })
+
+export const fetchMembershipRequests = (id: number | string) =>
+  request<ClubMembershipRequest[]>(`/api/clubs/${id}/membership-requests`)
+
+export const approveMembershipRequest = (clubId: number | string, requestId: number | string) =>
+  request<void>(`/api/clubs/${clubId}/membership-requests/${requestId}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+
+export const rejectMembershipRequest = (clubId: number | string, requestId: number | string) =>
+  request<void>(`/api/clubs/${clubId}/membership-requests/${requestId}`, {
+    method: 'DELETE',
   })

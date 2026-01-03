@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
-import { applyToClub, fetchClubById, fetchClubs } from '../services/clubService'
+import { applyToClub, cancelMembershipRequest, fetchClubById, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 
@@ -15,8 +15,18 @@ const error = ref('')
 const joining = ref(false)
 const joinError = ref('')
 const joinSuccess = ref('')
+const canceling = ref(false)
 
-const canApply = computed(() => Boolean(isAuthenticated.value && club.value && !club.value.viewerIsMember))
+const canApply = computed(
+  () =>
+    Boolean(
+      isAuthenticated.value &&
+        club.value &&
+        !club.value.viewerIsMember &&
+        !club.value.viewerHasPendingRequest
+    )
+)
+const hasPendingRequest = computed(() => Boolean(club.value?.viewerHasPendingRequest))
 
 const authStore = useAuthStore()
 const { currentUser, isAuthenticated } = storeToRefs(authStore)
@@ -71,6 +81,24 @@ const handleApply = async () => {
   }
 }
 
+const handleCancelRequest = async () => {
+  if (!club.value || !hasPendingRequest.value || canceling.value) {
+    return
+  }
+  canceling.value = true
+  joinError.value = ''
+  joinSuccess.value = ''
+  try {
+    await cancelMembershipRequest(club.value.id)
+    joinSuccess.value = 'Request withdrawn. You can apply again any time.'
+    await refreshClubSnapshot()
+  } catch (err) {
+    joinError.value = err instanceof Error ? err.message : 'Unable to cancel your request'
+  } finally {
+    canceling.value = false
+  }
+}
+
 watch(
   () => route.params.id,
   (newId) => {
@@ -106,10 +134,20 @@ watch(
             {{ club.meetingSchedule }} · Advisor {{ club.advisor || 'TBD' }} · {{ club.memberCount }} members
           </p>
           <p class="hero-description">{{ club.description }}</p>
-          <div class="hero-actions" v-if="canApply || joinSuccess || joinError">
+          <div class="hero-actions" v-if="canApply || joinSuccess || joinError || hasPendingRequest">
             <button v-if="canApply" type="button" class="apply-btn" @click="handleApply" :disabled="joining">
               {{ joining ? 'Sending…' : 'Apply to join' }}
             </button>
+            <button
+              v-else-if="hasPendingRequest"
+              type="button"
+              class="cancel-btn"
+              @click="handleCancelRequest"
+              :disabled="canceling"
+            >
+              {{ canceling ? 'Canceling…' : 'Withdraw request' }}
+            </button>
+            <p v-if="hasPendingRequest" class="join-message info">Your application is waiting for approval.</p>
             <p v-if="joinSuccess" class="join-message success">{{ joinSuccess }}</p>
             <p v-if="joinError" class="join-message error">{{ joinError }}</p>
           </div>
@@ -249,6 +287,21 @@ watch(
   cursor: not-allowed;
 }
 
+.cancel-btn {
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  background: transparent;
+  color: #fecaca;
+  font-weight: 600;
+  padding: 0.5rem 1.6rem;
+  cursor: pointer;
+}
+
+.cancel-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .join-message {
   margin: 0;
   font-size: 0.9rem;
@@ -260,6 +313,10 @@ watch(
 
 .join-message.error {
   color: #fecaca;
+}
+
+.join-message.info {
+  color: rgba(254, 252, 232, 0.9);
 }
 
 .admin-link {

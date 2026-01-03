@@ -15,6 +15,7 @@ export interface Club {
   viewerRole?: string | null
   viewerIsMember?: boolean
   canManage?: boolean
+  viewerHasPendingRequest?: boolean
 }
 
 export interface ClubMember {
@@ -23,4 +24,14 @@ export interface ClubMember {
   email: string
   avatarUrl: string | null
   roleName: string | null
+}
+
+export interface ClubMembershipRequest {
+  id: number
+  clubId: number
+  oauthUserId: number
+  displayName: string | null
+  email: string | null
+  avatarUrl: string | null
+  createdAt: string
 }

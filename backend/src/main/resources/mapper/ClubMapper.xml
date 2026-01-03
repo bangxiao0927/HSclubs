@@ -81,6 +81,16 @@
         <result column="role_name" property="roleName" />
     </resultMap>
 
+    <resultMap id="MembershipRequestViewMap" type="com.example.demo.club.model.ClubMembershipRequest">
+        <id column="id" property="id" />
+        <result column="club_id" property="clubId" />
+        <result column="oauth_user_id" property="oauthUserId" />
+        <result column="display_name" property="displayName" />
+        <result column="email" property="email" />
+        <result column="avatar_url" property="avatarUrl" />
+        <result column="created_at" property="createdAt" />
+    </resultMap>
+
     <select id="findMembersByClubId" resultMap="ClubMemberViewMap" parameterType="long">
         SELECT cm.oauth_user_id,
                ou.display_name,
@@ -108,5 +118,58 @@
         VALUES (#{clubId}, #{oauthUserId}, #{roleName})
         ON DUPLICATE KEY UPDATE role_name = VALUES(role_name)
     </insert>
+
+    <select id="findPendingRequestsByClubId" resultMap="MembershipRequestViewMap" parameterType="long">
+        SELECT cmr.id,
+               cmr.club_id,
+               cmr.oauth_user_id,
+               ou.display_name,
+               ou.email,
+               ou.avatar_url,
+               cmr.created_at
+        FROM club_membership_requests cmr
+            JOIN oauth_users ou ON ou.uid = cmr.oauth_user_id
+        WHERE cmr.club_id = #{clubId}
+        ORDER BY cmr.created_at ASC
+    </select>
+
+    <select id="findPendingRequestByClubAndUser" resultMap="MembershipRequestViewMap">
+        SELECT cmr.id,
+               cmr.club_id,
+               cmr.oauth_user_id,
+               ou.display_name,
+               ou.email,
+               ou.avatar_url,
+               cmr.created_at
+        FROM club_membership_requests cmr
+            JOIN oauth_users ou ON ou.uid = cmr.oauth_user_id
+        WHERE cmr.club_id = #{clubId}
+          AND cmr.oauth_user_id = #{oauthUserId}
+        LIMIT 1
+    </select>
+
+    <select id="findMembershipRequestById" resultMap="MembershipRequestViewMap" parameterType="long">
+        SELECT cmr.id,
+               cmr.club_id,
+               cmr.oauth_user_id,
+               ou.display_name,
+               ou.email,
+               ou.avatar_url,
+               cmr.created_at
+        FROM club_membership_requests cmr
+            JOIN oauth_users ou ON ou.uid = cmr.oauth_user_id
+        WHERE cmr.id = #{id}
+        LIMIT 1
+    </select>
+
+    <insert id="insertMembershipRequest">
+        INSERT INTO club_membership_requests (club_id, oauth_user_id)
+        VALUES (#{clubId}, #{oauthUserId})
+    </insert>
+
+    <delete id="deleteMembershipRequest">
+        DELETE FROM club_membership_requests
+        WHERE id = #{id}
+    </delete>
 
 </mapper>

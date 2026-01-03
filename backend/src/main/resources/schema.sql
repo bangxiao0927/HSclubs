@@ -1,12 +1,15 @@
+SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS calenders;
 DROP TABLE IF EXISTS club_activities;
-DROP TABLE IF EXISTS oauth_users;
-DROP TABLE IF EXISTS club_tag;
 DROP TABLE IF EXISTS club_member;
+DROP TABLE IF EXISTS club_membership_requests;
+DROP TABLE IF EXISTS club_tag;
 DROP TABLE IF EXISTS club_social_medias;
 DROP TABLE IF EXISTS clubs;
+DROP TABLE IF EXISTS oauth_users;
 DROP TABLE IF EXISTS club_category;
 DROP TABLE IF EXISTS schools;
+SET FOREIGN_KEY_CHECKS = 1;
 CREATE TABLE IF NOT EXISTS oauth_users (
     uid BIGINT PRIMARY KEY AUTO_INCREMENT,
     provider VARCHAR(50) NOT NULL,
@@ -68,6 +71,16 @@ CREATE TABLE IF NOT EXISTS club_member (
     PRIMARY KEY (club_id, oauth_user_id),
     CONSTRAINT fk_member_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     CONSTRAINT fk_member_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS club_membership_requests (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    club_id BIGINT NOT NULL,
+    oauth_user_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_club_membership_request (club_id, oauth_user_id),
+    CONSTRAINT fk_request_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    CONSTRAINT fk_request_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS club_tag (

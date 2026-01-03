@@ -3,6 +3,7 @@ package com.example.demo.club.controller;
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubMemberView;
+import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.service.ClubService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -82,18 +83,7 @@ public class ClubController {
 
     @GetMapping("/{id}/members")
     public List<ClubMemberView> listMembers(@PathVariable Long id, Authentication authentication) {
-        String viewerEmail = resolveViewerEmail(authentication);
-        if (viewerEmail == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        Club club = clubService.findById(id, viewerEmail);
-        if (club == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
-        }
-        boolean canViewMembers = Boolean.TRUE.equals(club.getCanManage()) || isOwner(authentication);
-        if (!canViewMembers) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to member details");
-        }
+        requireManageAccess(id, authentication);
         return clubService.findMembers(id);
     }
 
@@ -113,6 +103,57 @@ public class ClubController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
         } catch (IllegalStateException ex) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{id}/members/apply")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelApplication(@PathVariable Long id, Authentication authentication) {
+        String viewerEmail = resolveViewerEmail(authentication);
+        if (viewerEmail == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        if (clubService.findById(id) == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
+        try {
+            clubService.cancelMembershipRequest(id, viewerEmail);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @GetMapping("/{id}/membership-requests")
+    public List<ClubMembershipRequest> listMembershipRequests(@PathVariable Long id, Authentication authentication) {
+        requireManageAccess(id, authentication);
+        return clubService.findPendingRequests(id);
+    }
+
+    @PostMapping("/{id}/membership-requests/{requestId}/approve")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void approveMembershipRequest(@PathVariable Long id,
+                                          @PathVariable Long requestId,
+                                          Authentication authentication) {
+        requireManageAccess(id, authentication);
+        try {
+            clubService.approveMembershipRequest(id, requestId);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{id}/membership-requests/{requestId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void rejectMembershipRequest(@PathVariable Long id,
+                                         @PathVariable Long requestId,
+                                         Authentication authentication) {
+        requireManageAccess(id, authentication);
+        try {
+            clubService.rejectMembershipRequest(id, requestId);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
         }
     }
 
@@ -136,5 +177,21 @@ public class ClubController {
         return securityProperties.getOwnerEmails().stream()
             .filter(item -> item != null && !item.isBlank())
             .anyMatch(item -> email.equalsIgnoreCase(item.trim()));
+    }
+
+    private Club requireManageAccess(Long clubId, Authentication authentication) {
+        String viewerEmail = resolveViewerEmail(authentication);
+        if (viewerEmail == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        Club club = clubService.findById(clubId, viewerEmail);
+        if (club == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
+        boolean canManage = Boolean.TRUE.equals(club.getCanManage()) || isOwner(authentication);
+        if (!canManage) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to member details");
+        }
+        return club;
     }
 }
