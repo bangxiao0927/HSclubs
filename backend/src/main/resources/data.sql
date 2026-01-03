@@ -1,18 +1,18 @@
 SET @OLD_SQL_MODE = @@SQL_MODE;
 SET SQL_MODE = CONCAT(@@SQL_MODE, ',NO_AUTO_VALUE_ON_ZERO');
 
-INSERT INTO users (uid, nickname, login_name, email, password, role, avatar)
+INSERT INTO oauth_users (uid, provider, provider_user_id, email, display_name, avatar_url, role)
 VALUES
-  (1, 'Maya Chen', 'maya.chen', 'maya.chen@example.com', '$2a$10$abc', 'student', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Maya'),
-  (2, 'Leo Martinez', 'leo.m', 'leo.martinez@example.com', '$2a$10$def', 'student', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Leo'),
-  (3, 'Priya Singh', 'priya.s', 'priya.singh@example.com', '$2a$10$ghi', 'advisor', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Priya'),
-  (4, 'Dr. Patel', 'apatel', 'apatel@mvhs.org', '$2a$10$jkl', 'staff', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Patel')
+  (1, 'google', 'google-123', 'maya.chen@example.com', 'Maya Chen', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Maya', 'student'),
+  (2, 'google', 'google-456', 'leo.martinez@example.com', 'Leo Martinez', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Leo', 'student'),
+  (3, 'google', 'google-789', 'priya.singh@example.com', 'Priya Singh', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Priya', 'advisor'),
+  (4, 'google', 'google-321', 'apatel@mvhs.org', 'Dr. Patel', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Patel', 'staff')
 ON DUPLICATE KEY UPDATE
-  nickname = VALUES(nickname),
   email = VALUES(email),
-  password = VALUES(password),
+  display_name = VALUES(display_name),
+  avatar_url = VALUES(avatar_url),
   role = VALUES(role),
-  avatar = VALUES(avatar);
+  last_login_at = CURRENT_TIMESTAMP;
 
 INSERT INTO schools (id, school_name)
 VALUES (1, 'Mountain View High School')
@@ -66,7 +66,7 @@ ON DUPLICATE KEY UPDATE
   role_name = VALUES(role_name),
   club_permission = VALUES(club_permission);
 
-INSERT INTO club_member (club_id, uid, club_role_id)
+INSERT INTO club_member (club_id, oauth_user_id, club_role_id)
 VALUES
   (1, 1, 1),
   (1, 2, 2),

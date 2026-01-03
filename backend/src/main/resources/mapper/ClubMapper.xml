@@ -71,10 +71,10 @@
     <select id="findMemberRoleByClubAndEmail" resultType="string">
         SELECT cr.role_name
         FROM club_member cm
-            JOIN users u ON u.uid = cm.uid
+            JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
             LEFT JOIN club_role cr ON cr.id = cm.club_role_id
         WHERE cm.club_id = #{clubId}
-          AND LOWER(u.email) = LOWER(#{email})
+          AND LOWER(ou.email) = LOWER(#{email})
         LIMIT 1
     </select>
 

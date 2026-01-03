@@ -8,20 +8,8 @@ DROP TABLE IF EXISTS club_role;
 DROP TABLE IF EXISTS clubs;
 DROP TABLE IF EXISTS club_category;
 DROP TABLE IF EXISTS schools;
-DROP TABLE IF EXISTS users;
-
-CREATE TABLE IF NOT EXISTS users (
-    uid BIGINT PRIMARY KEY AUTO_INCREMENT,
-    nickname VARCHAR(120) NOT NULL,
-    login_name VARCHAR(120) NOT NULL UNIQUE,
-    email VARCHAR(200) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL DEFAULT 'student',
-    avatar VARCHAR(300)
-);
-
 CREATE TABLE IF NOT EXISTS oauth_users (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    uid BIGINT PRIMARY KEY AUTO_INCREMENT,
     provider VARCHAR(50) NOT NULL,
     provider_user_id VARCHAR(255) NOT NULL,
     email VARCHAR(200),
@@ -85,11 +73,11 @@ CREATE TABLE IF NOT EXISTS club_social_medias (
 
 CREATE TABLE IF NOT EXISTS club_member (
     club_id BIGINT NOT NULL,
-    uid BIGINT NOT NULL,
+    oauth_user_id BIGINT NOT NULL,
     club_role_id BIGINT,
-    PRIMARY KEY (club_id, uid),
+    PRIMARY KEY (club_id, oauth_user_id),
     CONSTRAINT fk_member_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
-    CONSTRAINT fk_member_user FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
+    CONSTRAINT fk_member_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE,
     CONSTRAINT fk_member_role FOREIGN KEY (club_role_id) REFERENCES club_role(id) ON DELETE SET NULL
 );
 
