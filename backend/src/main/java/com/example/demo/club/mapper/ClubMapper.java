@@ -1,6 +1,8 @@
 package com.example.demo.club.mapper;
 
 import com.example.demo.club.model.Club;
+import com.example.demo.club.model.ClubMemberView;
+import com.example.demo.club.model.ViewerMembershipStatus;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -19,5 +21,9 @@ public interface ClubMapper {
 
     int delete(@Param("id") Long id);
 
-    String findMemberRoleByClubAndEmail(@Param("clubId") Long clubId, @Param("email") String email);
+    ViewerMembershipStatus findMembershipStatus(@Param("clubId") Long clubId, @Param("email") String email);
+
+    List<ClubMemberView> findMembersByClubId(@Param("clubId") Long clubId);
+
+    int insertMember(@Param("clubId") Long clubId, @Param("oauthUserId") Long oauthUserId);
 }

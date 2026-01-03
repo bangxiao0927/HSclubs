@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 
-import { fetchClubById, updateClub } from '../services/clubService'
-import type { Club } from '../types/club'
+import { fetchClubById, fetchClubMembers, updateClub } from '../services/clubService'
+import type { Club, ClubMember } from '../types/club'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -12,6 +14,9 @@ const saving = ref(false)
 const loadError = ref('')
 const formError = ref('')
 const successMessage = ref('')
+const members = ref<ClubMember[]>([])
+const membersLoading = ref(false)
+const membersError = ref('')
 
 const form = reactive({
   name: '',
@@ -54,6 +59,10 @@ const hydrateForm = (data: Club) => {
   form.achievementsText = (data.achievements ?? []).join('\n')
 }
 
+const authStore = useAuthStore()
+const { currentUser } = storeToRefs(authStore)
+const canManageMembers = computed(() => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner))
+
 const loadClub = async (id: string) => {
   loading.value = true
   loadError.value = ''
@@ -63,11 +72,42 @@ const loadClub = async (id: string) => {
     const response = await fetchClubById(id)
     club.value = response
     hydrateForm(response)
+    if (canManageMembers.value) {
+      void loadMembers(id)
+    } else {
+      members.value = []
+      membersError.value = ''
+    }
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : 'Failed to load club details'
     club.value = null
+    members.value = []
   } finally {
     loading.value = false
+  }
+}
+
+const loadMembers = async (id: string) => {
+  if (!id || !canManageMembers.value) {
+    membersLoading.value = false
+    members.value = []
+    return
+  }
+  membersLoading.value = true
+  membersError.value = ''
+  try {
+    members.value = await fetchClubMembers(id)
+  } catch (err) {
+    membersError.value = err instanceof Error ? err.message : 'Failed to load members'
+    members.value = []
+  } finally {
+    membersLoading.value = false
+  }
+}
+
+const refreshMembers = () => {
+  if (club.value && canManageMembers.value) {
+    void loadMembers(String(club.value.id))
   }
 }
 
@@ -126,6 +166,15 @@ watch(
     }
   },
   { immediate: true }
+)
+
+watch(
+  canManageMembers,
+  (allowed) => {
+    if (allowed && club.value) {
+      void loadMembers(String(club.value.id))
+    }
+  }
 )
 </script>
 
@@ -244,6 +293,51 @@ watch(
           </div>
         </aside>
       </div>
+
+      <section class="member-panel">
+        <div class="member-panel__header">
+          <div>
+            <h2>Member management</h2>
+            <p>Review everyone currently linked to {{ club.name }}.</p>
+          </div>
+          <button
+            type="button"
+            class="ghost-btn"
+            @click="refreshMembers"
+            :disabled="membersLoading || !canManageMembers"
+          >
+            {{ membersLoading ? 'Refreshing…' : 'Refresh list' }}
+          </button>
+        </div>
+
+        <p v-if="!canManageMembers" class="member-hint">
+          Only club leaders or site owners can view the roster.
+        </p>
+
+        <div v-else>
+          <div v-if="membersLoading" class="status-card">Loading members…</div>
+          <div v-else-if="membersError" class="status-card error">
+            <p>{{ membersError }}</p>
+            <button type="button" class="ghost-btn" @click="refreshMembers">Try again</button>
+          </div>
+          <ul v-else-if="members.length" class="member-list">
+            <li v-for="member in members" :key="member.oauthUserId" class="member-entry">
+              <div class="member-avatar">
+                <img
+                  :src="member.avatarUrl || 'https://api.dicebear.com/7.x/thumbs/svg?seed=' + encodeURIComponent(member.displayName || 'Member')"
+                  :alt="member.displayName || 'Club member'"
+                />
+              </div>
+              <div class="member-info">
+                <p>{{ member.displayName || 'Unnamed member' }}</p>
+                <small>{{ member.roleName || 'Member' }}</small>
+              </div>
+              <a v-if="member.email" class="member-email" :href="`mailto:${member.email}`">{{ member.email }}</a>
+            </li>
+          </ul>
+          <p v-else class="member-empty">No members have been linked yet.</p>
+        </div>
+      </section>
     </template>
   </section>
 </template>
@@ -455,6 +549,91 @@ textarea {
   flex-direction: column;
   gap: 0.35rem;
   color: rgba(254, 252, 232, 0.8);
+}
+
+.member-panel {
+  border-radius: 28px;
+  border: 1px solid rgba(250, 204, 21, 0.18);
+  padding: clamp(1.5rem, 4vw, 2.75rem);
+  background: rgba(7, 7, 7, 0.92);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.member-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.member-panel__header h2 {
+  margin: 0;
+}
+
+.member-panel__header p {
+  margin: 0.2rem 0 0;
+  color: rgba(254, 252, 232, 0.7);
+}
+
+.member-hint,
+.member-empty {
+  margin: 0;
+  color: rgba(254, 252, 232, 0.75);
+}
+
+.member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.member-entry {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(254, 252, 232, 0.08);
+}
+
+.member-entry:last-child {
+  border-bottom: none;
+}
+
+.member-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  background: rgba(253, 224, 71, 0.08);
+}
+
+.member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.member-info p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.member-info small {
+  display: block;
+  color: rgba(254, 252, 232, 0.65);
+}
+
+.member-email {
+  color: rgba(250, 204, 21, 0.9);
+  font-size: 0.9rem;
 }
 
 @media (max-width: 900px) {

@@ -24,6 +24,7 @@ public class Club {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String viewerRole;
+    private Boolean viewerIsMember;
     private Boolean canManage;
 
     public Long getId() {
@@ -152,6 +153,14 @@ public class Club {
 
     public void setViewerRole(String viewerRole) {
         this.viewerRole = viewerRole;
+    }
+
+    public Boolean getViewerIsMember() {
+        return viewerIsMember;
+    }
+
+    public void setViewerIsMember(Boolean viewerIsMember) {
+        this.viewerIsMember = viewerIsMember;
     }
 
     public Boolean getCanManage() {

@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
-import { fetchClubById, fetchClubs } from '../services/clubService'
+import { applyToClub, fetchClubById, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 
@@ -12,9 +12,14 @@ const club = ref<Club | null>(null)
 const relatedClubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
+const joining = ref(false)
+const joinError = ref('')
+const joinSuccess = ref('')
+
+const canApply = computed(() => Boolean(isAuthenticated.value && club.value && !club.value.viewerIsMember))
 
 const authStore = useAuthStore()
-const { currentUser } = storeToRefs(authStore)
+const { currentUser, isAuthenticated } = storeToRefs(authStore)
 const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
 
 const clubImage = (entity: Club) => entity.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(entity.name)}`
@@ -23,6 +28,8 @@ const loadClub = async (id: string) => {
   loading.value = true
   error.value = ''
   club.value = null
+  joinError.value = ''
+  joinSuccess.value = ''
   try {
     const [clubResponse, allClubs] = await Promise.all([fetchClubById(id), fetchClubs()])
     club.value = clubResponse
@@ -32,6 +39,35 @@ const loadClub = async (id: string) => {
     relatedClubs.value = []
   } finally {
     loading.value = false
+  }
+}
+
+const refreshClubSnapshot = async () => {
+  if (!club.value) {
+    return
+  }
+  try {
+    club.value = await fetchClubById(String(club.value.id))
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+const handleApply = async () => {
+  if (!club.value || !canApply.value || joining.value) {
+    return
+  }
+  joining.value = true
+  joinError.value = ''
+  joinSuccess.value = ''
+  try {
+    await applyToClub(club.value.id)
+    joinSuccess.value = 'Request received. A club lead will reach out soon.'
+    await refreshClubSnapshot()
+  } catch (err) {
+    joinError.value = err instanceof Error ? err.message : 'Unable to submit your request'
+  } finally {
+    joining.value = false
   }
 }
 
@@ -70,6 +106,13 @@ watch(
             {{ club.meetingSchedule }} · Advisor {{ club.advisor || 'TBD' }} · {{ club.memberCount }} members
           </p>
           <p class="hero-description">{{ club.description }}</p>
+          <div class="hero-actions" v-if="canApply || joinSuccess || joinError">
+            <button v-if="canApply" type="button" class="apply-btn" @click="handleApply" :disabled="joining">
+              {{ joining ? 'Sending…' : 'Apply to join' }}
+            </button>
+            <p v-if="joinSuccess" class="join-message success">{{ joinSuccess }}</p>
+            <p v-if="joinError" class="join-message error">{{ joinError }}</p>
+          </div>
         </div>
         <div class="hero-side">
           <RouterLink
@@ -181,6 +224,42 @@ watch(
   flex-direction: column;
   align-items: flex-end;
   gap: 0.75rem;
+}
+
+.hero-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.apply-btn {
+  border-radius: 999px;
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  background: rgba(250, 204, 21, 0.15);
+  color: var(--mv-gold);
+  font-weight: 600;
+  padding: 0.5rem 1.6rem;
+  cursor: pointer;
+}
+
+.apply-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.join-message {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.join-message.success {
+  color: #bbf7d0;
+}
+
+.join-message.error {
+  color: #fecaca;
 }
 
 .admin-link {

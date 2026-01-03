@@ -1,7 +1,10 @@
 package com.example.demo.club.service;
 
+import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.club.mapper.ClubMapper;
 import com.example.demo.club.model.Club;
+import com.example.demo.club.model.ClubMemberView;
+import com.example.demo.club.model.ViewerMembershipStatus;
 import com.example.demo.school.mapper.SchoolMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -14,10 +17,12 @@ public class ClubService {
 
     private final ClubMapper clubMapper;
     private final SchoolMapper schoolMapper;
+    private final OAuthUserMapper oAuthUserMapper;
 
-    public ClubService(ClubMapper clubMapper, SchoolMapper schoolMapper) {
+    public ClubService(ClubMapper clubMapper, SchoolMapper schoolMapper, OAuthUserMapper oAuthUserMapper) {
         this.clubMapper = clubMapper;
         this.schoolMapper = schoolMapper;
+        this.oAuthUserMapper = oAuthUserMapper;
     }
 
     public List<Club> findAll() {
@@ -32,6 +37,10 @@ public class ClubService {
         Club club = clubMapper.findById(id);
         applyViewerPermissions(club, viewerEmail);
         return club;
+    }
+
+    public List<ClubMemberView> findMembers(Long clubId) {
+        return clubMapper.findMembersByClubId(clubId);
     }
 
     public Club create(Club club) {
@@ -73,15 +82,32 @@ public class ClubService {
         if (club == null) {
             return;
         }
+        club.setViewerIsMember(false);
+        club.setViewerRole(null);
+        club.setCanManage(false);
         if (!StringUtils.hasText(viewerEmail)) {
-            club.setViewerRole(null);
-            club.setCanManage(false);
             return;
         }
 
-        String roleName = clubMapper.findMemberRoleByClubAndEmail(club.getId(), viewerEmail);
-        club.setViewerRole(roleName);
-        boolean canManage = roleName != null && "president".equalsIgnoreCase(roleName.trim());
+        ViewerMembershipStatus membershipStatus = clubMapper.findMembershipStatus(club.getId(), viewerEmail);
+        if (membershipStatus == null) {
+            return;
+        }
+        club.setViewerIsMember(Boolean.TRUE.equals(membershipStatus.getMember()));
+        club.setViewerRole(membershipStatus.getRoleName());
+        boolean canManage = membershipStatus.getRoleName() != null &&
+            "president".equalsIgnoreCase(membershipStatus.getRoleName().trim());
         club.setCanManage(canManage);
+    }
+
+    public void applyForMembership(Long clubId, String viewerEmail) {
+        if (!StringUtils.hasText(viewerEmail)) {
+            throw new IllegalArgumentException("Viewer email is required");
+        }
+        Long oauthUserId = oAuthUserMapper.findIdByEmail(viewerEmail);
+        if (oauthUserId == null) {
+            throw new IllegalStateException("Viewer is not registered as an OAuth user");
+        }
+        clubMapper.insertMember(clubId, oauthUserId);
     }
 }

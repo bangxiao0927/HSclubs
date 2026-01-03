@@ -68,8 +68,37 @@
         DELETE FROM clubs WHERE id = #{id}
     </delete>
 
-    <select id="findMemberRoleByClubAndEmail" resultType="string">
-        SELECT cr.role_name
+    <resultMap id="ClubMemberViewMap" type="com.example.demo.club.model.ClubMemberView">
+        <id column="oauth_user_id" property="oauthUserId" />
+        <result column="display_name" property="displayName" />
+        <result column="email" property="email" />
+        <result column="avatar_url" property="avatarUrl" />
+        <result column="role_name" property="roleName" />
+        <result column="club_role_id" property="clubRoleId" />
+    </resultMap>
+
+    <resultMap id="ViewerMembershipStatusMap" type="com.example.demo.club.model.ViewerMembershipStatus">
+        <result column="is_member" property="member" />
+        <result column="role_name" property="roleName" />
+    </resultMap>
+
+    <select id="findMembersByClubId" resultMap="ClubMemberViewMap" parameterType="long">
+        SELECT cm.oauth_user_id,
+               ou.display_name,
+               ou.email,
+               ou.avatar_url,
+               cm.club_role_id,
+               cr.role_name
+        FROM club_member cm
+            JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
+            LEFT JOIN club_role cr ON cr.id = cm.club_role_id
+        WHERE cm.club_id = #{clubId}
+        ORDER BY COALESCE(cr.role_name, 'member') DESC, ou.display_name
+    </select>
+
+    <select id="findMembershipStatus" resultMap="ViewerMembershipStatusMap">
+        SELECT TRUE AS is_member,
+               cr.role_name
         FROM club_member cm
             JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
             LEFT JOIN club_role cr ON cr.id = cm.club_role_id
@@ -77,5 +106,11 @@
           AND LOWER(ou.email) = LOWER(#{email})
         LIMIT 1
     </select>
+
+    <insert id="insertMember">
+        INSERT INTO club_member (club_id, oauth_user_id, club_role_id)
+        VALUES (#{clubId}, #{oauthUserId}, NULL)
+        ON DUPLICATE KEY UPDATE oauth_user_id = VALUES(oauth_user_id)
+    </insert>
 
 </mapper>

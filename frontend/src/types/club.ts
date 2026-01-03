@@ -13,5 +13,15 @@ export interface Club {
   achievements: string[]
   schoolId: number
   viewerRole?: string | null
+  viewerIsMember?: boolean
   canManage?: boolean
+}
+
+export interface ClubMember {
+  oauthUserId: number
+  displayName: string
+  email: string
+  avatarUrl: string | null
+  roleName: string | null
+  clubRoleId: number | null
 }

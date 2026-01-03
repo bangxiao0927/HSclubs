@@ -1,4 +1,4 @@
-import type { Club } from '../types/club'
+import type { Club, ClubMember } from '../types/club'
 import { buildApiUrl } from './httpClient'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -19,7 +19,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(message || `Request failed with status ${response.status}`)
   }
 
-  return (await response.json()) as T
+  const raw = await response.text()
+  if (!raw) {
+    return undefined as T
+  }
+  return JSON.parse(raw) as T
 }
 
 export const fetchClubs = () => request<Club[]>('/api/clubs')
@@ -30,4 +34,12 @@ export const updateClub = (id: number | string, data: Partial<Club>) =>
   request<Club>(`/api/clubs/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
+  })
+
+export const fetchClubMembers = (id: number | string) => request<ClubMember[]>(`/api/clubs/${id}/members`)
+
+export const applyToClub = (id: number | string) =>
+  request<void>(`/api/clubs/${id}/members/apply`, {
+    method: 'POST',
+    body: JSON.stringify({}),
   })
