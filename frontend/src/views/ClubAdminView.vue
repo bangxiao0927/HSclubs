@@ -136,6 +136,7 @@ const handleSave = async () => {
 
   try {
     const payload: Partial<Club> = {
+      schoolId: club.value.schoolId,
       name: form.name,
       aliasName: nullable(form.aliasName ?? ''),
       description: form.description,
