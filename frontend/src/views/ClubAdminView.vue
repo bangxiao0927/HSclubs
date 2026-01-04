@@ -3,15 +3,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
-import {
-  approveMembershipRequest,
-  fetchClubById,
-  fetchClubMembers,
-  fetchMembershipRequests,
-  rejectMembershipRequest,
-  updateClub,
-} from '../services/clubService'
-import type { Club, ClubMember, ClubMembershipRequest } from '../types/club'
+import { fetchClubById, fetchClubMembers, updateClub } from '../services/clubService'
+import type { Club, ClubMember } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
@@ -24,12 +17,6 @@ const successMessage = ref('')
 const members = ref<ClubMember[]>([])
 const membersLoading = ref(false)
 const membersError = ref('')
-const pendingRequests = ref<ClubMembershipRequest[]>([])
-const pendingLoading = ref(false)
-const pendingError = ref('')
-const approvalError = ref('')
-const approvingRequestId = ref<number | null>(null)
-const decliningRequestId = ref<number | null>(null)
 
 const form = reactive({
   name: '',
@@ -87,21 +74,15 @@ const loadClub = async (id: string) => {
     hydrateForm(response)
     if (canManageMembers.value) {
       void loadMembers(id)
-      void loadPendingRequests(id)
     } else {
       members.value = []
       membersError.value = ''
-      pendingRequests.value = []
-      pendingError.value = ''
-      approvalError.value = ''
     }
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : 'Failed to load club details'
     club.value = null
     members.value = []
-    pendingRequests.value = []
     membersError.value = ''
-    pendingError.value = ''
   } finally {
     loading.value = false
   }
@@ -125,76 +106,10 @@ const loadMembers = async (id: string) => {
   }
 }
 
-const loadPendingRequests = async (id: string) => {
-  if (!id || !canManageMembers.value) {
-    pendingLoading.value = false
-    pendingRequests.value = []
-    return
-  }
-  pendingLoading.value = true
-  pendingError.value = ''
-  approvalError.value = ''
-  try {
-    pendingRequests.value = await fetchMembershipRequests(id)
-  } catch (err) {
-    pendingError.value = err instanceof Error ? err.message : 'Failed to load pending requests'
-    pendingRequests.value = []
-  } finally {
-    pendingLoading.value = false
-  }
-}
-
 const refreshMembers = () => {
   if (club.value && canManageMembers.value) {
-    const clubId = String(club.value.id)
-    void loadMembers(clubId)
-    void loadPendingRequests(clubId)
+    void loadMembers(String(club.value.id))
   }
-}
-
-const approveRequest = async (requestId: number) => {
-  if (!club.value || !canManageMembers.value || approvingRequestId.value === requestId) {
-    return
-  }
-  approvalError.value = ''
-  pendingError.value = ''
-  approvingRequestId.value = requestId
-  try {
-    await approveMembershipRequest(club.value.id, requestId)
-    const clubId = String(club.value.id)
-    await loadPendingRequests(clubId)
-    await loadMembers(clubId)
-  } catch (err) {
-    approvalError.value = err instanceof Error ? err.message : 'Failed to approve request'
-  } finally {
-    approvingRequestId.value = null
-  }
-}
-
-const rejectRequest = async (requestId: number) => {
-  if (!club.value || !canManageMembers.value || decliningRequestId.value === requestId) {
-    return
-  }
-  approvalError.value = ''
-  pendingError.value = ''
-  decliningRequestId.value = requestId
-  try {
-    await rejectMembershipRequest(club.value.id, requestId)
-    const clubId = String(club.value.id)
-    await loadPendingRequests(clubId)
-  } catch (err) {
-    approvalError.value = err instanceof Error ? err.message : 'Failed to decline request'
-  } finally {
-    decliningRequestId.value = null
-  }
-}
-
-const formatRequestTimestamp = (isoString: string) => {
-  const date = new Date(isoString)
-  if (Number.isNaN(date.getTime())) {
-    return 'Requested recently'
-  }
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 const retryLoad = () => {
@@ -258,12 +173,9 @@ watch(
   canManageMembers,
   (allowed) => {
     if (allowed && club.value) {
-      const clubId = String(club.value.id)
-      void loadMembers(clubId)
-      void loadPendingRequests(clubId)
+      void loadMembers(String(club.value.id))
     } else {
       members.value = []
-      pendingRequests.value = []
     }
   }
 )
@@ -391,92 +303,47 @@ watch(
             <h2>Member management</h2>
             <p>Review everyone currently linked to {{ club.name }}.</p>
           </div>
-          <button
-            type="button"
-            class="ghost-btn"
-            @click="refreshMembers"
-            :disabled="membersLoading || pendingLoading || !canManageMembers"
-          >
-            {{ membersLoading || pendingLoading ? 'Refreshing…' : 'Refresh data' }}
-          </button>
+          <div class="member-panel__actions">
+            <RouterLink
+              v-if="club && canManageMembers"
+              :to="`/clubs/${club.id}/admin/pending`"
+              class="ghost-btn"
+            >
+              Review pending requests
+            </RouterLink>
+            <button type="button" class="ghost-btn" @click="refreshMembers" :disabled="membersLoading || !canManageMembers">
+              {{ membersLoading ? 'Refreshing…' : 'Refresh roster' }}
+            </button>
+          </div>
         </div>
 
         <p v-if="!canManageMembers" class="member-hint">
           Only club leaders or site owners can view the roster.
         </p>
 
-        <div v-else class="membership-sections">
-          <section class="pending-panel">
-            <div class="pending-panel__header">
-              <h3>Pending approvals</h3>
-              <p>Applications that still need a leader decision.</p>
-            </div>
-            <p v-if="approvalError" class="member-hint error">{{ approvalError }}</p>
-            <div v-if="pendingLoading" class="status-card">Loading requests…</div>
-            <div v-else-if="pendingError" class="status-card error">
-              <p>{{ pendingError }}</p>
-              <button type="button" class="ghost-btn" @click="refreshMembers">Try again</button>
-            </div>
-            <ul v-else-if="pendingRequests.length" class="member-list pending-list">
-              <li v-for="request in pendingRequests" :key="request.id" class="member-entry pending-entry">
-                <div class="member-avatar">
-                  <img
-                    :src="request.avatarUrl || 'https://api.dicebear.com/7.x/thumbs/svg?seed=' + encodeURIComponent(request.displayName || 'Member')"
-                    :alt="request.displayName || 'Pending member'"
-                  />
-                </div>
-                <div class="member-info">
-                  <p>{{ request.displayName || 'Pending member' }}</p>
-                  <small>{{ request.email || 'No email on file' }}</small>
-                  <small class="request-meta">Requested {{ formatRequestTimestamp(request.createdAt) }}</small>
-                </div>
-                <div class="pending-actions">
-                  <button
-                    type="button"
-                    class="ghost-btn danger"
-                    @click="rejectRequest(request.id)"
-                    :disabled="decliningRequestId === request.id"
-                  >
-                    {{ decliningRequestId === request.id ? 'Declining…' : 'Decline' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="primary-btn"
-                    @click="approveRequest(request.id)"
-                    :disabled="approvingRequestId === request.id"
-                  >
-                    {{ approvingRequestId === request.id ? 'Approving…' : 'Approve' }}
-                  </button>
-                </div>
-              </li>
-            </ul>
-            <p v-else class="member-empty">No open requests right now.</p>
-          </section>
-
-          <section class="roster-panel">
-            <div v-if="membersLoading" class="status-card">Loading members…</div>
-            <div v-else-if="membersError" class="status-card error">
-              <p>{{ membersError }}</p>
-              <button type="button" class="ghost-btn" @click="refreshMembers">Try again</button>
-            </div>
-            <ul v-else-if="members.length" class="member-list">
-              <li v-for="member in members" :key="member.oauthUserId" class="member-entry">
-                <div class="member-avatar">
-                  <img
-                    :src="member.avatarUrl || 'https://api.dicebear.com/7.x/thumbs/svg?seed=' + encodeURIComponent(member.displayName || 'Member')"
-                    :alt="member.displayName || 'Club member'"
-                  />
-                </div>
-                <div class="member-info">
-                  <p>{{ member.displayName || 'Unnamed member' }}</p>
-                  <small>{{ member.roleName || 'Member' }}</small>
-                </div>
-                <a v-if="member.email" class="member-email" :href="`mailto:${member.email}`">{{ member.email }}</a>
-              </li>
-            </ul>
-            <p v-else class="member-empty">No members have been linked yet.</p>
-          </section>
-        </div>
+        <section v-else class="roster-panel">
+          <div v-if="membersLoading" class="status-card">Loading members…</div>
+          <div v-else-if="membersError" class="status-card error">
+            <p>{{ membersError }}</p>
+            <button type="button" class="ghost-btn" @click="refreshMembers">Try again</button>
+          </div>
+          <ul v-else-if="members.length" class="member-list">
+            <li v-for="member in members" :key="member.oauthUserId" class="member-entry">
+              <div class="member-avatar">
+                <img
+                  :src="member.avatarUrl || 'https://api.dicebear.com/7.x/thumbs/svg?seed=' + encodeURIComponent(member.displayName || 'Member')"
+                  :alt="member.displayName || 'Club member'"
+                />
+              </div>
+              <div class="member-info">
+                <p>{{ member.displayName || 'Unnamed member' }}</p>
+                <small>{{ member.roleName || 'Member' }}</small>
+              </div>
+              <a v-if="member.email" class="member-email" :href="`mailto:${member.email}`">{{ member.email }}</a>
+            </li>
+          </ul>
+          <p v-else class="member-empty">No members have been linked yet.</p>
+        </section>
       </section>
     </template>
   </section>
@@ -706,33 +573,10 @@ textarea {
   gap: 1.25rem;
 }
 
-.membership-sections {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.pending-panel,
 .roster-panel {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-}
-
-.pending-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-.pending-panel__header h3,
-.pending-panel__header p {
-  margin: 0;
-}
-
-.pending-panel__header p {
-  color: rgba(254, 252, 232, 0.7);
 }
 
 .member-panel__header {
@@ -750,6 +594,13 @@ textarea {
 .member-panel__header p {
   margin: 0.2rem 0 0;
   color: rgba(254, 252, 232, 0.7);
+}
+
+.member-panel__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .member-hint,
@@ -771,10 +622,6 @@ textarea {
   gap: 0.9rem;
 }
 
-.pending-list .member-entry {
-  padding: 0.65rem 0;
-}
-
 .member-entry {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -782,18 +629,6 @@ textarea {
   align-items: center;
   padding: 0.75rem 0;
   border-bottom: 1px solid rgba(254, 252, 232, 0.08);
-}
-
-.pending-entry {
-  grid-template-columns: auto 1fr auto;
-}
-
-.pending-entry .primary-btn {
-  justify-self: flex-end;
-}
-
-.request-meta {
-  color: rgba(254, 252, 232, 0.55);
 }
 
 .member-entry:last-child {

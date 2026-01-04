@@ -33,6 +33,11 @@ const router = createRouter({
       component: () => import('../views/ClubAdminView.vue'),
     },
     {
+      path: '/clubs/:id/admin/pending',
+      name: 'club-admin-pending',
+      component: () => import('../views/ClubPendingView.vue'),
+    },
+    {
       path: '/admin',
       name: 'owner-clubs',
       component: () => import('../views/OwnerAdminView.vue'),
