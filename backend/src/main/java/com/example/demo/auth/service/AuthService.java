@@ -62,6 +62,7 @@ public class AuthService {
         user.setAvatarUrl(stringAttribute(attributes, "picture", "avatar"));
         String provider = authentication.getAuthorizedClientRegistrationId();
         user.setProvider(provider);
+        user.setGraduationYear(readGraduationYear(attributes));
         user.setOwner(isOwner(user.getEmail()));
         oAuthUserService.recordLogin(provider, attributes);
         return user;
@@ -92,5 +93,60 @@ public class AuthService {
         return securityProperties.getOwnerEmails().stream()
             .filter(StringUtils::hasText)
             .anyMatch(allowed -> email.equalsIgnoreCase(allowed.trim()));
+    }
+
+    private Integer readGraduationYear(Map<String, Object> attributes) {
+        if (attributes == null) {
+            return null;
+        }
+
+        Integer year = extractGraduationYear(attributes, "graduationYear", "gradYear", "classYear", "class_of", "classOf");
+        if (year != null) {
+            return year;
+        }
+
+        Object education = attributes.get("education");
+        if (education instanceof Map<?, ?> nested) {
+            year = extractGraduationYear((Map<String, Object>) nested, "graduationYear", "gradYear", "classYear");
+            if (year != null) {
+                return year;
+            }
+        }
+
+        return null;
+    }
+
+    private Integer extractGraduationYear(Map<String, Object> attributes, String... keys) {
+        for (String key : keys) {
+            Object value = attributes.get(key);
+            Integer parsed = parseYear(value);
+            if (parsed != null) {
+                return parsed;
+            }
+        }
+        return null;
+    }
+
+    private Integer parseYear(Object value) {
+        if (value instanceof Number number) {
+            int candidate = number.intValue();
+            return isPlausibleYear(candidate) ? candidate : null;
+        }
+        if (value instanceof String str && !str.isBlank()) {
+            String digits = str.trim().replaceAll("[^0-9]", "");
+            if (digits.length() == 4) {
+                try {
+                    int candidate = Integer.parseInt(digits);
+                    return isPlausibleYear(candidate) ? candidate : null;
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isPlausibleYear(int year) {
+        return year >= 1900 && year <= 2100;
     }
 }

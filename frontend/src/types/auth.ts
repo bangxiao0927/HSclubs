@@ -11,4 +11,5 @@ export interface AuthUser {
   avatarUrl: string
   provider: string
   isOwner: boolean
+  graduationYear?: number | null
 }

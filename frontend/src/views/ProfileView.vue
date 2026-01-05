@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
@@ -20,6 +21,14 @@ const authStore = useAuthStore()
 const { isAuthenticated, currentUser, userLoading, userError } = storeToRefs(authStore)
 
 const handleLogout = () => authStore.logout()
+
+const graduationYearLabel = computed(() => {
+  const year = currentUser.value?.graduationYear
+  if (!year) {
+    return 'Not shared'
+  }
+  return `${year} (Graduation year)`
+})
 </script>
 
 <template>
@@ -48,6 +57,10 @@ const handleLogout = () => authStore.logout()
             <div>
               <span>User ID</span>
               <strong>{{ currentUser?.id }}</strong>
+            </div>
+            <div>
+              <span>Graduation year</span>
+              <strong>{{ graduationYearLabel }}</strong>
             </div>
           </div>
           <div class="cta-group">

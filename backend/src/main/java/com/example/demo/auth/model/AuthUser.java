@@ -9,6 +9,7 @@ public class AuthUser {
     private String displayName;
     private String avatarUrl;
     private String provider;
+    private Integer graduationYear;
     @JsonProperty("isOwner")
     private boolean owner;
 
@@ -50,6 +51,14 @@ public class AuthUser {
 
     public void setProvider(String provider) {
         this.provider = provider;
+    }
+
+    public Integer getGraduationYear() {
+        return graduationYear;
+    }
+
+    public void setGraduationYear(Integer graduationYear) {
+        this.graduationYear = graduationYear;
     }
 
     public boolean isOwner() {
