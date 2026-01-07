@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from '../stores/auth'
+import { updateGraduationYear } from '../services/userService'
 
 const quickLinks = [
   { label: 'Complete profile', description: 'Add grade, contact info, and interests.' },
@@ -22,6 +23,29 @@ const { isAuthenticated, currentUser, userLoading, userError } = storeToRefs(aut
 
 const handleLogout = () => authStore.logout()
 
+const graduationYearOptions = computed(() => {
+  const currentYear = new Date().getFullYear()
+  return Array.from({ length: 4 }, (_, index) => currentYear + index)
+})
+
+const selectedGraduationYear = ref<string>('')
+const graduationYearError = ref<string | null>(null)
+const graduationYearSuccess = ref<string | null>(null)
+const graduationYearSaving = ref(false)
+
+watch(
+  currentUser,
+  (user) => {
+    selectedGraduationYear.value = user?.graduationYear ? String(user.graduationYear) : ''
+  },
+  { immediate: true },
+)
+
+watch(selectedGraduationYear, () => {
+  graduationYearError.value = null
+  graduationYearSuccess.value = null
+})
+
 const graduationYearLabel = computed(() => {
   const year = currentUser.value?.graduationYear
   if (!year) {
@@ -29,6 +53,35 @@ const graduationYearLabel = computed(() => {
   }
   return `${year} (Graduation year)`
 })
+
+const handleGraduationYearSave = async () => {
+  if (!selectedGraduationYear.value) {
+    graduationYearError.value = 'Please select your graduation year.'
+    graduationYearSuccess.value = null
+    return
+  }
+
+  const year = Number(selectedGraduationYear.value)
+  if (Number.isNaN(year)) {
+    graduationYearError.value = 'Please select a valid graduation year.'
+    graduationYearSuccess.value = null
+    return
+  }
+
+  graduationYearError.value = null
+  graduationYearSuccess.value = null
+  graduationYearSaving.value = true
+  try {
+    await updateGraduationYear(year)
+    await authStore.refreshUser()
+    graduationYearSuccess.value = 'Graduation year saved.'
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to save your graduation year.'
+    graduationYearError.value = message
+  } finally {
+    graduationYearSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -95,6 +148,32 @@ const graduationYearLabel = computed(() => {
               <p>{{ link.description }}</p>
             </li>
           </ul>
+        </article>
+
+        <article class="card graduation-card">
+          <h2>Graduation year</h2>
+          <p class="card-subtitle">Share when you plan to finish high school.</p>
+          <form class="graduation-form" @submit.prevent="handleGraduationYearSave">
+            <label for="graduationYearSelect">Select your graduation year</label>
+            <select
+              id="graduationYearSelect"
+              v-model="selectedGraduationYear"
+              :disabled="graduationYearSaving"
+            >
+              <option value="" disabled>Select your year</option>
+              <option v-for="year in graduationYearOptions" :key="year" :value="String(year)">
+                Class of {{ year }}
+              </option>
+            </select>
+            <p class="form-hint">Options cover the four active high school classes.</p>
+            <div class="form-actions">
+              <button type="submit" class="btn primary" :disabled="graduationYearSaving">
+                {{ graduationYearSaving ? 'Saving…' : 'Save year' }}
+              </button>
+              <p v-if="graduationYearError" class="form-feedback error">{{ graduationYearError }}</p>
+              <p v-else-if="graduationYearSuccess" class="form-feedback success">{{ graduationYearSuccess }}</p>
+            </div>
+          </form>
         </article>
 
         <article class="card reminders">
@@ -307,6 +386,57 @@ const graduationYearLabel = computed(() => {
 .quick-links p {
   margin: 0;
   color: rgba(254, 252, 232, 0.7);
+}
+
+.graduation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.graduation-form label {
+  font-weight: 600;
+  color: rgba(254, 252, 232, 0.9);
+}
+
+.graduation-form select {
+  border-radius: 14px;
+  border: 1px solid rgba(254, 252, 232, 0.15);
+  background: rgba(254, 252, 232, 0.04);
+  color: #fefce8;
+  padding: 0.65rem 0.75rem;
+  font-size: 1rem;
+}
+
+.graduation-form select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.form-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(254, 252, 232, 0.65);
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+
+.form-feedback {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.form-feedback.error {
+  color: #f87171;
+}
+
+.form-feedback.success {
+  color: #34d399;
 }
 
 .reminders ul {
