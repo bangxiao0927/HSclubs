@@ -63,7 +63,7 @@ public class AuthService {
         user.setId(firstNonBlank(attributes, "id", "sub", "email"));
         user.setEmail(stringAttribute(attributes, "email"));
         user.setDisplayName(firstNonBlank(attributes, "name", "given_name"));
-        user.setAvatarUrl(stringAttribute(attributes, "picture", "avatar"));
+        user.setAvatarUrl(stringAttribute(attributes, "picture", "avatar", "avatar_url"));
         String provider = authentication.getAuthorizedClientRegistrationId();
         user.setProvider(provider);
         user.setGraduationYear(readGraduationYear(attributes));
