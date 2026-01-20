@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
@@ -13,6 +13,15 @@ const { isAuthenticated, currentUser } = storeToRefs(authStore)
 const handleLogout = () => {
   authStore.logout()
 }
+
+watch(
+  isAuthenticated,
+  (authenticated, previous) => {
+    if (authenticated && !previous) {
+      void authStore.refreshUser()
+    }
+  },
+)
 </script>
 
 <template>

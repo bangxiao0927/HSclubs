@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.user.mapper.UserProfileMapper">
+
+    <resultMap id="UserProfileResultMap" type="com.example.demo.user.model.UserProfile">
+        <id property="oauthUserId" column="oauth_user_id" />
+        <result property="graduationYear" column="graduation_year" />
+    </resultMap>
+
+    <select id="findByOauthUserId" parameterType="long" resultMap="UserProfileResultMap">
+        SELECT oauth_user_id, graduation_year
+        FROM user_profiles
+        WHERE oauth_user_id = #{oauthUserId}
+        LIMIT 1
+    </select>
+
+    <insert id="upsert" parameterType="com.example.demo.user.model.UserProfile">
+        INSERT INTO user_profiles (oauth_user_id, graduation_year)
+        VALUES (#{oauthUserId}, #{graduationYear})
+        ON DUPLICATE KEY UPDATE
+            graduation_year = VALUES(graduation_year),
+            updated_at = CURRENT_TIMESTAMP
+    </insert>
+
+</mapper>

@@ -6,6 +6,7 @@ DROP TABLE IF EXISTS club_membership_requests;
 DROP TABLE IF EXISTS club_tag;
 DROP TABLE IF EXISTS club_social_medias;
 DROP TABLE IF EXISTS clubs;
+DROP TABLE IF EXISTS user_profiles;
 DROP TABLE IF EXISTS oauth_users;
 DROP TABLE IF EXISTS club_category;
 DROP TABLE IF EXISTS schools;
@@ -21,6 +22,13 @@ CREATE TABLE IF NOT EXISTS oauth_users (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uq_provider_user UNIQUE (provider, provider_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+    oauth_user_id BIGINT PRIMARY KEY,
+    graduation_year INT NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_profiles_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS schools (

@@ -34,10 +34,28 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const buildFallbackAvatar = (user: AuthUser) => {
+    const seed = user.displayName?.trim() || user.email || user.id || 'Member'
+    return `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(seed)}`
+  }
+
+  const normalizeUser = (user: AuthUser | null): AuthUser | null => {
+    if (!user) {
+      return null
+    }
+
+    const trimmed = user.avatarUrl?.trim()
+    return {
+      ...user,
+      avatarUrl: trimmed ? buildApiUrl(trimmed) : buildFallbackAvatar(user),
+    }
+  }
+
   const refreshUser = async () => {
     userLoading.value = true
     try {
-      currentUser.value = await fetchAuthenticatedUser()
+      const fetched = await fetchAuthenticatedUser()
+      currentUser.value = normalizeUser(fetched)
       userError.value = null
     } catch (error) {
       userError.value = error instanceof Error ? error.message : 'Unable to verify session'

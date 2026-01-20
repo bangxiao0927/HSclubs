@@ -7,6 +7,7 @@ import java.util.Map;
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.auth.model.AuthProvider;
 import com.example.demo.auth.model.AuthUser;
+import com.example.demo.user.service.UserService;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
@@ -21,10 +22,12 @@ public class AuthService {
     private final Iterable<ClientRegistration> clientRegistrations;
     private final OAuthUserService oAuthUserService;
     private final SecurityProperties securityProperties;
+    private final UserService userService;
 
     public AuthService(ClientRegistrationRepository clientRegistrationRepository,
                        OAuthUserService oAuthUserService,
-                       SecurityProperties securityProperties) {
+                       SecurityProperties securityProperties,
+                       UserService userService) {
         if (clientRegistrationRepository instanceof Iterable<?>) {
             this.clientRegistrations = (Iterable<ClientRegistration>) clientRegistrationRepository;
         } else {
@@ -32,6 +35,7 @@ public class AuthService {
         }
         this.oAuthUserService = oAuthUserService;
         this.securityProperties = securityProperties;
+        this.userService = userService;
     }
 
     public List<AuthProvider> getProviders() {
@@ -59,10 +63,14 @@ public class AuthService {
         user.setId(firstNonBlank(attributes, "id", "sub", "email"));
         user.setEmail(stringAttribute(attributes, "email"));
         user.setDisplayName(firstNonBlank(attributes, "name", "given_name"));
-        user.setAvatarUrl(stringAttribute(attributes, "picture", "avatar"));
+        user.setAvatarUrl(stringAttribute(attributes, "picture", "avatar", "avatar_url"));
         String provider = authentication.getAuthorizedClientRegistrationId();
         user.setProvider(provider);
         user.setGraduationYear(readGraduationYear(attributes));
+        Integer storedGraduationYear = userService.findGraduationYearByEmail(user.getEmail());
+        if (storedGraduationYear != null) {
+            user.setGraduationYear(storedGraduationYear);
+        }
         user.setOwner(isOwner(user.getEmail()));
         oAuthUserService.recordLogin(provider, attributes);
         return user;
