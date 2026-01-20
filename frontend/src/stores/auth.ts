@@ -47,7 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
     const trimmed = user.avatarUrl?.trim()
     return {
       ...user,
-      avatarUrl: trimmed ? trimmed : buildFallbackAvatar(user),
+      avatarUrl: trimmed ? buildApiUrl(trimmed) : buildFallbackAvatar(user),
     }
   }
 
