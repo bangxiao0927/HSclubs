@@ -32,6 +32,12 @@ jobs:
         git config --global --add safe.directory $GITHUB_WORKSPACE  # git safe directory setup
         ./mvnw test
         
+    - name: Set up Node.js
+    - uses: actions/setup-node@v4
+      with:
+          node-version: '20'  # Or your project's required version (check package.json engines)
+          cache: 'npm'  # Optional: Speeds up installs
+
     # Test frountend
     - name: frontend
       working-directory: frontend
