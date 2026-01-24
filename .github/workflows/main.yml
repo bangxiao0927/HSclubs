@@ -34,7 +34,7 @@ jobs:
         
     # Test frountend
     - name: frontend
+      working-directory: frontend
       run: |
-        cd ..
-        cd frontend
+        npm ci
         npm run build
