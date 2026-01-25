@@ -1,4 +1,5 @@
-const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8080' : '')).trim()
+const fallbackBaseUrl = ''
+const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? fallbackBaseUrl).trim()
 const apiBaseUrl = rawBaseUrl.replace(/\/$/, '')
 
 const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value)
