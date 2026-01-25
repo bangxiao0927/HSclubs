@@ -3,9 +3,10 @@ server:
 
 app:
   security:
+    frontend-origin: ${FRONTEND_ORIGIN:http://localhost:${FRONTEND_PORT:4173}}
     allowed-origins:
-      - http://localhost:5173
-    post-login-redirect-uri: http://localhost:5173/auth/callback
+      - ${app.security.frontend-origin}
+    post-login-redirect-uri: "${app.security.frontend-origin}/auth/callback"
     owner-emails: ${APP_OWNER_EMAILS}
 
 spring:

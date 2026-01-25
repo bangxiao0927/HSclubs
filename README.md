@@ -10,7 +10,8 @@
 ```bash
 cd frontend
 npm install             # install deps (Node 18+ recommended; project tested with Node 24 via nvm)
-npm run dev             # start Vite dev server on http://localhost:5173
+npm run dev
+npm run preview            # start Vite dev server on http://localhost:4173 (override via FRONTEND_PORT)
 ```
 
 ### Other useful scripts
@@ -49,7 +50,7 @@ The backend now exposes an initial OAuth 2.0 surface backed by Google sign-in.
 
 Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (see `backend/.env` for local development) before starting the backend so Spring Security can complete the OAuth flow. The current configuration expects Google to redirect to `http://localhost:8080/api/auth/google/callback`, matching the OAuth client you shared.
 
-The Vue dev server is already allowed via CORS (`http://localhost:5173`), so the frontend can
+The Vue dev server is already allowed via CORS (`FRONTEND_ORIGIN`, default `http://localhost:4173`), so the frontend can
 call the backend without extra proxying.
 
-Set `app.security.post-login-redirect-uri` (defaults to `http://localhost:5173/auth/callback`) if you need the backend to send users somewhere else after OAuth success/failure. On the frontend side, `VITE_API_BASE_URL` is optional now—dev builds automatically fall back to `http://localhost:8080`, but you can override it for other environments.
+Set `FRONTEND_PORT` or `FRONTEND_ORIGIN` (default redirect is `${FRONTEND_ORIGIN}/auth/callback`) if you need the backend to send users somewhere else after OAuth success/failure. On the frontend side, `VITE_API_BASE_URL` is optional now—dev builds automatically fall back to `http://localhost:8080`, but you can override it for other environments.
