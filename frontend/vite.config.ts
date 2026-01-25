@@ -23,6 +23,9 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    allowedHosts: [
+    	'hsclubs.net'
+    ]
   },
   resolve: {
     alias: {
