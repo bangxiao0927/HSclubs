@@ -27,7 +27,7 @@ spring:
           google:
             client-id: ${GOOGLE_CLIENT_ID}
             client-secret: ${GOOGLE_CLIENT_SECRET}
-            redirect-uri: "{baseUrl}/api/auth/google/callback"
+            redirect-uri: "${VITE_API_BASE_URL}/api/auth/google/callback"
             scope:
               - email
               - profile
