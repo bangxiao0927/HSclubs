@@ -1,11 +1,5 @@
 server:
-  port: 8443
-  ssl:
-    enabled: true
-    key-store: classpath:keystore/hsclubs.p12
-    key-store-type: PKCS12
-    key-store-password: ${SSL_KEYSTORE_PASSWORD}
-    key-alias: hsclubs
+  port: 8080
 
 app:
   security:
