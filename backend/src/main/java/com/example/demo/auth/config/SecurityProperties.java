@@ -12,6 +12,7 @@ public class SecurityProperties {
     private List<String> allowedOrigins = new ArrayList<>();
     private String postLoginRedirectUri;
     private List<String> ownerEmails = new ArrayList<>();
+    private String authorizationRequestBaseUri;
 
     public String getFrontendOrigin() {
         return frontendOrigin;
@@ -48,5 +49,13 @@ public class SecurityProperties {
 
     public void setOwnerEmails(List<String> ownerEmails) {
         this.ownerEmails = ownerEmails == null ? new ArrayList<>() : new ArrayList<>(ownerEmails);
+    }
+
+    public String getAuthorizationRequestBaseUri() {
+        return authorizationRequestBaseUri;
+    }
+
+    public void setAuthorizationRequestBaseUri(String authorizationRequestBaseUri) {
+        this.authorizationRequestBaseUri = authorizationRequestBaseUri;
     }
 }

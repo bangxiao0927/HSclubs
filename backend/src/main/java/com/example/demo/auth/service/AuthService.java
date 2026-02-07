@@ -23,6 +23,7 @@ public class AuthService {
     private final OAuthUserService oAuthUserService;
     private final SecurityProperties securityProperties;
     private final UserService userService;
+    private final String authorizationRequestBaseUri;
 
     public AuthService(ClientRegistrationRepository clientRegistrationRepository,
                        OAuthUserService oAuthUserService,
@@ -36,13 +37,13 @@ public class AuthService {
         this.oAuthUserService = oAuthUserService;
         this.securityProperties = securityProperties;
         this.userService = userService;
+        this.authorizationRequestBaseUri = resolveAuthorizationRequestBaseUri(securityProperties);
     }
 
     public List<AuthProvider> getProviders() {
         List<AuthProvider> providers = new ArrayList<>();
         for (ClientRegistration registration : clientRegistrations) {
-            String authorizationPath = OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI
-                + "/" + registration.getRegistrationId();
+            String authorizationPath = buildAuthorizationPath(registration.getRegistrationId());
             providers.add(new AuthProvider(registration.getRegistrationId(), registration.getClientName(), authorizationPath));
         }
         return providers;
@@ -101,6 +102,21 @@ public class AuthService {
         return securityProperties.getOwnerEmails().stream()
             .filter(StringUtils::hasText)
             .anyMatch(allowed -> email.equalsIgnoreCase(allowed.trim()));
+    }
+
+    private String buildAuthorizationPath(String registrationId) {
+        String normalizedBase = authorizationRequestBaseUri.endsWith("/")
+            ? authorizationRequestBaseUri
+            : authorizationRequestBaseUri + "/";
+        return normalizedBase + registrationId;
+    }
+
+    private String resolveAuthorizationRequestBaseUri(SecurityProperties properties) {
+        String configured = properties.getAuthorizationRequestBaseUri();
+        if (StringUtils.hasText(configured)) {
+            return configured;
+        }
+        return OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI;
     }
 
     private Integer readGraduationYear(Map<String, Object> attributes) {

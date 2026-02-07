@@ -9,6 +9,7 @@ app:
       - ${app.security.frontend-origin}
     post-login-redirect-uri: "${app.security.frontend-origin}/auth/callback"
     owner-emails: ${APP_OWNER_EMAILS}
+    authorization-request-base-uri: ${APP_AUTHORIZATION_REQUEST_BASE_URI:/api/auth/authorize}
 
 spring:
   config:

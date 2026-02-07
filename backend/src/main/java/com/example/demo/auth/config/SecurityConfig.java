@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.util.StringUtils;
@@ -48,6 +49,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/**").permitAll()
                 .anyRequest().permitAll())
             .oauth2Login(oauth2 -> oauth2
+                .authorizationEndpoint(authorization -> authorization
+                    .baseUri(resolveAuthorizationRequestBaseUri()))
                 .redirectionEndpoint(redirection -> redirection.baseUri("/api/auth/*/callback"))
                 .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
                 .successHandler((request, response, authentication) ->
@@ -87,5 +90,13 @@ public class SecurityConfig {
     private String resolveLoginRedirectUri() {
         String redirect = securityProperties.getPostLoginRedirectUri();
         return StringUtils.hasText(redirect) ? redirect : "/";
+    }
+
+    private String resolveAuthorizationRequestBaseUri() {
+        String configured = securityProperties.getAuthorizationRequestBaseUri();
+        if (StringUtils.hasText(configured)) {
+            return configured;
+        }
+        return OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI;
     }
 }
