@@ -178,6 +178,10 @@ watch(
           <span class="stat-label">Contact</span>
           <p class="stat-value">{{ club.contactEmail || 'Not provided' }}</p>
         </div>
+        <div class="stat-card">
+          <span class="stat-label">Room</span>
+          <p class="stat-value">{{ club.location || 'TBD' }}</p>
+        </div>
       </div>
     </header>
 
