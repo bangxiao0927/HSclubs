@@ -9,6 +9,7 @@ export interface Club {
   contactEmail: string | null
   advisor: string | null
   imageUrl: string | null
+  instagramUrl?: string | null
   memberCount: number
   achievements: string[]
   schoolId: number
