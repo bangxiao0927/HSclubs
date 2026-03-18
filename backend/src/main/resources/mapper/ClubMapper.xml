@@ -15,6 +15,7 @@
         <result column="contact_email" property="contactEmail" />
         <result column="advisor" property="advisor" />
         <result column="image_url" property="imageUrl" />
+        <result column="instagram_url" property="instagramUrl" />
         <result column="member_count" property="memberCount" />
         <result column="achievements" property="achievements" typeHandler="com.example.demo.club.mapper.AchievementsTypeHandler" />
         <result column="school_id" property="schoolId" />
@@ -24,7 +25,13 @@
 
     <sql id="BaseColumnList">
         id, name, alias_name, description, category, meeting_schedule, location,
-        contact_email, advisor, image_url, member_count, achievements, school_id, created_at, updated_at
+        contact_email, advisor, image_url,
+        (SELECT link_url
+         FROM club_social_medias
+         WHERE club_id = clubs.id
+           AND social_type = 'instagram'
+         LIMIT 1) AS instagram_url,
+        member_count, achievements, school_id, created_at, updated_at
     </sql>
 
     <select id="findAll" resultMap="ClubResultMap">
