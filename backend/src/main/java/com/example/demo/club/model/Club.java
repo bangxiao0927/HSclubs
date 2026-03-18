@@ -18,6 +18,7 @@ public class Club {
     private String contactEmail;
     private String advisor;
     private String imageUrl;
+    private String instagramUrl;
     private Integer memberCount;
     private List<String> achievements;
     private Long schoolId;
@@ -106,6 +107,14 @@ public class Club {
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public String getInstagramUrl() {
+        return instagramUrl;
+    }
+
+    public void setInstagramUrl(String instagramUrl) {
+        this.instagramUrl = instagramUrl;
     }
 
     public Integer getMemberCount() {
