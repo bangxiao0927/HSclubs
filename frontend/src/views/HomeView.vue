@@ -44,10 +44,6 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
           <span class="stat-label">Active clubs</span>
           <p class="stat-value">{{ clubs.length }}</p>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">Total members counted</span>
-          <p class="stat-value">{{ totalMembers }}</p>
-        </div>
       </div>
     </section>
 
@@ -66,9 +62,9 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
             class="top-card"
             role="link"
             tabindex="0"
-            @click="navigate"
-            @keydown.enter.prevent="navigate"
-            @keydown.space.prevent="navigate"
+            @click="(event) => navigate(event)"
+            @keydown.enter.prevent="() => navigate()"
+            @keydown.space.prevent="() => navigate()"
           >
             <div class="club-avatar large">
               <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
@@ -95,9 +91,9 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
             class="club-row"
             role="link"
             tabindex="0"
-            @click="navigate"
-            @keydown.enter.prevent="navigate"
-            @keydown.space.prevent="navigate"
+            @click="(event) => navigate(event)"
+            @keydown.enter.prevent="() => navigate()"
+            @keydown.space.prevent="() => navigate()"
           >
             <div class="club-main">
               <div class="club-avatar">
