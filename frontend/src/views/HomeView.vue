@@ -61,16 +61,25 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
         <p class="section-subtitle">Sorted automatically from roster submissions.</p>
       </div>
       <div class="top-grid">
-        <RouterLink v-for="club in topClubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
-          <div class="club-avatar large">
-            <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
-          </div>
-          <span class="member-count">{{ club.memberCount }} members</span>
-          <h3>{{ club.name }}</h3>
-          <div class="card-meta">
-            <span>{{ club.advisor }}</span>
-            <span>{{ club.meetingSchedule }}</span>
-          </div>
+        <RouterLink v-for="club in topClubs" :key="club.id" :to="`/clubs/${club.id}`" custom v-slot="{ navigate }">
+          <article
+            class="top-card"
+            role="link"
+            tabindex="0"
+            @click="navigate"
+            @keydown.enter.prevent="navigate"
+            @keydown.space.prevent="navigate"
+          >
+            <div class="club-avatar large">
+              <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
+            </div>
+            <span class="member-count">{{ club.memberCount }} members</span>
+            <h3>{{ club.name }}</h3>
+            <div class="card-meta">
+              <span>{{ club.advisor }}</span>
+              <span>{{ club.meetingSchedule }}</span>
+            </div>
+          </article>
         </RouterLink>
       </div>
     </section>
@@ -81,19 +90,28 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
         <h2>All clubs</h2>
       </div>
       <div class="club-directory">
-        <RouterLink v-for="club in clubs" :key="club.id" class="club-row" :to="`/clubs/${club.id}`">
-          <div class="club-main">
-            <div class="club-avatar">
-              <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
+        <RouterLink v-for="club in clubs" :key="club.id" :to="`/clubs/${club.id}`" custom v-slot="{ navigate }">
+          <div
+            class="club-row"
+            role="link"
+            tabindex="0"
+            @click="navigate"
+            @keydown.enter.prevent="navigate"
+            @keydown.space.prevent="navigate"
+          >
+            <div class="club-main">
+              <div class="club-avatar">
+                <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
+              </div>
+              <div class="club-info">
+                <h3>{{ club.name }}</h3>
+              </div>
             </div>
-            <div class="club-info">
-              <h3>{{ club.name }}</h3>
+            <div class="club-details">
+              <span class="badge">{{ club.memberCount }} members</span>
+              <span>{{ club.advisor }}</span>
+              <span>{{ club.meetingSchedule }}</span>
             </div>
-          </div>
-          <div class="club-details">
-            <span class="badge">{{ club.memberCount }} members</span>
-            <span>{{ club.advisor }}</span>
-            <span>{{ club.meetingSchedule }}</span>
           </div>
         </RouterLink>
       </div>
@@ -188,6 +206,7 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   border: 1px solid rgba(250, 204, 21, 0.18);
   padding: 1.5rem;
   background: rgba(10, 10, 10, 0.85);
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
@@ -236,6 +255,7 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   transform: translateY(-2px);
 }
 
+
 .member-count {
   color: var(--mv-gold);
   font-weight: 600;
@@ -267,6 +287,7 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   color: inherit;
   text-decoration: none;
   cursor: pointer;
+  position: relative;
 }
 
 .club-main {
@@ -306,6 +327,7 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   flex-wrap: wrap;
   color: rgba(254, 252, 232, 0.75);
 }
+
 
 .badge {
   padding: 0.2rem 0.75rem;
