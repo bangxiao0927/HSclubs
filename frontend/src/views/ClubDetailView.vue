@@ -34,6 +34,16 @@ const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
 
 const clubImage = (entity: Club) => entity.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(entity.name)}`
 
+const instagramHandle = (url?: string | null) => {
+  if (!url) {
+    return ''
+  }
+  const normalized = url.trim().replace(/\/+$/, '')
+  const parts = normalized.split('/')
+  const lastPart = parts[parts.length - 1] ?? ''
+  return lastPart.startsWith('@') ? lastPart : `@${lastPart}`
+}
+
 const loadClub = async (id: string) => {
   loading.value = true
   error.value = ''
@@ -181,6 +191,28 @@ watch(
         <div class="stat-card">
           <span class="stat-label">Room</span>
           <p class="stat-value">{{ club.location || 'TBD' }}</p>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Instagram</span>
+          <p class="stat-value">
+            <a
+              v-if="club.instagramUrl"
+              class="stat-link"
+              :href="club.instagramUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="instagram-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="img" focusable="false">
+                  <rect x="4" y="4" width="16" height="16" rx="4" ry="4" fill="none" stroke="currentColor" stroke-width="1.5" />
+                  <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5" />
+                  <circle cx="17" cy="7" r="1.2" fill="currentColor" />
+                </svg>
+              </span>
+              {{ instagramHandle(club.instagramUrl) }}
+            </a>
+            <span v-else>Not provided</span>
+          </p>
         </div>
       </div>
     </header>
@@ -398,6 +430,32 @@ watch(
   font-size: 1.2rem;
   font-weight: 600;
   color: var(--mv-gold);
+}
+
+.stat-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--mv-gold);
+  text-decoration: none;
+}
+
+.stat-link:hover,
+.stat-link:focus-visible {
+  text-decoration: underline;
+}
+
+.instagram-icon {
+  width: 35px;
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.instagram-icon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .club-body {
