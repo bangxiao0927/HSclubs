@@ -4,58 +4,12 @@ import { RouterLink } from 'vue-router'
 
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
-
-type Category = {
-  id: string
-  title: string
-  focus: string
-  clubCount: number
-  icon: string
-  gradient: string
-}
-
-const categories: Category[] = [
-  {
-    id: 'stem',
-    title: 'STEM & Innovation',
-    focus: 'Robotics · Engineering · AI',
-    clubCount: 12,
-    icon: '⚙️',
-    gradient: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)'
-  },
-  {
-    id: 'arts',
-    title: 'Creative Arts & Media',
-    focus: 'Design · Film · Performing Arts',
-    clubCount: 15,
-    icon: '🎨',
-    gradient: 'linear-gradient(135deg, #854d0e 0%, #facc15 100%)'
-  },
-  {
-    id: 'service',
-    title: 'Service & Leadership',
-    focus: 'Community · Civic Action · Advocacy',
-    clubCount: 9,
-    icon: '🤝',
-    gradient: 'linear-gradient(135deg, #14532d 0%, #22c55e 100%)'
-  },
-  {
-    id: 'wellness',
-    title: 'Athletics & Wellness',
-    focus: 'Training · Competition · Mindfulness',
-    clubCount: 8,
-    icon: '🏅',
-    gradient: 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)'
-  }
-]
-
-const fallbackCategory = categories[0]!
-const selectedCategoryId = ref(fallbackCategory.id)
-const activeCategory = computed(() => categories.find(category => category.id === selectedCategoryId.value) ?? fallbackCategory)
+import { clubCategoryOptions } from '../utils/clubCategories'
 
 const clubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
+const selectedCategoryTitle = ref(clubCategoryOptions[0]?.title ?? '')
 
 const loadClubs = async () => {
   loading.value = true
@@ -72,8 +26,26 @@ const loadClubs = async () => {
 onMounted(loadClubs)
 
 const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(club.name)}`
-const activeCategoryClubs = computed(() =>
-  clubs.value.filter((club) => club.category === activeCategory.value.title)
+
+const categories = computed(() =>
+  clubCategoryOptions.map((category) => {
+    const categoryClubs = clubs.value
+      .filter((club) => club.category === category.title)
+      .sort((a, b) => {
+        const memberDelta = (b.memberCount ?? 0) - (a.memberCount ?? 0)
+        return memberDelta !== 0 ? memberDelta : a.name.localeCompare(b.name)
+      })
+
+    return {
+      ...category,
+      clubCount: categoryClubs.length,
+      clubs: categoryClubs,
+    }
+  }),
+)
+
+const activeCategory = computed(
+  () => categories.value.find((category) => category.title === selectedCategoryTitle.value) ?? categories.value[0] ?? null,
 )
 </script>
 
@@ -81,67 +53,78 @@ const activeCategoryClubs = computed(() =>
   <section class="explore page-shell">
     <header class="explore-header">
       <p class="section-label">Explore</p>
-      <h1>Pick a focus area</h1>
+      <h1>Browse clubs by category</h1>
       <p>
-        Choose a category to see how Mountain View packages resources, advisors, and recruiting tips for that lane. Use it to guide your next signup push.
+        Clubs are grouped by their saved category, and club admins can now maintain that type directly from the admin page.
       </p>
     </header>
 
-    <div class="category-picker">
-      <button
-        v-for="category in categories"
-        :key="category.id"
-        type="button"
-        class="category-pill"
-        :class="{ active: category.id === selectedCategoryId }"
-        @click="selectedCategoryId = category.id"
-      >
-        <span>{{ category.icon }}</span>
-        <span>{{ category.title }}</span>
-      </button>
-    </div>
+    <section v-if="loading" class="status-card">Loading categories…</section>
+    <section v-else-if="error" class="status-card error">{{ error }}</section>
 
-    <article v-if="activeCategory" class="category-panel">
-      <div
-        class="panel-hero"
-        :style="{ background: activeCategory.gradient }"
-      >
-        <span class="panel-icon">{{ activeCategory.icon }}</span>
-        <p class="panel-count">{{ activeCategory.clubCount }} active clubs</p>
-        <h2>{{ activeCategory.title }}</h2>
-        <p>{{ activeCategory.focus }}</p>
-      </div>
-    </article>
-
-    <section class="category-clubs" v-if="activeCategory">
-      <header class="clubs-header">
-        <div>
-          <p class="section-label">Clubs in this category</p>
-          <h2>{{ activeCategory.title }}</h2>
-        </div>
-        <p v-if="loading" class="status-pill">Loading…</p>
-        <p v-else-if="error" class="status-pill error">{{ error }}</p>
-        <p v-else class="status-pill">{{ activeCategoryClubs.length }} clubs</p>
-      </header>
-
-      <div v-if="!loading && !error" class="top-grid">
-        <article v-if="!activeCategoryClubs.length" class="empty-card">
-          <p>No clubs have been tagged for this category yet.</p>
+    <template v-else>
+      <section class="overview-grid">
+        <article v-for="category in categories" :key="category.title" class="overview-card">
+          <span class="overview-icon">{{ category.icon }}</span>
+          <strong>{{ category.clubCount }}</strong>
+          <span>{{ category.title }}</span>
         </article>
-        <RouterLink v-for="club in activeCategoryClubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
-          <div class="club-avatar large">
-            <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
-          </div>
-          <span class="member-count">{{ club.memberCount }} members</span>
-          <h3>{{ club.name }}</h3>
-          <p>{{ club.description }}</p>
-          <div class="card-meta">
-            <span>{{ club.advisor }}</span>
-            <span>{{ club.meetingSchedule }}</span>
-          </div>
-        </RouterLink>
+      </section>
+
+      <div class="category-picker">
+        <button
+          v-for="category in categories"
+          :key="category.title"
+          type="button"
+          class="category-pill"
+          :class="{ active: category.title === activeCategory?.title }"
+          @click="selectedCategoryTitle = category.title"
+        >
+          <span>{{ category.icon }}</span>
+          <span>{{ category.title }}</span>
+          <small>{{ category.clubCount }}</small>
+        </button>
       </div>
-    </section>
+
+      <article v-if="activeCategory" class="category-panel">
+        <div class="panel-hero" :style="{ background: activeCategory.gradient }">
+          <span class="panel-icon">{{ activeCategory.icon }}</span>
+          <p class="panel-count">{{ activeCategory.clubCount }} clubs in this category</p>
+          <h2>{{ activeCategory.title }}</h2>
+          <p>{{ activeCategory.description }}</p>
+          <span class="panel-focus">{{ activeCategory.focus }}</span>
+        </div>
+      </article>
+
+      <section v-if="activeCategory" class="category-clubs">
+        <header class="clubs-header">
+          <div>
+            <p class="section-label">Clubs in this category</p>
+            <h2>{{ activeCategory.title }}</h2>
+          </div>
+          <p class="status-pill">{{ activeCategory.clubCount }} clubs</p>
+        </header>
+
+        <div class="top-grid">
+          <article v-if="!activeCategory.clubs.length" class="empty-card">
+            <p>No clubs have been assigned to {{ activeCategory.title }} yet.</p>
+          </article>
+          <RouterLink v-for="club in activeCategory.clubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
+            <div class="club-avatar large">
+              <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
+            </div>
+            <span class="member-count">{{ club.memberCount }} members</span>
+            <h3>{{ club.name }}</h3>
+            <p class="club-category">{{ club.category }}</p>
+            <p class="club-description">{{ club.description }}</p>
+            <div class="card-meta">
+              <span>{{ club.advisor || 'Advisor TBD' }}</span>
+              <span>{{ club.meetingSchedule || 'Schedule TBD' }}</span>
+            </div>
+          </RouterLink>
+        </div>
+      </section>
+    </template>
   </section>
 </template>
 
@@ -158,8 +141,45 @@ const activeCategoryClubs = computed(() =>
 }
 
 .explore-header p {
-  max-width: 640px;
+  max-width: 700px;
   color: var(--mv-text-muted);
+}
+
+.status-card {
+  padding: 0.9rem 1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  background: rgba(10, 10, 10, 0.82);
+}
+
+.status-card.error {
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1.05rem 1.2rem;
+  border-radius: 22px;
+  border: 1px solid rgba(250, 204, 21, 0.16);
+  background: rgba(10, 10, 10, 0.8);
+}
+
+.overview-card strong {
+  font-size: 1.8rem;
+  color: var(--mv-gold);
+}
+
+.overview-icon {
+  font-size: 1.2rem;
 }
 
 .category-picker {
@@ -169,16 +189,23 @@ const activeCategoryClubs = computed(() =>
 }
 
 .category-pill {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.6rem 1.2rem;
+  gap: 0.55rem;
+  padding: 0.7rem 1rem;
   border-radius: 999px;
   border: 1px solid rgba(250, 204, 21, 0.25);
   background: transparent;
   color: inherit;
   cursor: pointer;
   font-weight: 600;
+}
+
+.category-pill small {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(254, 252, 232, 0.08);
+  color: rgba(254, 252, 232, 0.72);
 }
 
 .category-pill.active {
@@ -193,6 +220,34 @@ const activeCategoryClubs = computed(() =>
   overflow: hidden;
   background: rgba(5, 5, 5, 0.85);
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
+}
+
+.panel-hero {
+  padding: clamp(1.5rem, 4vw, 2.8rem);
+  color: #fefce8;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.panel-icon {
+  font-size: 2rem;
+}
+
+.panel-count {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.85rem;
+  color: rgba(254, 252, 232, 0.85);
+}
+
+.panel-focus {
+  width: fit-content;
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
 }
 
 .category-clubs {
@@ -217,14 +272,9 @@ const activeCategoryClubs = computed(() =>
   font-size: 0.9rem;
 }
 
-.status-pill.error {
-  border-color: rgba(248, 113, 113, 0.45);
-  color: #fecaca;
-}
-
 .top-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1.25rem;
 }
 
@@ -294,6 +344,21 @@ const activeCategoryClubs = computed(() =>
   font-size: 0.95rem;
 }
 
+.club-category {
+  margin: 0;
+  color: rgba(250, 204, 21, 0.82);
+  font-size: 0.9rem;
+}
+
+.club-description {
+  margin: 0;
+  color: rgba(254, 252, 232, 0.74);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .card-meta {
   display: flex;
   flex-direction: column;
@@ -304,7 +369,7 @@ const activeCategoryClubs = computed(() =>
 
 .empty-card {
   border-radius: 24px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px dashed rgba(250, 204, 21, 0.22);
   padding: 1.5rem;
   background: rgba(10, 10, 10, 0.85);
   display: flex;
@@ -313,28 +378,14 @@ const activeCategoryClubs = computed(() =>
   color: var(--mv-text-muted);
 }
 
-.panel-hero {
-  padding: clamp(1.5rem, 4vw, 2.8rem);
-  color: #fefce8;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.panel-icon {
-  font-size: 2rem;
-}
-
-.panel-count {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.85rem;
-  color: rgba(254, 252, 232, 0.85);
-}
-
 @media (max-width: 640px) {
   .category-panel {
     border-radius: 24px;
+  }
+
+  .category-pill {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 </style>

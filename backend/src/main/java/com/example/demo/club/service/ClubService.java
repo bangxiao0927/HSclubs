@@ -13,9 +13,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class ClubService {
+
+    private static final Set<String> ALLOWED_CATEGORIES = Set.of(
+        "STEM & Innovation",
+        "Creative Arts & Media",
+        "Service & Leadership",
+        "Culture & Identity",
+        "Wellness & Athletics",
+        "Competition & Strategy"
+    );
 
     private final ClubMapper clubMapper;
     private final SchoolMapper schoolMapper;
@@ -72,6 +82,14 @@ public class ClubService {
     }
 
     private void normalizeClub(Club club) {
+        if (!StringUtils.hasText(club.getCategory())) {
+            throw new IllegalArgumentException("Category is required");
+        }
+        String normalizedCategory = club.getCategory().trim();
+        if (!ALLOWED_CATEGORIES.contains(normalizedCategory)) {
+            throw new IllegalArgumentException("Invalid category");
+        }
+        club.setCategory(normalizedCategory);
         if (club.getAchievements() == null) {
             club.setAchievements(Collections.emptyList());
         }

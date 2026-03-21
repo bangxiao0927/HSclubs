@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { fetchClubById, fetchClubMembers, updateClub } from '../services/clubService'
 import type { Club, ClubMember } from '../types/club'
 import { useAuthStore } from '../stores/auth'
+import { clubCategoryOptions } from '../utils/clubCategories'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -50,7 +51,7 @@ const hydrateForm = (data: Club) => {
   form.name = data.name
   form.aliasName = data.aliasName ?? ''
   form.description = data.description
-  form.category = data.category
+  form.category = data.category || clubCategoryOptions[0]?.title || ''
   form.meetingSchedule = data.meetingSchedule
   form.location = data.location ?? ''
   form.contactEmail = data.contactEmail ?? ''
@@ -209,7 +210,7 @@ watch(
     <template v-else-if="club">
       <header class="admin-hero">
         <div>
-          <p class="section-label">Admin · {{ club.category }}</p>
+          <p class="section-label">Admin · {{ club.category || 'Uncategorized' }}</p>
           <h1>{{ club.name }}</h1>
           <p class="hero-meta">
             {{ club.memberCount }} members · Advisor {{ club.advisor || 'TBD' }} · {{ club.meetingSchedule }}
@@ -245,7 +246,11 @@ watch(
             </label>
             <label>
               <span>Category</span>
-              <input v-model="form.category" type="text" required />
+              <select v-model="form.category" required>
+                <option v-for="category in clubCategoryOptions" :key="category.title" :value="category.title">
+                  {{ category.title }}
+                </option>
+              </select>
             </label>
             <label>
               <span>Meeting schedule</span>

@@ -22,7 +22,10 @@ INSERT INTO club_category (id, cate_name, logo, description)
 VALUES
   (1, 'STEM & Innovation', 'https://cdn.example.com/logos/stem.svg', 'Engineering, robotics, science, and technology-focused clubs.'),
   (2, 'Service & Leadership', 'https://cdn.example.com/logos/service.svg', 'Clubs centered on volunteering, civic engagement, and leadership.'),
-  (3, 'Creative Arts & Media', 'https://cdn.example.com/logos/arts.svg', 'Visual arts, performing arts, and multimedia storytelling clubs.')
+  (3, 'Creative Arts & Media', 'https://cdn.example.com/logos/arts.svg', 'Visual arts, performing arts, and multimedia storytelling clubs.'),
+  (4, 'Culture & Identity', 'https://cdn.example.com/logos/culture.svg', 'Clubs organized around heritage, culture, language, and identity communities.'),
+  (5, 'Wellness & Athletics', 'https://cdn.example.com/logos/wellness.svg', 'Athletics, physical wellness, recreation, and mental health clubs.'),
+  (6, 'Competition & Strategy', 'https://cdn.example.com/logos/competition.svg', 'Debate, games, olympiads, and strategy-focused clubs.')
 ON DUPLICATE KEY UPDATE
   logo = VALUES(logo),
   description = VALUES(description);
@@ -149,6 +152,34 @@ ON DUPLICATE KEY UPDATE
   member_count = VALUES(member_count),
   achievements = VALUES(achievements),
   school_id = VALUES(school_id);
+
+UPDATE clubs
+SET category = 'Service & Leadership'
+WHERE school_id = 1;
+
+UPDATE clubs
+SET category = 'STEM & Innovation'
+WHERE LOWER(name) REGEXP 'aerospace|aviation|analytics|artificial intelligence|biology|chemistry|computer science|derm|information security|makers|science olympiad|steam club|aias|architecture|pediatrics';
+
+UPDATE clubs
+SET category = 'STEM & Innovation'
+WHERE LOWER(name) IN ('math club', 'artificial intelligence club', 'computer science club', 'chemistry club', 'biology club');
+
+UPDATE clubs
+SET category = 'Competition & Strategy'
+WHERE LOWER(name) REGEXP 'chess|speech|debate|puzzle|esports|dungeons and dragons|magic the gathering|f=ma|spartan equity partners';
+
+UPDATE clubs
+SET category = 'Creative Arts & Media'
+WHERE LOWER(name) REGEXP 'crochet|dance-a-gram|drama llamas|film club|poetry club|yearbook';
+
+UPDATE clubs
+SET category = 'Culture & Identity'
+WHERE LOWER(name) REGEXP 'asian pacific union|barkada|black student union|chinese culture|connected through cultures|korean culture|mecha|south asian student union|taiwanese american student association|vietnamese student association';
+
+UPDATE clubs
+SET category = 'Wellness & Athletics'
+WHERE LOWER(name) REGEXP '6th man|aah|badminton|bring change to mind|psychology club|rock climbing club|student athlete service club';
 
 INSERT INTO club_member (club_id, oauth_user_id, role_name)
 VALUES
