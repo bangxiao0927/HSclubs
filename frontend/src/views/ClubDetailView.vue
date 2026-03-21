@@ -418,6 +418,9 @@ watch(
   border: 1px solid rgba(250, 204, 21, 0.2);
   padding: 1.2rem;
   background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 .stat-label {
@@ -430,6 +433,9 @@ watch(
   font-size: 1.2rem;
   font-weight: 600;
   color: var(--mv-gold);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .stat-link {

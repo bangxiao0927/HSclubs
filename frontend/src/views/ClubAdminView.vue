@@ -546,6 +546,9 @@ textarea {
   border: 1px solid rgba(254, 252, 232, 0.1);
   padding: 1rem;
   background: rgba(15, 15, 15, 0.8);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 .insight-card .label {
@@ -558,6 +561,9 @@ textarea {
   margin: 0.35rem 0 0;
   font-size: 1.1rem;
   font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .insight-card.achievements ul {
