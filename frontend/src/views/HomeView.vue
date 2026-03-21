@@ -23,7 +23,6 @@ const loadClubs = async () => {
 
 onMounted(loadClubs)
 
-const totalMembers = computed(() => clubs.value.reduce((sum, club) => sum + (club.memberCount ?? 0), 0))
 const topClubs = computed(() =>
   [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4),
 )
@@ -36,19 +35,18 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
     <section class="home-hero page-shell">
       <div class="hero-copy">
         <p class="section-label">Mountain View · Clubs</p>
-        <h1>Member snapshot</h1>
+        <h1>Club directory</h1>
         <p>
-          Use the quick view below to see which clubs are drawing the biggest rosters this season, then scan the full directory to plan signups and recruiting pushes.
+          Browse all active clubs, jump into details, and use the search bar above when you already know the name or topic you want.
         </p>
-      </div>
-      <div class="hero-stats">
         <div class="stat-card">
           <span class="stat-label">Active clubs</span>
           <p class="stat-value">{{ clubs.length }}</p>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">Members counted</span>
-          <p class="stat-value">{{ totalMembers }}</p>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="hero-image-frame">
+          <span class="frame-label">Cover image area</span>
         </div>
       </div>
     </section>
@@ -163,18 +161,43 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   color: var(--mv-text-muted);
 }
 
-.hero-stats {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
 .stat-card {
+  width: fit-content;
   min-width: 180px;
   border-radius: 20px;
   border: 1px solid rgba(250, 204, 21, 0.2);
   background: rgba(0, 0, 0, 0.45);
   padding: 1.25rem;
+}
+
+.hero-visual {
+  flex: 1 1 320px;
+  min-width: min(320px, 100%);
+  display: flex;
+}
+
+.hero-image-frame {
+  width: 100%;
+  min-height: 240px;
+  border-radius: 28px;
+  border: 1px dashed rgba(250, 204, 21, 0.35);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(250, 204, 21, 0.18), transparent 35%),
+    linear-gradient(145deg, rgba(24, 24, 24, 0.95), rgba(8, 8, 8, 0.98));
+  display: flex;
+  align-items: flex-end;
+  padding: 1.25rem;
+}
+
+.frame-label {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(254, 252, 232, 0.72);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .stat-label {
@@ -375,8 +398,12 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
     align-items: flex-start;
   }
 
-  .hero-stats {
+  .hero-visual {
     width: 100%;
+  }
+
+  .hero-image-frame {
+    min-height: 180px;
   }
 }
 </style>
