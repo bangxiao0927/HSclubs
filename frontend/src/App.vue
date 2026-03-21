@@ -1,17 +1,30 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from './stores/auth'
 
 const searchQuery = ref('')
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 const { isAuthenticated, currentUser } = storeToRefs(authStore)
 
 const handleLogout = () => {
   authStore.logout()
+}
+
+const syncSearchQueryFromRoute = () => {
+  searchQuery.value = typeof route.query.q === 'string' ? route.query.q : ''
+}
+
+const submitSearch = () => {
+  const q = searchQuery.value.trim()
+  void router.push({
+    name: q ? 'club-search' : 'home',
+    query: q ? { q } : {},
+  })
 }
 
 watch(
@@ -21,6 +34,14 @@ watch(
       void authStore.refreshUser()
     }
   },
+)
+
+watch(
+  () => route.query.q,
+  () => {
+    syncSearchQueryFromRoute()
+  },
+  { immediate: true },
 )
 </script>
 
@@ -58,15 +79,17 @@ watch(
           </nav>
         </div>
 
-        <div class="search-bar">
+        <form class="search-bar" @submit.prevent="submitSearch">
           <input
             v-model="searchQuery"
-            type="text"
+            type="search"
             placeholder="Search your favorite clubs"
             class="search-input"
           />
-          <span class="search-icon">🔍</span>
-        </div>
+          <button type="submit" class="search-button" aria-label="Search clubs">
+            <span class="search-icon">🔍</span>
+          </button>
+        </form>
 
         <div class="header-right">
           <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link">
@@ -182,7 +205,7 @@ watch(
   align-items: center;
   background: rgba(15, 15, 15, 0.85);
   border-radius: 999px;
-  padding: 0.6rem 1.5rem;
+  padding: 0.42rem 0.6rem 0.42rem 1rem;
   flex: 1 1 260px;
   min-width: 220px;
   max-width: 440px;
@@ -195,12 +218,26 @@ watch(
   outline: none;
   flex: 1;
   font-size: 0.95rem;
+  min-width: 0;
   color: #fefce8;
   background: transparent;
 }
 
 .search-input::placeholder {
   color: rgba(254, 252, 232, 0.4);
+}
+
+.search-button {
+  border: none;
+  background: transparent;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 .search-icon {
@@ -282,6 +319,16 @@ watch(
 }
 
 @media (max-width: 640px) {
+  .header {
+    padding-block: 0.75rem;
+  }
+
+  .header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.85rem;
+  }
+
   .nav {
     width: 100%;
     justify-content: space-between;
@@ -290,6 +337,17 @@ watch(
   .search-bar {
     max-width: none;
     width: 100%;
+    min-width: 0;
+    padding: 0.32rem 0.45rem 0.32rem 0.9rem;
+  }
+
+  .search-input {
+    font-size: 16px;
+  }
+
+  .search-button {
+    width: 2rem;
+    height: 2rem;
   }
 }
 </style>

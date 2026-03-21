@@ -24,7 +24,9 @@ const loadClubs = async () => {
 onMounted(loadClubs)
 
 const totalMembers = computed(() => clubs.value.reduce((sum, club) => sum + (club.memberCount ?? 0), 0))
-const topClubs = computed(() => [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4))
+const topClubs = computed(() =>
+  [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4),
+)
 
 const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(club.name)}`
 </script>
@@ -44,6 +46,10 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
           <span class="stat-label">Active clubs</span>
           <p class="stat-value">{{ clubs.length }}</p>
         </div>
+        <div class="stat-card">
+          <span class="stat-label">Members counted</span>
+          <p class="stat-value">{{ totalMembers }}</p>
+        </div>
       </div>
     </section>
 
@@ -56,7 +62,7 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
         <h2>Highest membership clubs</h2>
         <p class="section-subtitle">Sorted automatically from roster submissions.</p>
       </div>
-      <div class="top-grid">
+      <div v-if="topClubs.length" class="top-grid">
         <RouterLink v-for="club in topClubs" :key="club.id" :to="`/clubs/${club.id}`" custom v-slot="{ navigate }">
           <article
             class="top-card"
@@ -78,14 +84,18 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
           </article>
         </RouterLink>
       </div>
+      <div v-else-if="!loading && !error" class="empty-state">
+        <p>No club membership data is available yet.</p>
+      </div>
     </section>
 
     <section class="all-clubs-section page-shell">
       <div class="section-heading">
         <p class="section-label">Directory</p>
         <h2>All clubs</h2>
+        <p class="section-subtitle">Use the header search to open a separate results page for club names, advisors, or keywords.</p>
       </div>
-      <div class="club-directory">
+      <div v-if="clubs.length" class="club-directory">
         <RouterLink v-for="club in clubs" :key="club.id" :to="`/clubs/${club.id}`" custom v-slot="{ navigate }">
           <div
             class="club-row"
@@ -110,6 +120,9 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
             </div>
           </div>
         </RouterLink>
+      </div>
+      <div v-else-if="!loading && !error" class="empty-state">
+        <p>No clubs are available yet.</p>
       </div>
     </section>
   </div>
@@ -195,6 +208,14 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1.25rem;
+}
+
+.empty-state {
+  border-radius: 24px;
+  border: 1px dashed rgba(250, 204, 21, 0.28);
+  padding: 1.25rem 1.5rem;
+  background: rgba(10, 10, 10, 0.55);
+  color: var(--mv-text-muted);
 }
 
 .top-card {
