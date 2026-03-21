@@ -5,6 +5,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { matchesClubSearch, normalizeClubSearchQuery } from '../utils/clubSearch'
+import { clubImage } from '../utils/clubImages'
 
 const clubs = ref<Club[]>([])
 const loading = ref(true)
@@ -30,7 +31,6 @@ const normalizedSearchQuery = computed(() => normalizeClubSearchQuery(route.quer
 const filteredClubs = computed(() =>
   clubs.value.filter((club) => matchesClubSearch(club, normalizedSearchQuery.value)),
 )
-const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(club.name)}`
 </script>
 
 <template>

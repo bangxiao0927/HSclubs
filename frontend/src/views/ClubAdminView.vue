@@ -7,6 +7,7 @@ import { fetchClubById, fetchClubMembers, updateClub } from '../services/clubSer
 import type { Club, ClubMember } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubCategoryOptions } from '../utils/clubCategories'
+import { clubImage } from '../utils/clubImages'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -43,9 +44,6 @@ const nullable = (value: string) => {
   const trimmed = value.trim()
   return trimmed.length ? trimmed : null
 }
-
-const clubImage = (entity: Club) =>
-  entity.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(entity.name)}`
 
 const hydrateForm = (data: Club) => {
   form.name = data.name

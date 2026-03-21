@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
+import { clubImage } from '../utils/clubImages'
 
 const clubs = ref<Club[]>([])
 const loading = ref(true)
@@ -27,7 +28,6 @@ const topClubs = computed(() =>
   [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4),
 )
 
-const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(club.name)}`
 </script>
 
 <template>

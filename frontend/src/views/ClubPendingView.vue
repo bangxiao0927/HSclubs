@@ -11,6 +11,7 @@ import {
 } from '../services/clubService'
 import type { Club, ClubMembershipRequest } from '../types/club'
 import { useAuthStore } from '../stores/auth'
+import { clubImage } from '../utils/clubImages'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -28,9 +29,6 @@ const { currentUser } = storeToRefs(authStore)
 const canManageMembers = computed(
   () => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner)
 )
-
-const clubImage = (entity: Club) =>
-  entity.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(entity.name)}`
 
 const loadPendingRequests = async (id: string) => {
   if (!id || !canManageMembers.value) {

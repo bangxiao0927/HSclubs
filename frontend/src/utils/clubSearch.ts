@@ -8,6 +8,11 @@ export const matchesClubSearch = (club: Club, query: string) => {
     return true
   }
 
+  const instagramKeywords = new Set(['ins', 'instagram'])
+  if (instagramKeywords.has(query)) {
+    return Boolean(club.instagramUrl?.trim())
+  }
+
   const haystacks = [
     club.name,
     club.aliasName,
@@ -17,6 +22,7 @@ export const matchesClubSearch = (club: Club, query: string) => {
     club.location,
     club.contactEmail,
     club.advisor,
+    club.instagramUrl,
   ]
     .filter((value): value is string => Boolean(value))
     .map((value) => value.toLowerCase())

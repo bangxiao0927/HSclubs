@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router'
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { clubCategoryOptions } from '../utils/clubCategories'
+import { clubImage } from '../utils/clubImages'
 
 const clubs = ref<Club[]>([])
 const loading = ref(true)
@@ -24,8 +25,6 @@ const loadClubs = async () => {
 }
 
 onMounted(loadClubs)
-
-const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(club.name)}`
 
 const categories = computed(() =>
   clubCategoryOptions.map((category) => {

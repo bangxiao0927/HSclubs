@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { applyToClub, cancelMembershipRequest, fetchClubById, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
+import { clubImage } from '../utils/clubImages'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -31,8 +32,6 @@ const hasPendingRequest = computed(() => Boolean(club.value?.viewerHasPendingReq
 const authStore = useAuthStore()
 const { currentUser, isAuthenticated } = storeToRefs(authStore)
 const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
-
-const clubImage = (entity: Club) => entity.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(entity.name)}`
 
 const instagramHandle = (url?: string | null) => {
   if (!url) {

@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
+import { clubImage } from '../utils/clubImages'
 
 const authStore = useAuthStore()
 const { currentUser, userLoading, hasCheckedSession } = storeToRefs(authStore)
@@ -20,8 +21,6 @@ const lastFetchedAt = ref<Date | null>(null)
 
 const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
 const sessionReady = computed(() => hasCheckedSession.value || !userLoading.value)
-
-const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(club.name)}`
 
 const loadClubs = async () => {
   if (loading.value) {
