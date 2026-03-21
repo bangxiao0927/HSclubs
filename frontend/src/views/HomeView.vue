@@ -136,13 +136,14 @@ const topClubs = computed(() =>
 
 .home-hero {
   border-radius: 36px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.75rem, 4vw, 3rem);
-  background: linear-gradient(125deg, rgba(250, 204, 21, 0.18), rgba(5, 5, 5, 0.9));
+  background: var(--mv-surface-hero);
   display: flex;
   justify-content: space-between;
   gap: 2rem;
   flex-wrap: wrap;
+  box-shadow: var(--mv-shadow-card);
 }
 
 .hero-copy {
@@ -165,8 +166,8 @@ const topClubs = computed(() =>
   width: fit-content;
   min-width: 180px;
   border-radius: 20px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
-  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-soft);
   padding: 1.25rem;
 }
 
@@ -180,10 +181,8 @@ const topClubs = computed(() =>
   width: 100%;
   min-height: 240px;
   border-radius: 28px;
-  border: 1px dashed rgba(250, 204, 21, 0.35);
-  background:
-    radial-gradient(circle at 20% 20%, rgba(250, 204, 21, 0.18), transparent 35%),
-    linear-gradient(145deg, rgba(24, 24, 24, 0.95), rgba(8, 8, 8, 0.98));
+  border: 1px dashed var(--mv-border-strong);
+  background: var(--mv-surface-hero-strong);
   display: flex;
   align-items: flex-end;
   padding: 1.25rem;
@@ -192,9 +191,9 @@ const topClubs = computed(() =>
 .frame-label {
   padding: 0.35rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid rgba(250, 204, 21, 0.28);
-  background: rgba(0, 0, 0, 0.35);
-  color: rgba(254, 252, 232, 0.72);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+  color: var(--mv-text-faint);
   font-size: 0.82rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -202,7 +201,7 @@ const topClubs = computed(() =>
 
 .stat-label {
   font-size: 0.9rem;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .stat-value {
@@ -235,22 +234,22 @@ const topClubs = computed(() =>
 
 .empty-state {
   border-radius: 24px;
-  border: 1px dashed rgba(250, 204, 21, 0.28);
+  border: 1px dashed var(--mv-border-strong);
   padding: 1.25rem 1.5rem;
-  background: rgba(10, 10, 10, 0.55);
+  background: var(--mv-surface-muted);
   color: var(--mv-text-muted);
 }
 
 .top-card {
   border-radius: 24px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px solid var(--mv-border);
   padding: 1.5rem;
-  background: rgba(10, 10, 10, 0.85);
+  background: var(--mv-surface-card);
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
-  box-shadow: 0 25px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--mv-shadow-card);
   color: inherit;
   text-decoration: none;
   cursor: pointer;
@@ -264,8 +263,8 @@ const topClubs = computed(() =>
   height: 72px;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.3);
-  background: rgba(253, 224, 71, 0.12);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-accent);
   flex-shrink: 0;
 }
 
@@ -293,7 +292,7 @@ const topClubs = computed(() =>
 
 .top-card:hover,
 .top-card:focus-visible {
-  border-color: rgba(250, 204, 21, 0.45);
+  border-color: var(--mv-border-strong);
   transform: translateY(-2px);
 }
 
@@ -308,15 +307,15 @@ const topClubs = computed(() =>
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
   font-size: 0.9rem;
 }
 
 .club-directory {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.15);
-  background: rgba(7, 7, 7, 0.9);
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card-strong);
+  box-shadow: var(--mv-shadow-elevated);
 }
 
 .club-row {
@@ -325,7 +324,7 @@ const topClubs = computed(() =>
   flex-wrap: wrap;
   gap: 1rem;
   padding: 1.25rem 1.75rem;
-  border-bottom: 1px solid rgba(254, 252, 232, 0.05);
+  border-bottom: 1px solid var(--mv-border);
   color: inherit;
   text-decoration: none;
   cursor: pointer;
@@ -355,7 +354,7 @@ const topClubs = computed(() =>
 
 .club-row:hover,
 .club-row:focus-visible {
-  background: rgba(253, 224, 71, 0.05);
+  background: var(--mv-gold-soft);
 }
 
 .top-card:focus-visible,
@@ -369,7 +368,7 @@ const topClubs = computed(() =>
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 
@@ -386,14 +385,15 @@ const topClubs = computed(() =>
   margin: 0 auto;
   padding: 0.75rem 1.5rem;
   border-radius: 16px;
-  background: rgba(253, 224, 71, 0.12);
-  border: 1px solid rgba(253, 224, 71, 0.35);
-  color: rgba(254, 252, 232, 0.85);
+  background: var(--mv-surface-accent);
+  border: 1px solid var(--mv-border-strong);
+  color: var(--mv-text-soft);
 }
 
 .status-banner.error {
-  background: rgba(248, 113, 113, 0.12);
-  border-color: rgba(248, 113, 113, 0.45);
+  background: var(--mv-surface-danger);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: var(--mv-status-danger);
 }
 
 @media (max-width: 640px) {

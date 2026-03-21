@@ -147,13 +147,14 @@ const activeCategory = computed(
 .status-card {
   padding: 0.9rem 1rem;
   border-radius: 20px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: rgba(10, 10, 10, 0.82);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+  box-shadow: var(--mv-shadow-card);
 }
 
 .status-card.error {
-  border-color: rgba(248, 113, 113, 0.45);
-  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.35);
+  color: var(--mv-status-danger);
 }
 
 .overview-grid {
@@ -168,8 +169,9 @@ const activeCategory = computed(
   gap: 0.25rem;
   padding: 1.05rem 1.2rem;
   border-radius: 22px;
-  border: 1px solid rgba(250, 204, 21, 0.16);
-  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+  box-shadow: var(--mv-shadow-card);
 }
 
 .overview-card strong {
@@ -193,8 +195,8 @@ const activeCategory = computed(
   gap: 0.55rem;
   padding: 0.7rem 1rem;
   border-radius: 999px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: transparent;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-muted);
   color: inherit;
   cursor: pointer;
   font-weight: 600;
@@ -203,22 +205,22 @@ const activeCategory = computed(
 .category-pill small {
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
-  background: rgba(254, 252, 232, 0.08);
-  color: rgba(254, 252, 232, 0.72);
+  background: var(--mv-surface-soft);
+  color: var(--mv-text-faint);
 }
 
 .category-pill.active {
-  background: rgba(250, 204, 21, 0.15);
-  border-color: rgba(250, 204, 21, 0.45);
+  background: var(--mv-surface-accent);
+  border-color: var(--mv-border-strong);
   color: var(--mv-gold);
 }
 
 .category-panel {
   border-radius: 32px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
+  border: 1px solid var(--mv-border);
   overflow: hidden;
-  background: rgba(5, 5, 5, 0.85);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
+  background: var(--mv-surface-card-strong);
+  box-shadow: var(--mv-shadow-elevated);
 }
 
 .panel-hero {
@@ -237,7 +239,7 @@ const activeCategory = computed(
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.85rem;
-  color: rgba(254, 252, 232, 0.85);
+  color: rgba(255, 253, 247, 0.9);
 }
 
 .panel-focus {
@@ -246,7 +248,7 @@ const activeCategory = computed(
   padding: 0.35rem 0.75rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .category-clubs {
@@ -266,8 +268,8 @@ const activeCategory = computed(
 .status-pill {
   padding: 0.35rem 0.9rem;
   border-radius: 999px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  color: rgba(254, 252, 232, 0.8);
+  border: 1px solid var(--mv-border);
+  color: var(--mv-text-soft);
   font-size: 0.9rem;
 }
 
@@ -279,13 +281,13 @@ const activeCategory = computed(
 
 .top-card {
   border-radius: 24px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px solid var(--mv-border);
   padding: 1.5rem;
-  background: rgba(10, 10, 10, 0.85);
+  background: var(--mv-surface-card);
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
-  box-shadow: 0 25px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--mv-shadow-card);
   color: inherit;
   text-decoration: none;
   cursor: pointer;
@@ -305,7 +307,7 @@ const activeCategory = computed(
 
 .top-card:hover,
 .top-card:focus-visible {
-  border-color: rgba(250, 204, 21, 0.45);
+  border-color: var(--mv-border-strong);
   transform: translateY(-2px);
 }
 
@@ -319,8 +321,8 @@ const activeCategory = computed(
   height: 72px;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.3);
-  background: rgba(253, 224, 71, 0.12);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-accent);
   flex-shrink: 0;
 }
 
@@ -345,13 +347,13 @@ const activeCategory = computed(
 
 .club-category {
   margin: 0;
-  color: rgba(250, 204, 21, 0.82);
+  color: var(--mv-gold);
   font-size: 0.9rem;
 }
 
 .club-description {
   margin: 0;
-  color: rgba(254, 252, 232, 0.74);
+  color: var(--mv-text-faint);
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
@@ -362,15 +364,15 @@ const activeCategory = computed(
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
   font-size: 0.9rem;
 }
 
 .empty-card {
   border-radius: 24px;
-  border: 1px dashed rgba(250, 204, 21, 0.22);
+  border: 1px dashed var(--mv-border-strong);
   padding: 1.5rem;
-  background: rgba(10, 10, 10, 0.85);
+  background: var(--mv-surface-muted);
   display: flex;
   align-items: center;
   justify-content: center;

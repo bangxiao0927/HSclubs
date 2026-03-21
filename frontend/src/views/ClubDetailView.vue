@@ -270,18 +270,19 @@ watch(
 }
 
 .back-link {
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
   font-weight: 600;
 }
 
 .club-hero {
   border-radius: 32px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 3rem);
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.18), rgba(5, 5, 5, 0.9));
+  background: var(--mv-surface-hero);
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  box-shadow: var(--mv-shadow-card);
 }
 
 .hero-top {
@@ -309,8 +310,8 @@ watch(
 
 .apply-btn {
   border-radius: 999px;
-  border: 1px solid rgba(250, 204, 21, 0.4);
-  background: rgba(250, 204, 21, 0.15);
+  border: 1px solid var(--mv-border-strong);
+  background: var(--mv-surface-accent);
   color: var(--mv-gold);
   font-weight: 600;
   padding: 0.5rem 1.6rem;
@@ -324,9 +325,9 @@ watch(
 
 .cancel-btn {
   border-radius: 999px;
-  border: 1px solid rgba(248, 113, 113, 0.5);
+  border: 1px solid rgba(239, 68, 68, 0.4);
   background: transparent;
-  color: #fecaca;
+  color: var(--mv-status-danger);
   font-weight: 600;
   padding: 0.5rem 1.6rem;
   cursor: pointer;
@@ -343,24 +344,25 @@ watch(
 }
 
 .join-message.success {
-  color: #bbf7d0;
+  color: var(--mv-status-success);
 }
 
 .join-message.error {
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .join-message.info {
-  color: rgba(254, 252, 232, 0.9);
+  color: var(--mv-text-soft);
 }
 
 .admin-link {
-  border: 1px solid rgba(250, 204, 21, 0.4);
+  border: 1px solid var(--mv-border-strong);
   border-radius: 999px;
   padding: 0.4rem 1rem;
   text-decoration: none;
   color: var(--mv-gold);
   font-weight: 600;
+  background: var(--mv-surface-muted);
 }
 
 .club-hero h1 {
@@ -370,7 +372,7 @@ watch(
 
 .hero-meta {
   margin: 0;
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 .hero-description {
@@ -382,8 +384,8 @@ watch(
   height: 72px;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: rgba(253, 224, 71, 0.08);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-accent);
   flex-shrink: 0;
 }
 
@@ -414,9 +416,9 @@ watch(
 
 .stat-card {
   border-radius: 24px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
+  border: 1px solid var(--mv-border);
   padding: 1.2rem;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--mv-surface-soft);
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -424,7 +426,7 @@ watch(
 
 .stat-label {
   font-size: 0.85rem;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .stat-value {
@@ -472,12 +474,13 @@ watch(
 
 .spotlight {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.15);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 2.75rem);
-  background: rgba(7, 7, 7, 0.9);
+  background: var(--mv-surface-card-strong);
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  box-shadow: var(--mv-shadow-card);
 }
 
 .spotlight ul {
@@ -492,8 +495,8 @@ watch(
 .spotlight button {
   align-self: flex-start;
   border-radius: 20px;
-  border: 1px solid rgba(250, 204, 21, 0.35);
-  background: rgba(250, 204, 21, 0.15);
+  border: 1px solid var(--mv-border-strong);
+  background: var(--mv-surface-accent);
   color: var(--mv-gold);
   padding: 0.65rem 1.6rem;
   font-weight: 600;
@@ -507,9 +510,10 @@ watch(
 
 .related {
   border-radius: 24px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
+  border: 1px solid var(--mv-border);
   padding: 1.5rem;
-  background: rgba(10, 10, 10, 0.85);
+  background: var(--mv-surface-card);
+  box-shadow: var(--mv-shadow-card);
 }
 
 .related ul {
@@ -530,7 +534,7 @@ watch(
 }
 
 .related small {
-  color: rgba(254, 252, 232, 0.6);
+  color: var(--mv-text-dim);
 }
 
 .empty-state {

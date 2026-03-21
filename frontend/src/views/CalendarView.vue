@@ -163,8 +163,8 @@ function extractDay(value: string) {
 
 <style scoped>
 .calendar-page {
-  background: linear-gradient(180deg, #050505 0%, #0b0b0b 70%, #111 100%);
-  color: #fefce8;
+  background: transparent;
+  color: var(--mv-text);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -197,7 +197,7 @@ function extractDay(value: string) {
 }
 
 .calendar-subtitle {
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
   max-width: 540px;
 }
 
@@ -214,22 +214,23 @@ function extractDay(value: string) {
 
 .calendar-column {
   border-radius: 24px;
-  border: 1px solid rgba(250, 204, 21, 0.15);
-  background: rgba(10, 10, 10, 0.85);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
   display: flex;
   flex-direction: column;
+  box-shadow: var(--mv-shadow-card);
 }
 
 .column-head {
   padding: 1.1rem 1.25rem;
-  border-bottom: 1px solid rgba(250, 204, 21, 0.1);
+  border-bottom: 1px solid var(--mv-border);
   display: flex;
   justify-content: space-between;
   font-weight: 600;
 }
 
 .column-head small {
-  color: rgba(254, 252, 232, 0.65);
+  color: var(--mv-text-dim);
 }
 
 .column-body {
@@ -240,7 +241,7 @@ function extractDay(value: string) {
 }
 
 .event-card {
-  background: rgba(253, 224, 71, 0.05);
+  background: var(--mv-surface-soft);
   padding: 1rem 1.25rem;
   border-radius: 18px;
   display: flex;
@@ -254,8 +255,8 @@ function extractDay(value: string) {
 
 .event-card:hover,
 .event-card:focus-visible {
-  border-color: rgba(253, 224, 71, 0.45);
-  background: rgba(253, 224, 71, 0.08);
+  border-color: var(--mv-border-strong);
+  background: var(--mv-surface-accent);
 }
 
 .event-card:focus-visible {
@@ -279,7 +280,7 @@ function extractDay(value: string) {
   font-size: 0.75rem;
   padding: 0.15rem 0.6rem;
   border-radius: 999px;
-  background: rgba(250, 204, 21, 0.15);
+  background: var(--mv-surface-accent);
   color: var(--mv-gold);
 }
 
@@ -287,39 +288,40 @@ function extractDay(value: string) {
 .event-location {
   margin: 0;
   font-size: 0.9rem;
-  color: rgba(254, 252, 232, 0.85);
+  color: var(--mv-text-soft);
 }
 
 .event-location {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .empty {
-  color: rgba(254, 252, 232, 0.45);
+  color: var(--mv-text-dim);
   font-size: 0.9rem;
 }
 
 .status-banner {
   padding: 0.85rem 1.25rem;
   border-radius: 16px;
-  border: 1px solid rgba(253, 224, 71, 0.35);
-  background: rgba(253, 224, 71, 0.08);
-  color: rgba(254, 252, 232, 0.85);
+  border: 1px solid var(--mv-border-strong);
+  background: var(--mv-surface-accent);
+  color: var(--mv-text-soft);
 }
 
 .status-banner.error {
-  border-color: rgba(248, 113, 113, 0.45);
-  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  background: var(--mv-surface-danger);
+  color: var(--mv-status-danger);
 }
 
 .section-label {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-size: 0.75rem;
-  color: rgba(254, 252, 232, 0.6);
+  color: var(--mv-text-dim);
 }
 
 @media (max-width: 640px) {

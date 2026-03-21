@@ -1,5 +1,69 @@
 /* Mountain View color tokens */
 :root {
+  --mv-night: #f4f0e8;
+  --mv-ink: #fbf7ef;
+  --mv-graphite: #efe7d8;
+  --mv-card: #fffdfa;
+  --mv-border: rgba(111, 78, 23, 0.16);
+  --mv-border-strong: rgba(111, 78, 23, 0.28);
+  --mv-gold: #b7791f;
+  --mv-gold-soft: rgba(183, 121, 31, 0.12);
+  --mv-text: #1c1917;
+  --mv-text-muted: #57534e;
+  --mv-radius: 28px;
+  --app-body-bg:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.14), transparent 30%),
+    linear-gradient(180deg, #fbf7ef 0%, #f6f0e4 55%, #efe7d8 100%);
+  --app-body-text: var(--mv-text);
+  --mv-header-bg: rgba(251, 247, 239, 0.82);
+  --mv-header-border: rgba(111, 78, 23, 0.12);
+  --mv-header-shadow: 0 14px 32px rgba(120, 90, 40, 0.1);
+  --mv-logo-text: #1c1917;
+  --mv-nav-text: rgba(28, 25, 23, 0.7);
+  --mv-nav-text-active: #1c1917;
+  --mv-nav-text-hover: #8b5e1a;
+  --mv-search-bg: rgba(255, 253, 250, 0.95);
+  --mv-search-border: rgba(111, 78, 23, 0.14);
+  --mv-search-text: #1c1917;
+  --mv-search-placeholder: rgba(87, 83, 78, 0.68);
+  --mv-search-icon: rgba(87, 83, 78, 0.8);
+  --mv-profile-border: rgba(111, 78, 23, 0.14);
+  --mv-profile-text: rgba(28, 25, 23, 0.88);
+  --mv-profile-hover-bg: rgba(245, 158, 11, 0.12);
+  --mv-profile-hover-border: rgba(183, 121, 31, 0.3);
+  --mv-ghost-border: rgba(111, 78, 23, 0.18);
+  --mv-ghost-text: rgba(28, 25, 23, 0.86);
+  --mv-primary-bg: #c58a2b;
+  --mv-primary-text: #fffdf7;
+  --mv-primary-shadow: 0 12px 24px rgba(197, 138, 43, 0.22);
+  --mv-surface-hero: linear-gradient(135deg, rgba(255, 248, 228, 0.92), rgba(244, 232, 208, 0.9));
+  --mv-surface-hero-strong: linear-gradient(135deg, rgba(255, 244, 214, 0.95), rgba(234, 220, 191, 0.95));
+  --mv-surface-card: rgba(255, 253, 250, 0.86);
+  --mv-surface-card-strong: rgba(255, 252, 247, 0.95);
+  --mv-surface-soft: rgba(255, 248, 235, 0.72);
+  --mv-surface-muted: rgba(255, 252, 247, 0.68);
+  --mv-surface-accent: rgba(245, 158, 11, 0.12);
+  --mv-surface-danger: rgba(239, 68, 68, 0.1);
+  --mv-text-soft: rgba(28, 25, 23, 0.84);
+  --mv-text-faint: rgba(87, 83, 78, 0.74);
+  --mv-text-dim: rgba(87, 83, 78, 0.58);
+  --mv-status-success: #15803d;
+  --mv-status-danger: #b91c1c;
+  --mv-status-warning: #b7791f;
+  --mv-shadow-card: 0 18px 40px rgba(120, 90, 40, 0.12);
+  --mv-shadow-elevated: 0 24px 56px rgba(120, 90, 40, 0.16);
+
+  --color-background: var(--mv-night);
+  --color-background-soft: var(--mv-ink);
+  --color-background-mute: var(--mv-graphite);
+  --color-border: var(--mv-border);
+  --color-border-hover: var(--mv-border-strong);
+  --color-heading: var(--mv-text);
+  --color-text: var(--mv-text);
+  --section-gap: 140px;
+}
+
+:root[data-theme='dark'] {
   --mv-night: #030303;
   --mv-ink: #080808;
   --mv-graphite: #111111;
@@ -10,16 +74,48 @@
   --mv-gold-soft: rgba(250, 204, 21, 0.08);
   --mv-text: #f8fafc;
   --mv-text-muted: #a3a3a3;
-  --mv-radius: 28px;
-
-  --color-background: var(--mv-night);
-  --color-background-soft: var(--mv-ink);
-  --color-background-mute: var(--mv-graphite);
-  --color-border: var(--mv-border);
-  --color-border-hover: var(--mv-border-strong);
-  --color-heading: var(--mv-text);
-  --color-text: var(--mv-text);
-  --section-gap: 140px;
+  --app-body-bg:
+    radial-gradient(circle at 15% 15%, rgba(250, 204, 21, 0.25), transparent 50%),
+    radial-gradient(circle at 80% 0%, rgba(234, 179, 8, 0.18), transparent 45%),
+    #050505;
+  --app-body-text: #fefce8;
+  --mv-header-bg: rgba(5, 5, 5, 0.9);
+  --mv-header-border: rgba(250, 204, 21, 0.15);
+  --mv-header-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --mv-logo-text: #fde047;
+  --mv-nav-text: rgba(254, 252, 232, 0.75);
+  --mv-nav-text-active: #fefce8;
+  --mv-nav-text-hover: #fde047;
+  --mv-search-bg: rgba(15, 15, 15, 0.85);
+  --mv-search-border: rgba(250, 204, 21, 0.35);
+  --mv-search-text: #fefce8;
+  --mv-search-placeholder: rgba(254, 252, 232, 0.4);
+  --mv-search-icon: rgba(254, 252, 232, 0.65);
+  --mv-profile-border: rgba(254, 252, 232, 0.25);
+  --mv-profile-text: rgba(254, 252, 232, 0.85);
+  --mv-profile-hover-bg: rgba(253, 224, 71, 0.08);
+  --mv-profile-hover-border: rgba(253, 224, 71, 0.8);
+  --mv-ghost-border: rgba(254, 252, 232, 0.4);
+  --mv-ghost-text: rgba(254, 252, 232, 0.9);
+  --mv-primary-bg: #fde047;
+  --mv-primary-text: #111111;
+  --mv-primary-shadow: 0 10px 20px rgba(253, 224, 71, 0.35);
+  --mv-surface-hero: linear-gradient(125deg, rgba(250, 204, 21, 0.18), rgba(5, 5, 5, 0.9));
+  --mv-surface-hero-strong: linear-gradient(120deg, rgba(250, 204, 21, 0.2), rgba(5, 5, 5, 0.95));
+  --mv-surface-card: rgba(10, 10, 10, 0.85);
+  --mv-surface-card-strong: rgba(7, 7, 7, 0.9);
+  --mv-surface-soft: rgba(0, 0, 0, 0.45);
+  --mv-surface-muted: rgba(10, 10, 10, 0.55);
+  --mv-surface-accent: rgba(250, 204, 21, 0.15);
+  --mv-surface-danger: rgba(248, 113, 113, 0.12);
+  --mv-text-soft: rgba(254, 252, 232, 0.85);
+  --mv-text-faint: rgba(254, 252, 232, 0.72);
+  --mv-text-dim: rgba(254, 252, 232, 0.6);
+  --mv-status-success: #bbf7d0;
+  --mv-status-danger: #fecaca;
+  --mv-status-warning: #facc15;
+  --mv-shadow-card: 0 25px 40px rgba(0, 0, 0, 0.35);
+  --mv-shadow-elevated: 0 25px 60px rgba(0, 0, 0, 0.45);
 }
 
 *,
@@ -36,9 +132,11 @@ body {
   background: var(--color-background);
   transition:
     color 0.5s,
-    background-color 0.5s;
+    background-color 0.5s,
+    background 0.5s;
   line-height: 1.6;
   font-family:
+    'Plus Jakarta Sans',
     Inter,
     -apple-system,
     BlinkMacSystemFont,

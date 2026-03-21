@@ -101,9 +101,10 @@ const filteredClubs = computed(() =>
 
 .results-hero {
   border-radius: 36px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.75rem, 4vw, 3rem);
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.12), rgba(10, 10, 10, 0.95));
+  background: var(--mv-surface-hero);
+  box-shadow: var(--mv-shadow-card);
 }
 
 .results-copy {
@@ -140,8 +141,8 @@ const filteredClubs = computed(() =>
   gap: 1.25rem;
   padding: 1.4rem 1.5rem;
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.16);
-  background: rgba(7, 7, 7, 0.88);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
   color: inherit;
   cursor: pointer;
   transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
@@ -151,8 +152,8 @@ const filteredClubs = computed(() =>
 
 .result-card:hover,
 .result-card:focus-visible {
-  border-color: rgba(250, 204, 21, 0.45);
-  background: rgba(20, 20, 20, 0.96);
+  border-color: var(--mv-border-strong);
+  background: var(--mv-surface-card-strong);
   transform: translateY(-2px);
 }
 
@@ -172,8 +173,8 @@ const filteredClubs = computed(() =>
   height: 80px;
   border-radius: 22px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.3);
-  background: rgba(253, 224, 71, 0.12);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-accent);
   flex-shrink: 0;
 }
 
@@ -197,7 +198,7 @@ const filteredClubs = computed(() =>
 
 .result-copy p {
   margin: 0;
-  color: rgba(254, 252, 232, 0.72);
+  color: var(--mv-text-faint);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -209,7 +210,7 @@ const filteredClubs = computed(() =>
   flex-direction: column;
   align-items: flex-end;
   gap: 0.5rem;
-  color: rgba(254, 252, 232, 0.74);
+  color: var(--mv-text-faint);
   text-align: right;
   flex-shrink: 0;
 }
@@ -224,9 +225,9 @@ const filteredClubs = computed(() =>
 
 .empty-state {
   border-radius: 24px;
-  border: 1px dashed rgba(250, 204, 21, 0.28);
+  border: 1px dashed var(--mv-border-strong);
   padding: 1.25rem 1.5rem;
-  background: rgba(10, 10, 10, 0.55);
+  background: var(--mv-surface-muted);
   color: var(--mv-text-muted);
 }
 
@@ -235,14 +236,15 @@ const filteredClubs = computed(() =>
   margin: 0 auto;
   padding: 0.75rem 1.5rem;
   border-radius: 16px;
-  background: rgba(253, 224, 71, 0.12);
-  border: 1px solid rgba(253, 224, 71, 0.35);
-  color: rgba(254, 252, 232, 0.85);
+  background: var(--mv-surface-accent);
+  border: 1px solid var(--mv-border-strong);
+  color: var(--mv-text-soft);
 }
 
 .status-banner.error {
-  background: rgba(248, 113, 113, 0.12);
-  border-color: rgba(248, 113, 113, 0.45);
+  background: var(--mv-surface-danger);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: var(--mv-status-danger);
 }
 
 @media (max-width: 720px) {

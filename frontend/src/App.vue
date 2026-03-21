@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
@@ -13,6 +13,31 @@ const { isAuthenticated, currentUser } = storeToRefs(authStore)
 
 const handleLogout = () => {
   authStore.logout()
+}
+
+const theme = ref<'light' | 'dark'>('light')
+const themeLabel = computed(() => (theme.value === 'light' ? 'Dark mode' : 'Light mode'))
+
+const applyTheme = (value: 'light' | 'dark') => {
+  document.documentElement.dataset.theme = value
+  try {
+    localStorage.setItem('theme', value)
+  } catch (error) {
+    console.warn('Failed to persist theme preference.', error)
+  }
+}
+
+const toggleTheme = () => {
+  theme.value = theme.value === 'light' ? 'dark' : 'light'
+}
+
+try {
+  const storedTheme = localStorage.getItem('theme')
+  if (storedTheme === 'light' || storedTheme === 'dark') {
+    theme.value = storedTheme
+  }
+} catch (error) {
+  console.warn('Failed to read theme preference.', error)
 }
 
 const syncSearchQueryFromRoute = () => {
@@ -35,6 +60,8 @@ watch(
     }
   },
 )
+
+watch(theme, (value) => applyTheme(value), { immediate: true })
 
 watch(
   () => route.query.q,
@@ -92,6 +119,10 @@ watch(
         </form>
 
         <div class="header-right">
+          <button type="button" class="theme-toggle" @click="toggleTheme">
+            <span class="theme-icon" aria-hidden="true">{{ theme === 'light' ? '🌙' : '☀️' }}</span>
+            <span>{{ themeLabel }}</span>
+          </button>
           <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link">
             <span class="profile-icon">👤</span>
             <span>Profile</span>
@@ -126,13 +157,13 @@ watch(
 
 .header {
   padding-block: 1rem;
-  background: rgba(5, 5, 5, 0.9);
-  border-bottom: 1px solid rgba(250, 204, 21, 0.15);
+  background: var(--mv-header-bg);
+  border-bottom: 1px solid var(--mv-header-border);
   position: sticky;
   top: 0;
   z-index: 10;
   backdrop-filter: blur(12px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--mv-header-shadow);
 }
 
 .header-inner {
@@ -164,17 +195,17 @@ watch(
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--mv-card);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.5rem;
-  color: #111111;
+  color: var(--mv-text);
 }
 
 .logo-text {
   font-weight: 700;
-  color: #fde047;
+  color: var(--mv-logo-text);
 }
 
 .nav {
@@ -186,31 +217,31 @@ watch(
 }
 
 .nav-link {
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-nav-text);
   text-decoration: none;
   transition: color 0.2s;
 }
 
 .nav-link.active {
-  color: #fefce8;
+  color: var(--mv-nav-text-active);
   font-weight: 600;
 }
 
 .nav-link:hover {
-  color: #fde047;
+  color: var(--mv-nav-text-hover);
 }
 
 .search-bar {
   display: flex;
   align-items: center;
-  background: rgba(15, 15, 15, 0.85);
+  background: var(--mv-search-bg);
   border-radius: 999px;
   padding: 0.42rem 0.6rem 0.42rem 1rem;
   flex: 1 1 260px;
   min-width: 220px;
   max-width: 440px;
   gap: 0.5rem;
-  border: 1px solid rgba(250, 204, 21, 0.35);
+  border: 1px solid var(--mv-search-border);
 }
 
 .search-input {
@@ -219,12 +250,12 @@ watch(
   flex: 1;
   font-size: 0.95rem;
   min-width: 0;
-  color: #fefce8;
+  color: var(--mv-search-text);
   background: transparent;
 }
 
 .search-input::placeholder {
-  color: rgba(254, 252, 232, 0.4);
+  color: var(--mv-search-placeholder);
 }
 
 .search-button {
@@ -241,7 +272,7 @@ watch(
 }
 
 .search-icon {
-  color: rgba(254, 252, 232, 0.65);
+  color: var(--mv-search-icon);
   font-size: 1.2rem;
 }
 
@@ -257,15 +288,15 @@ watch(
   gap: 0.5rem;
   padding: 0.4rem 1rem;
   border-radius: 999px;
-  border: 1px solid rgba(254, 252, 232, 0.25);
+  border: 1px solid var(--mv-profile-border);
   text-decoration: none;
-  color: rgba(254, 252, 232, 0.85);
+  color: var(--mv-profile-text);
   transition: background 0.2s, border-color 0.2s;
 }
 
 .profile-link:hover {
-  border-color: rgba(253, 224, 71, 0.8);
-  background: rgba(253, 224, 71, 0.08);
+  border-color: var(--mv-profile-hover-border);
+  background: var(--mv-profile-hover-bg);
 }
 
 .profile-icon {
@@ -288,14 +319,38 @@ watch(
 }
 
 .auth-btn.ghost {
-  border: 1px solid rgba(254, 252, 232, 0.4);
-  color: rgba(254, 252, 232, 0.9);
+  border: 1px solid var(--mv-ghost-border);
+  color: var(--mv-ghost-text);
 }
 
 .auth-btn.primary {
-  background: #fde047;
-  color: #111;
-  box-shadow: 0 10px 20px rgba(253, 224, 71, 0.35);
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+  box-shadow: var(--mv-primary-shadow);
+}
+
+.theme-toggle {
+  border: 1px solid var(--mv-ghost-border);
+  color: var(--mv-ghost-text);
+  background: transparent;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.theme-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--mv-shadow-card);
+}
+
+.theme-icon {
+  font-size: 1rem;
 }
 
 .auth-btn:hover {
