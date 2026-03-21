@@ -145,6 +145,8 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   color: inherit;
   cursor: pointer;
   transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 180px;
 }
 
 .result-card:hover,

@@ -30,7 +30,7 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    clubs.value = await fetchClubs()
+    clubs.value = await fetchClubs({ force: hasLoadedOnce.value })
     hasLoadedOnce.value = true
     lastFetchedAt.value = new Date()
   } catch (err) {
@@ -315,6 +315,8 @@ select {
   padding: 1.25rem 1.75rem;
   border-bottom: 1px solid rgba(254, 252, 232, 0.06);
   flex-wrap: wrap;
+  content-visibility: auto;
+  contain-intrinsic-size: 110px;
 }
 
 .club-row:last-of-type {

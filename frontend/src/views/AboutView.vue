@@ -241,6 +241,8 @@ const activeCategoryClubs = computed(() =>
   text-decoration: none;
   cursor: pointer;
   transition: border-color 0.2s ease, transform 0.2s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 320px;
 }
 
 .top-card h3 {

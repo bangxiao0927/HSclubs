@@ -255,6 +255,8 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   text-decoration: none;
   cursor: pointer;
   transition: border-color 0.2s ease, transform 0.2s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 260px;
 }
 
 .club-avatar {
@@ -328,6 +330,8 @@ const clubImage = (club: Club) => club.imageUrl ?? `https://api.dicebear.com/7.x
   text-decoration: none;
   cursor: pointer;
   position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: 110px;
 }
 
 .club-main {
