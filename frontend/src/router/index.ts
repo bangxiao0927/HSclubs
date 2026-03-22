@@ -23,6 +23,11 @@ const router = createRouter({
       component: () => import('../views/CalendarView.vue'),
     },
     {
+      path: '/search',
+      name: 'club-search',
+      component: () => import('../views/ClubSearchView.vue'),
+    },
+    {
       path: '/clubs/:id',
       name: 'club-detail',
       component: () => import('../views/ClubDetailView.vue'),

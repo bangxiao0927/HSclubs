@@ -221,11 +221,12 @@ const handleGraduationYearSave = async () => {
   gap: clamp(1.5rem, 3vw, 2.5rem);
   padding: clamp(1.5rem, 4vw, 3rem);
   border-radius: 36px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
-  background: linear-gradient(120deg, rgba(250, 204, 21, 0.18), rgba(5, 5, 5, 0.95));
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-hero-strong);
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  box-shadow: var(--mv-shadow-card);
 }
 
 .hero-copy {
@@ -244,8 +245,8 @@ const handleGraduationYearSave = async () => {
 .user-meta div {
   padding: 0.75rem 1rem;
   border-radius: 18px;
-  border: 1px solid rgba(254, 252, 232, 0.15);
-  background: rgba(254, 252, 232, 0.05);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-soft);
 }
 
 .user-meta span {
@@ -254,7 +255,7 @@ const handleGraduationYearSave = async () => {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin-bottom: 0.35rem;
-  color: rgba(254, 252, 232, 0.6);
+  color: var(--mv-text-dim);
 }
 
 .user-meta strong {
@@ -282,14 +283,15 @@ const handleGraduationYearSave = async () => {
 }
 
 .btn.primary {
-  background: #fde047;
-  color: #111;
-  box-shadow: 0 10px 30px rgba(253, 224, 71, 0.35);
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+  box-shadow: var(--mv-primary-shadow);
 }
 
 .btn.ghost {
-  border: 1px solid rgba(254, 252, 232, 0.4);
-  color: #fefce8;
+  border: 1px solid var(--mv-ghost-border);
+  color: var(--mv-ghost-text);
+  background: var(--mv-surface-muted);
 }
 
 .btn:hover {
@@ -300,8 +302,8 @@ const handleGraduationYearSave = async () => {
   min-width: 220px;
   flex: 1;
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
   padding: 2rem;
   text-align: center;
   display: flex;
@@ -314,7 +316,7 @@ const handleGraduationYearSave = async () => {
   height: 120px;
   border-radius: 25px;
   margin: 0 auto;
-  background: rgba(253, 224, 71, 0.15);
+  background: var(--mv-surface-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -334,7 +336,7 @@ const handleGraduationYearSave = async () => {
 
 .hero-card-desc {
   margin: 0;
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 .profile-grid {
@@ -345,13 +347,13 @@ const handleGraduationYearSave = async () => {
 
 .card {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
-  background: rgba(7, 7, 7, 0.9);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card-strong);
   padding: 1.75rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  box-shadow: 0 25px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--mv-shadow-card);
 }
 
 .card h2 {
@@ -360,7 +362,7 @@ const handleGraduationYearSave = async () => {
 
 .card-subtitle {
   margin: 0;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .quick-links {
@@ -375,8 +377,8 @@ const handleGraduationYearSave = async () => {
 .quick-links li {
   padding: 1rem;
   border-radius: 20px;
-  border: 1px solid rgba(254, 252, 232, 0.08);
-  background: rgba(254, 252, 232, 0.03);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-soft);
 }
 
 .quick-links h3 {
@@ -385,7 +387,7 @@ const handleGraduationYearSave = async () => {
 
 .quick-links p {
   margin: 0;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .graduation-form {
@@ -396,14 +398,14 @@ const handleGraduationYearSave = async () => {
 
 .graduation-form label {
   font-weight: 600;
-  color: rgba(254, 252, 232, 0.9);
+  color: var(--mv-text-soft);
 }
 
 .graduation-form select {
   border-radius: 14px;
-  border: 1px solid rgba(254, 252, 232, 0.15);
-  background: rgba(254, 252, 232, 0.04);
-  color: #fefce8;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-soft);
+  color: var(--mv-text);
   padding: 0.65rem 0.75rem;
   font-size: 1rem;
 }
@@ -416,7 +418,7 @@ const handleGraduationYearSave = async () => {
 .form-hint {
   margin: 0;
   font-size: 0.9rem;
-  color: rgba(254, 252, 232, 0.65);
+  color: var(--mv-text-dim);
 }
 
 .form-actions {
@@ -432,11 +434,11 @@ const handleGraduationYearSave = async () => {
 }
 
 .form-feedback.error {
-  color: #f87171;
+  color: var(--mv-status-danger);
 }
 
 .form-feedback.success {
-  color: #34d399;
+  color: var(--mv-status-success);
 }
 
 .reminders ul {
@@ -449,7 +451,7 @@ const handleGraduationYearSave = async () => {
 }
 
 .reminders li {
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 .auth-gate {
@@ -461,13 +463,13 @@ const handleGraduationYearSave = async () => {
 
 .gate-card {
   border-radius: 32px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: linear-gradient(120deg, rgba(250, 204, 21, 0.2), rgba(5, 5, 5, 0.95));
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-hero-strong);
   padding: clamp(1.75rem, 4vw, 3rem);
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  box-shadow: 0 25px 45px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--mv-shadow-elevated);
 }
 
 .gate-actions {
@@ -477,10 +479,10 @@ const handleGraduationYearSave = async () => {
 .gate-benefits {
   list-style: disc;
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px solid var(--mv-border);
   padding: 1.5rem 2rem;
-  background: rgba(10, 10, 10, 0.85);
-  color: rgba(254, 252, 232, 0.8);
+  background: var(--mv-surface-card);
+  color: var(--mv-text-soft);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -498,14 +500,15 @@ const handleGraduationYearSave = async () => {
 }
 
 .alert.error {
-  border-color: rgba(239, 68, 68, 0.4);
-  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.35);
+  background: var(--mv-surface-danger);
+  color: var(--mv-status-danger);
 }
 
 .alert.muted {
-  border-color: rgba(254, 252, 232, 0.15);
-  background: rgba(254, 252, 232, 0.07);
-  color: rgba(254, 252, 232, 0.8);
+  border-color: var(--mv-border);
+  background: var(--mv-surface-soft);
+  color: var(--mv-text-soft);
 }
 
 @media (max-width: 640px) {

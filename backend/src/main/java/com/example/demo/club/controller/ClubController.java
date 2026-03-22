@@ -61,10 +61,8 @@ public class ClubController {
     }
 
     @PutMapping("/{id}")
-    public Club update(@PathVariable Long id, @RequestBody Club club) {
-        if (clubService.findById(id) == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
-        }
+    public Club update(@PathVariable Long id, @RequestBody Club club, Authentication authentication) {
+        requireManageAccess(id, authentication);
         try {
             return clubService.update(id, club);
         } catch (IllegalArgumentException ex) {

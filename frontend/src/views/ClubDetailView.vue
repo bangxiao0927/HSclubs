@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { applyToClub, cancelMembershipRequest, fetchClubById, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
+import { clubImage } from '../utils/clubImages'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -32,7 +33,15 @@ const authStore = useAuthStore()
 const { currentUser, isAuthenticated } = storeToRefs(authStore)
 const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
 
-const clubImage = (entity: Club) => entity.imageUrl ?? `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(entity.name)}`
+const instagramHandle = (url?: string | null) => {
+  if (!url) {
+    return ''
+  }
+  const normalized = url.trim().replace(/\/+$/, '')
+  const parts = normalized.split('/')
+  const lastPart = parts[parts.length - 1] ?? ''
+  return lastPart.startsWith('@') ? lastPart : `@${lastPart}`
+}
 
 const loadClub = async (id: string) => {
   loading.value = true
@@ -178,6 +187,32 @@ watch(
           <span class="stat-label">Contact</span>
           <p class="stat-value">{{ club.contactEmail || 'Not provided' }}</p>
         </div>
+        <div class="stat-card">
+          <span class="stat-label">Room</span>
+          <p class="stat-value">{{ club.location || 'TBD' }}</p>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Instagram</span>
+          <p class="stat-value">
+            <a
+              v-if="club.instagramUrl"
+              class="stat-link"
+              :href="club.instagramUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="instagram-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="img" focusable="false">
+                  <rect x="4" y="4" width="16" height="16" rx="4" ry="4" fill="none" stroke="currentColor" stroke-width="1.5" />
+                  <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5" />
+                  <circle cx="17" cy="7" r="1.2" fill="currentColor" />
+                </svg>
+              </span>
+              {{ instagramHandle(club.instagramUrl) }}
+            </a>
+            <span v-else>Not provided</span>
+          </p>
+        </div>
       </div>
     </header>
 
@@ -189,6 +224,10 @@ watch(
           for showcases.
         </p>
         <h3>Recent achievements</h3>
+        <div v-if="club.scheduleNote" class="schedule-note">
+          <h3>President update</h3>
+          <p>{{ club.scheduleNote }}</p>
+        </div>
         <ul v-if="club.achievements && club.achievements.length">
           <li v-for="achievement in club.achievements" :key="achievement">
             {{ achievement }}
@@ -235,18 +274,19 @@ watch(
 }
 
 .back-link {
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
   font-weight: 600;
 }
 
 .club-hero {
   border-radius: 32px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 3rem);
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.18), rgba(5, 5, 5, 0.9));
+  background: var(--mv-surface-hero);
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  box-shadow: var(--mv-shadow-card);
 }
 
 .hero-top {
@@ -274,8 +314,8 @@ watch(
 
 .apply-btn {
   border-radius: 999px;
-  border: 1px solid rgba(250, 204, 21, 0.4);
-  background: rgba(250, 204, 21, 0.15);
+  border: 1px solid var(--mv-border-strong);
+  background: var(--mv-surface-accent);
   color: var(--mv-gold);
   font-weight: 600;
   padding: 0.5rem 1.6rem;
@@ -289,9 +329,9 @@ watch(
 
 .cancel-btn {
   border-radius: 999px;
-  border: 1px solid rgba(248, 113, 113, 0.5);
+  border: 1px solid rgba(239, 68, 68, 0.4);
   background: transparent;
-  color: #fecaca;
+  color: var(--mv-status-danger);
   font-weight: 600;
   padding: 0.5rem 1.6rem;
   cursor: pointer;
@@ -308,24 +348,25 @@ watch(
 }
 
 .join-message.success {
-  color: #bbf7d0;
+  color: var(--mv-status-success);
 }
 
 .join-message.error {
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .join-message.info {
-  color: rgba(254, 252, 232, 0.9);
+  color: var(--mv-text-soft);
 }
 
 .admin-link {
-  border: 1px solid rgba(250, 204, 21, 0.4);
+  border: 1px solid var(--mv-border-strong);
   border-radius: 999px;
   padding: 0.4rem 1rem;
   text-decoration: none;
   color: var(--mv-gold);
   font-weight: 600;
+  background: var(--mv-surface-muted);
 }
 
 .club-hero h1 {
@@ -335,7 +376,7 @@ watch(
 
 .hero-meta {
   margin: 0;
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 .hero-description {
@@ -347,8 +388,8 @@ watch(
   height: 72px;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: rgba(253, 224, 71, 0.08);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-accent);
   flex-shrink: 0;
 }
 
@@ -379,14 +420,17 @@ watch(
 
 .stat-card {
   border-radius: 24px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
+  border: 1px solid var(--mv-border);
   padding: 1.2rem;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--mv-surface-soft);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 .stat-label {
   font-size: 0.85rem;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .stat-value {
@@ -394,6 +438,35 @@ watch(
   font-size: 1.2rem;
   font-weight: 600;
   color: var(--mv-gold);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.stat-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--mv-gold);
+  text-decoration: none;
+}
+
+.stat-link:hover,
+.stat-link:focus-visible {
+  text-decoration: underline;
+}
+
+.instagram-icon {
+  width: 35px;
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.instagram-icon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .club-body {
@@ -405,12 +478,13 @@ watch(
 
 .spotlight {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.15);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 2.75rem);
-  background: rgba(7, 7, 7, 0.9);
+  background: var(--mv-surface-card-strong);
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  box-shadow: var(--mv-shadow-card);
 }
 
 .spotlight ul {
@@ -422,11 +496,29 @@ watch(
   gap: 0.4rem;
 }
 
+.schedule-note {
+  border-radius: 18px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-soft);
+  padding: 1rem 1.1rem;
+}
+
+.schedule-note h3,
+.schedule-note p {
+  margin: 0;
+}
+
+.schedule-note p {
+  margin-top: 0.4rem;
+  color: var(--mv-text-soft);
+  white-space: pre-wrap;
+}
+
 .spotlight button {
   align-self: flex-start;
   border-radius: 20px;
-  border: 1px solid rgba(250, 204, 21, 0.35);
-  background: rgba(250, 204, 21, 0.15);
+  border: 1px solid var(--mv-border-strong);
+  background: var(--mv-surface-accent);
   color: var(--mv-gold);
   padding: 0.65rem 1.6rem;
   font-weight: 600;
@@ -440,9 +532,10 @@ watch(
 
 .related {
   border-radius: 24px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
+  border: 1px solid var(--mv-border);
   padding: 1.5rem;
-  background: rgba(10, 10, 10, 0.85);
+  background: var(--mv-surface-card);
+  box-shadow: var(--mv-shadow-card);
 }
 
 .related ul {
@@ -463,7 +556,7 @@ watch(
 }
 
 .related small {
-  color: rgba(254, 252, 232, 0.6);
+  color: var(--mv-text-dim);
 }
 
 .empty-state {

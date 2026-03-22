@@ -12,11 +12,8 @@ body {
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 15% 15%, rgba(250, 204, 21, 0.25), transparent 50%),
-    radial-gradient(circle at 80% 0%, rgba(234, 179, 8, 0.18), transparent 45%),
-    #050505;
-  color: #fefce8;
+  background: var(--app-body-bg);
+  color: var(--app-body-text);
 }
 
 #app {
