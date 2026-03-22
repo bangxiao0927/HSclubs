@@ -224,6 +224,10 @@ watch(
           for showcases.
         </p>
         <h3>Recent achievements</h3>
+        <div v-if="club.scheduleNote" class="schedule-note">
+          <h3>President update</h3>
+          <p>{{ club.scheduleNote }}</p>
+        </div>
         <ul v-if="club.achievements && club.achievements.length">
           <li v-for="achievement in club.achievements" :key="achievement">
             {{ achievement }}
@@ -490,6 +494,24 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+
+.schedule-note {
+  border-radius: 18px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-soft);
+  padding: 1rem 1.1rem;
+}
+
+.schedule-note h3,
+.schedule-note p {
+  margin: 0;
+}
+
+.schedule-note p {
+  margin-top: 0.4rem;
+  color: var(--mv-text-soft);
+  white-space: pre-wrap;
 }
 
 .spotlight button {

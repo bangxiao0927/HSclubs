@@ -26,6 +26,7 @@ const form = reactive({
   description: '',
   category: '',
   meetingSchedule: '',
+  scheduleNote: '',
   location: '',
   contactEmail: '',
   advisor: '',
@@ -51,6 +52,7 @@ const hydrateForm = (data: Club) => {
   form.description = data.description
   form.category = data.category || clubCategoryOptions[0]?.title || ''
   form.meetingSchedule = data.meetingSchedule
+  form.scheduleNote = data.scheduleNote ?? ''
   form.location = data.location ?? ''
   form.contactEmail = data.contactEmail ?? ''
   form.advisor = data.advisor ?? ''
@@ -141,6 +143,7 @@ const handleSave = async () => {
       description: form.description,
       category: form.category,
       meetingSchedule: form.meetingSchedule,
+      scheduleNote: nullable(form.scheduleNote ?? ''),
       location: nullable(form.location ?? ''),
       contactEmail: nullable(form.contactEmail ?? ''),
       advisor: nullable(form.advisor ?? ''),
@@ -254,6 +257,14 @@ watch(
               <span>Meeting schedule</span>
               <input v-model="form.meetingSchedule" type="text" required />
             </label>
+            <label class="wide">
+              <span>President schedule note</span>
+              <textarea
+                v-model="form.scheduleNote"
+                rows="3"
+                placeholder="Add exceptions, meeting dates, room changes, or extra context for the calendar."
+              ></textarea>
+            </label>
             <label>
               <span>Location</span>
               <input v-model="form.location" type="text" placeholder="Optional" />
@@ -290,6 +301,10 @@ watch(
           <div class="insight-card">
             <p class="label">Contact</p>
             <p class="value">{{ form.contactEmail || 'Not provided' }}</p>
+          </div>
+          <div class="insight-card">
+            <p class="label">President note</p>
+            <p class="value note-preview">{{ form.scheduleNote || 'No president note added' }}</p>
           </div>
           <div class="insight-card achievements">
             <p class="label">Achievements</p>
@@ -562,6 +577,11 @@ textarea {
   line-height: 1.35;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.note-preview {
+  white-space: pre-wrap;
+  font-size: 0.98rem;
 }
 
 .insight-card.achievements ul {

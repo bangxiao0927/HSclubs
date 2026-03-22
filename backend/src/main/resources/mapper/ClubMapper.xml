@@ -11,6 +11,7 @@
         <result column="description" property="description" />
         <result column="category" property="category" />
         <result column="meeting_schedule" property="meetingSchedule" />
+        <result column="schedule_note" property="scheduleNote" />
         <result column="location" property="location" />
         <result column="contact_email" property="contactEmail" />
         <result column="advisor" property="advisor" />
@@ -24,7 +25,7 @@
     </resultMap>
 
     <sql id="BaseColumnList">
-        id, name, alias_name, description, category, meeting_schedule, location,
+        id, name, alias_name, description, category, meeting_schedule, schedule_note, location,
         contact_email, advisor, image_url,
         (SELECT link_url
          FROM club_social_medias
@@ -47,9 +48,9 @@
     </select>
 
     <insert id="insert" parameterType="com.example.demo.club.model.Club" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO clubs (name, alias_name, description, category, meeting_schedule, location,
+        INSERT INTO clubs (name, alias_name, description, category, meeting_schedule, schedule_note, location,
                            contact_email, advisor, image_url, member_count, achievements, school_id)
-        VALUES (#{name}, #{aliasName}, #{description}, #{category}, #{meetingSchedule}, #{location},
+        VALUES (#{name}, #{aliasName}, #{description}, #{category}, #{meetingSchedule}, #{scheduleNote}, #{location},
                 #{contactEmail}, #{advisor}, #{imageUrl}, #{memberCount},
                 #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler}, #{schoolId})
     </insert>
@@ -61,6 +62,7 @@
                 description = #{description},
                 category = #{category},
                 meeting_schedule = #{meetingSchedule},
+                schedule_note = #{scheduleNote},
                 location = #{location},
                 contact_email = #{contactEmail},
                 advisor = #{advisor},

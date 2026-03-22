@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS clubs (
     description TEXT,
     category VARCHAR(150),
     meeting_schedule VARCHAR(150),
+    schedule_note TEXT,
     location VARCHAR(150),
     contact_email VARCHAR(150),
     advisor VARCHAR(150),

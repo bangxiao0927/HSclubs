@@ -5,6 +5,7 @@ export interface Club {
   description: string
   category: string
   meetingSchedule: string
+  scheduleNote?: string | null
   location: string | null
   contactEmail: string | null
   advisor: string | null

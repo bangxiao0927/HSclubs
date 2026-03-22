@@ -14,6 +14,7 @@ public class Club {
     private String description;
     private String category;
     private String meetingSchedule;
+    private String scheduleNote;
     private String location;
     private String contactEmail;
     private String advisor;
@@ -83,6 +84,14 @@ public class Club {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public String getScheduleNote() {
+        return scheduleNote;
+    }
+
+    public void setScheduleNote(String scheduleNote) {
+        this.scheduleNote = scheduleNote;
     }
 
     public String getContactEmail() {
