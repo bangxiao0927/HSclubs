@@ -405,4 +405,10 @@ watch(
     height: 2rem;
   }
 }
+
+@media (pointer: coarse) {
+  .search-input {
+    font-size: 16px;
+  }
+}
 </style>
