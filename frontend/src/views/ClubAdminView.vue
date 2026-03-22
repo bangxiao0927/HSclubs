@@ -390,21 +390,27 @@ watch(
   flex-wrap: wrap;
 }
 
+.back-link {
+  color: var(--mv-text-soft);
+  text-decoration: none;
+  font-weight: 600;
+}
+
 .ghost-btn,
 .primary-btn {
   border-radius: 999px;
   padding: 0.55rem 1.4rem;
   font-weight: 600;
-  border: 1px solid rgba(250, 204, 21, 0.35);
+  border: 1px solid var(--mv-ghost-border);
   background: transparent;
-  color: rgba(254, 252, 232, 0.85);
+  color: var(--mv-ghost-text);
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
 }
 
 .ghost-btn.danger {
   border-color: rgba(248, 113, 113, 0.35);
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .ghost-btn:disabled,
@@ -414,28 +420,28 @@ watch(
 }
 
 .primary-btn {
-  background: var(--mv-gold);
-  color: #111;
-  border-color: var(--mv-gold);
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+  border-color: var(--mv-primary-bg);
 }
 
 .status-card {
   border-radius: 20px;
-  border: 1px solid rgba(250, 204, 21, 0.15);
+  border: 1px solid var(--mv-border);
   padding: 1.25rem 1.5rem;
-  background: rgba(7, 7, 7, 0.85);
+  background: var(--mv-surface-card-strong);
 }
 
 .status-card.error {
   border-color: rgba(248, 113, 113, 0.4);
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .admin-hero {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 2.75rem);
-  background: rgba(10, 10, 10, 0.9);
+  background: var(--mv-surface-hero);
   display: flex;
   justify-content: space-between;
   gap: clamp(1rem, 3vw, 2rem);
@@ -443,7 +449,7 @@ watch(
 }
 
 .hero-meta {
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 .hero-side {
@@ -458,8 +464,8 @@ watch(
   height: 110px;
   border-radius: 28px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: rgba(253, 224, 71, 0.08);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-accent);
 }
 
 .club-avatar img {
@@ -470,7 +476,7 @@ watch(
 
 .club-id {
   font-size: 0.9rem;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .status-row {
@@ -483,17 +489,17 @@ watch(
   border-radius: 999px;
   padding: 0.4rem 1rem;
   font-size: 0.9rem;
-  border: 1px solid rgba(250, 204, 21, 0.35);
+  border: 1px solid var(--mv-border);
 }
 
 .pill.success {
   border-color: rgba(34, 197, 94, 0.35);
-  color: #bbf7d0;
+  color: var(--mv-status-success);
 }
 
 .pill.error {
   border-color: rgba(248, 113, 113, 0.45);
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .admin-grid {
@@ -504,9 +510,9 @@ watch(
 
 .admin-form {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.25rem, 4vw, 2rem);
-  background: rgba(7, 7, 7, 0.9);
+  background: var(--mv-surface-card-strong);
 }
 
 .form-grid {
@@ -520,15 +526,16 @@ label {
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.9rem;
-  color: rgba(254, 252, 232, 0.8);
+  color: var(--mv-text-soft);
 }
 
 input,
+select,
 textarea {
   border-radius: 14px;
-  border: 1px solid rgba(254, 252, 232, 0.15);
-  background: rgba(15, 15, 15, 0.85);
-  color: #fefce8;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+  color: var(--mv-text);
   padding: 0.65rem 0.9rem;
   font: inherit;
 }
@@ -546,9 +553,9 @@ textarea {
 
 .insights-panel {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.25rem, 4vw, 1.75rem);
-  background: rgba(10, 10, 10, 0.9);
+  background: var(--mv-surface-card-strong);
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -556,9 +563,9 @@ textarea {
 
 .insight-card {
   border-radius: 20px;
-  border: 1px solid rgba(254, 252, 232, 0.1);
+  border: 1px solid var(--mv-border);
   padding: 1rem;
-  background: rgba(15, 15, 15, 0.8);
+  background: var(--mv-surface-card);
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -566,7 +573,7 @@ textarea {
 
 .insight-card .label {
   margin: 0;
-  color: rgba(254, 252, 232, 0.65);
+  color: var(--mv-text-dim);
   font-size: 0.85rem;
 }
 
@@ -590,14 +597,14 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  color: rgba(254, 252, 232, 0.8);
+  color: var(--mv-text-soft);
 }
 
 .member-panel {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 2.75rem);
-  background: rgba(7, 7, 7, 0.92);
+  background: var(--mv-surface-card-strong);
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -623,7 +630,7 @@ textarea {
 
 .member-panel__header p {
   margin: 0.2rem 0 0;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .member-panel__actions {
@@ -636,11 +643,11 @@ textarea {
 .member-hint,
 .member-empty {
   margin: 0;
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 .member-hint.error {
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .member-list {
@@ -658,7 +665,7 @@ textarea {
   gap: 0.75rem;
   align-items: center;
   padding: 0.75rem 0;
-  border-bottom: 1px solid rgba(254, 252, 232, 0.08);
+  border-bottom: 1px solid var(--mv-border);
 }
 
 .member-entry:last-child {
@@ -670,8 +677,8 @@ textarea {
   height: 48px;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: rgba(253, 224, 71, 0.08);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-accent);
 }
 
 .member-avatar img {
@@ -687,11 +694,11 @@ textarea {
 
 .member-info small {
   display: block;
-  color: rgba(254, 252, 232, 0.65);
+  color: var(--mv-text-dim);
 }
 
 .member-email {
-  color: rgba(250, 204, 21, 0.9);
+  color: var(--mv-gold);
   font-size: 0.9rem;
 }
 

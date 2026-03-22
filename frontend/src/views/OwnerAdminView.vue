@@ -223,9 +223,9 @@ const resetFilters = () => {
   justify-content: space-between;
   gap: clamp(1rem, 3vw, 2rem);
   border-radius: 36px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 3rem);
-  background: radial-gradient(circle at top left, rgba(250, 204, 21, 0.15), rgba(5, 5, 5, 0.95));
+  background: var(--mv-surface-hero-strong);
   flex-wrap: wrap;
 }
 
@@ -244,15 +244,15 @@ const resetFilters = () => {
 
 .stat-card {
   border-radius: 20px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  border: 1px solid var(--mv-border);
   padding: 0.75rem 1.1rem;
-  background: rgba(10, 10, 10, 0.75);
+  background: var(--mv-surface-card);
   min-width: 140px;
 }
 
 .stat-card span {
   font-size: 0.85rem;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .stat-card strong {
@@ -271,7 +271,7 @@ const resetFilters = () => {
 
 .sync-label {
   margin: 0;
-  color: rgba(254, 252, 232, 0.6);
+  color: var(--mv-text-dim);
 }
 
 .filters {
@@ -285,15 +285,15 @@ const resetFilters = () => {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  color: rgba(254, 252, 232, 0.8);
+  color: var(--mv-text-soft);
 }
 
 input,
 select {
   border-radius: 16px;
-  border: 1px solid rgba(254, 252, 232, 0.15);
-  background: rgba(12, 12, 12, 0.85);
-  color: #fefce8;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+  color: var(--mv-text);
   padding: 0.65rem 0.9rem;
   min-width: 220px;
 }
@@ -302,8 +302,8 @@ select {
   display: flex;
   flex-direction: column;
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.15);
-  background: rgba(7, 7, 7, 0.9);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card-strong);
   overflow: hidden;
 }
 
@@ -312,7 +312,7 @@ select {
   justify-content: space-between;
   gap: 1rem;
   padding: 1.25rem 1.75rem;
-  border-bottom: 1px solid rgba(254, 252, 232, 0.06);
+  border-bottom: 1px solid var(--mv-border);
   flex-wrap: wrap;
   content-visibility: auto;
   contain-intrinsic-size: 110px;
@@ -334,7 +334,7 @@ select {
   height: 64px;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  border: 1px solid var(--mv-border);
 }
 
 .club-avatar img {
@@ -350,11 +350,11 @@ select {
 .alias {
   margin: 0.2rem 0 0;
   font-size: 0.9rem;
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 .alias.muted {
-  color: rgba(254, 252, 232, 0.5);
+  color: var(--mv-text-dim);
 }
 
 .club-meta {
@@ -362,7 +362,7 @@ select {
   gap: 1rem;
   flex-wrap: wrap;
   align-items: center;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
   min-width: 200px;
 }
 
@@ -377,9 +377,9 @@ select {
   border-radius: 999px;
   padding: 0.5rem 1.2rem;
   font-weight: 600;
-  border: 1px solid rgba(250, 204, 21, 0.35);
+  border: 1px solid var(--mv-ghost-border);
   background: transparent;
-  color: rgba(254, 252, 232, 0.85);
+  color: var(--mv-ghost-text);
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
   text-decoration: none;
@@ -393,9 +393,9 @@ select {
 }
 
 .primary-btn {
-  background: var(--mv-gold);
-  color: #111;
-  border-color: var(--mv-gold);
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+  border-color: var(--mv-primary-bg);
 }
 
 .ghost-btn.small,
@@ -405,18 +405,18 @@ select {
 
 .status-card {
   border-radius: 24px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
+  border: 1px solid var(--mv-border);
   padding: 1rem 1.25rem;
-  background: rgba(7, 7, 7, 0.9);
+  background: var(--mv-surface-card-strong);
 }
 
 .status-card.error {
   border-color: rgba(248, 113, 113, 0.45);
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .status-card.muted {
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 .gate-shell {
@@ -425,9 +425,9 @@ select {
 
 .gate-card {
   border-radius: 32px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.75rem, 4vw, 3rem);
-  background: rgba(10, 10, 10, 0.9);
+  background: var(--mv-surface-card-strong);
   display: flex;
   flex-direction: column;
   gap: 1rem;

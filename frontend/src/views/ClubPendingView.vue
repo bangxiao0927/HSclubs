@@ -263,7 +263,7 @@ watch(
 }
 
 .back-link {
-  color: rgba(254, 252, 232, 0.85);
+  color: var(--mv-text-soft);
   text-decoration: none;
   font-weight: 600;
 }
@@ -279,16 +279,16 @@ watch(
   border-radius: 999px;
   padding: 0.55rem 1.4rem;
   font-weight: 600;
-  border: 1px solid rgba(250, 204, 21, 0.35);
+  border: 1px solid var(--mv-ghost-border);
   background: transparent;
-  color: rgba(254, 252, 232, 0.85);
+  color: var(--mv-ghost-text);
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
 }
 
 .ghost-btn.danger {
   border-color: rgba(248, 113, 113, 0.35);
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .ghost-btn:disabled,
@@ -298,37 +298,38 @@ watch(
 }
 
 .primary-btn {
-  background: rgba(250, 204, 21, 0.15);
-  color: #facc15;
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+  border-color: var(--mv-primary-bg);
 }
 
 .status-card {
   border-radius: 20px;
-  border: 1px solid rgba(254, 252, 232, 0.2);
+  border: 1px solid var(--mv-border);
   padding: 1rem 1.25rem;
-  background: rgba(12, 12, 12, 0.85);
+  background: var(--mv-surface-card-strong);
 }
 
 .status-card.error {
   border-color: rgba(248, 113, 113, 0.35);
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .pending-hero {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 2.75rem);
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
   align-items: center;
-  background: rgba(7, 7, 7, 0.92);
+  background: var(--mv-surface-hero);
   justify-content: space-between;
 }
 
 .section-label {
   margin: 0;
-  color: rgba(254, 252, 232, 0.65);
+  color: var(--mv-gold);
   font-size: 0.9rem;
   font-weight: 600;
 }
@@ -339,7 +340,7 @@ watch(
 
 .hero-meta {
   margin: 0;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .hero-side {
@@ -354,8 +355,8 @@ watch(
   height: 80px;
   border-radius: 22px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.35);
-  background: rgba(253, 224, 71, 0.12);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-accent);
 }
 
 .club-avatar img {
@@ -365,7 +366,7 @@ watch(
 }
 
 .club-id {
-  color: rgba(254, 252, 232, 0.65);
+  color: var(--mv-text-dim);
   font-size: 0.9rem;
 }
 
@@ -378,19 +379,19 @@ watch(
 .pill {
   border-radius: 999px;
   padding: 0.4rem 1rem;
-  border: 1px solid rgba(254, 252, 232, 0.2);
+  border: 1px solid var(--mv-border);
 }
 
 .pill.error {
   border-color: rgba(248, 113, 113, 0.35);
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .pending-panel {
   border-radius: 28px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 2.75rem);
-  background: rgba(7, 7, 7, 0.92);
+  background: var(--mv-surface-card-strong);
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -410,17 +411,17 @@ watch(
 
 .pending-panel__header p {
   margin: 0;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
 }
 
 .member-hint,
 .member-empty {
   margin: 0;
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
 }
 
 .member-hint.error {
-  color: #fecaca;
+  color: var(--mv-status-danger);
 }
 
 .member-list {
@@ -438,7 +439,7 @@ watch(
   gap: 0.75rem;
   align-items: center;
   padding: 0.75rem 0;
-  border-bottom: 1px solid rgba(254, 252, 232, 0.08);
+  border-bottom: 1px solid var(--mv-border);
 }
 
 .member-entry:last-child {
@@ -457,8 +458,8 @@ watch(
   height: 48px;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.25);
-  background: rgba(253, 224, 71, 0.08);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-accent);
 }
 
 .member-avatar img {
@@ -474,11 +475,11 @@ watch(
 
 .member-info small {
   display: block;
-  color: rgba(254, 252, 232, 0.65);
+  color: var(--mv-text-dim);
 }
 
 .request-meta {
-  color: rgba(254, 252, 232, 0.55);
+  color: var(--mv-text-dim);
 }
 
 @media (max-width: 900px) {
