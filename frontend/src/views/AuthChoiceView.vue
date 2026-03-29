@@ -159,27 +159,28 @@ const handleProviderLogin = (providerId: string) => {
 }
 
 .alert.error {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: var(--mv-surface-danger);
+  border: 1px solid color-mix(in srgb, var(--mv-status-danger) 45%, transparent);
+  color: var(--mv-text);
 }
 
 .alert.muted {
-  background: rgba(254, 252, 232, 0.08);
-  border: 1px solid rgba(254, 252, 232, 0.12);
-  color: rgba(254, 252, 232, 0.75);
+  background: var(--mv-surface-soft);
+  border: 1px solid var(--mv-border);
+  color: var(--mv-text-faint);
 }
 
 .back-link {
   display: inline-block;
   margin-top: 1.5rem;
-  color: rgba(254, 252, 232, 0.7);
+  color: var(--mv-text-faint);
   text-decoration: none;
   font-size: 0.95rem;
   transition: color 0.2s ease;
 }
 
 .back-link:hover {
-  color: #fde047;
+  color: var(--mv-gold);
 }
 
 @media (max-width: 480px) {
