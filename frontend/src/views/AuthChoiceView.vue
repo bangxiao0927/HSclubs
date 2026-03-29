@@ -87,7 +87,7 @@ const handleProviderLogin = (providerId: string) => {
   text-transform: uppercase;
   letter-spacing: 0.3em;
   font-size: 0.75rem;
-  color: rgba(254, 252, 232, 0.6);
+  color: var(--mv-text-dim);
   margin: 0;
 }
 
@@ -99,7 +99,7 @@ const handleProviderLogin = (providerId: string) => {
 .description {
   margin: 0 auto 1.5rem;
   max-width: 32ch;
-  color: rgba(254, 252, 232, 0.75);
+  color: var(--mv-text-faint);
   line-height: 1.6;
 }
 
