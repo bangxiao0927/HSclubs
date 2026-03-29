@@ -63,10 +63,11 @@ const handleProviderLogin = (providerId: string) => {
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  background: radial-gradient(circle at 20% 20%, rgba(253, 224, 71, 0.15), transparent 55%),
-    radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.2), transparent 60%),
-    #06070b;
-  color: #fefce8;
+  background:
+    radial-gradient(circle at 20% 20%, var(--mv-gold-soft), transparent 55%),
+    radial-gradient(circle at 80% 0%, var(--mv-surface-accent), transparent 60%),
+    var(--app-body-bg);
+  color: var(--mv-text);
 }
 
 .login-panel {
@@ -74,11 +75,12 @@ const handleProviderLogin = (providerId: string) => {
   gap: clamp(1.5rem, 3vw, 2.5rem);
   padding: clamp(1.5rem, 4vw, 3rem);
   border-radius: 36px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
-  background: linear-gradient(120deg, rgba(250, 204, 21, 0.18), rgba(5, 5, 5, 0.95));
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-hero-strong);
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  box-shadow: var(--mv-shadow-elevated);
 }
 
 .page-label {
