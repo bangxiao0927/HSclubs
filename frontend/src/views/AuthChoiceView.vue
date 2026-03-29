@@ -112,7 +112,7 @@ const handleProviderLogin = (providerId: string) => {
 
 .provider-btn {
   width: 100%;
-  border: none;
+  border: 1px solid var(--mv-border);
   border-radius: 999px;
   padding: 0.85rem 1rem;
   font-size: 1rem;
@@ -122,23 +122,23 @@ const handleProviderLogin = (providerId: string) => {
   justify-content: center;
   gap: 0.65rem;
   cursor: pointer;
-  color: #0f172a;
-  background: #fefefe;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.35);
+  color: var(--mv-text);
+  background: var(--mv-surface-card-strong);
+  box-shadow: var(--mv-shadow-card);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .provider-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--mv-shadow-elevated);
 }
 
 .provider-icon {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 50%;
-  background: white;
-  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: var(--mv-surface-soft);
+  border: 1px solid var(--mv-border);
   display: inline-flex;
   align-items: center;
   justify-content: center;
