@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { fetchClubs } from '../services/clubService'
@@ -9,6 +9,8 @@ import { clubImage } from '../utils/clubImages'
 const clubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
+const currentHeroImageIndex = ref(0)
+let heroInterval: number | undefined
 
 const loadClubs = async () => {
   loading.value = true
@@ -24,9 +26,42 @@ const loadClubs = async () => {
 
 onMounted(loadClubs)
 
+onMounted(() => {
+  startHeroInterval()
+})
+
+onUnmounted(() => {
+  stopHeroInterval()
+})
+
 const topClubs = computed(() =>
   [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4),
 )
+
+const heroImages = [
+  '/hsclubs1.jpg',
+  '/hsclubs2.png',
+  '/hsclubs3.png',
+]
+
+const stopHeroInterval = () => {
+  if (heroInterval !== undefined) {
+    window.clearInterval(heroInterval)
+    heroInterval = undefined
+  }
+}
+
+const startHeroInterval = () => {
+  stopHeroInterval()
+  heroInterval = window.setInterval(() => {
+    currentHeroImageIndex.value = (currentHeroImageIndex.value + 1) % heroImages.length
+  }, 3000)
+}
+
+const showHeroImage = (index: number) => {
+  currentHeroImageIndex.value = index
+  startHeroInterval()
+}
 
 </script>
 
@@ -44,9 +79,29 @@ const topClubs = computed(() =>
           <p class="stat-value">{{ clubs.length }}</p>
         </div>
       </div>
-      <div class="hero-visual" aria-hidden="true">
+      <div class="hero-visual">
         <div class="hero-image-frame">
-          <span class="frame-label">Cover image area</span>
+          <transition name="hero-slide" mode="out-in">
+            <img
+              :key="heroImages[currentHeroImageIndex]"
+              class="hero-image hero-image-primary"
+              :src="heroImages[currentHeroImageIndex]"
+              alt=""
+              loading="eager"
+            />
+          </transition>
+          <div class="hero-dots" aria-label="Homepage images">
+            <button
+              v-for="(image, index) in heroImages"
+              :key="image"
+              class="hero-dot"
+              :class="{ active: index === currentHeroImageIndex }"
+              type="button"
+              :aria-label="`Show image ${index + 1}`"
+              :aria-pressed="index === currentHeroImageIndex"
+              @click="showHeroImage(index)"
+            />
+          </div>
         </div>
       </div>
     </section>
@@ -179,24 +234,79 @@ const topClubs = computed(() =>
 
 .hero-image-frame {
   width: 100%;
-  min-height: 240px;
+  height: clamp(260px, 32vw, 420px);
   border-radius: 28px;
-  border: 1px dashed var(--mv-border-strong);
+  border: 1px solid var(--mv-border-strong);
   background: var(--mv-surface-hero-strong);
-  display: flex;
-  align-items: flex-end;
-  padding: 1.25rem;
+  display: block;
+  padding: 1rem;
+  overflow: hidden;
+  position: relative;
 }
 
-.frame-label {
-  padding: 0.35rem 0.75rem;
+.hero-image-frame :deep(.hero-slide-enter-active),
+.hero-image-frame :deep(.hero-slide-leave-active) {
+  position: absolute;
+  inset: 1rem;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.hero-image {
+  position: absolute;
+  inset: 1rem;
+  width: calc(100% - 2rem);
+  height: calc(100% - 2rem);
+  object-fit: cover;
+  display: block;
+  border-radius: 22px;
+}
+
+.hero-image-primary {
+  min-width: 0;
+}
+
+.hero-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 1.85rem;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  gap: 0.55rem;
+  padding: 0.45rem 0.7rem;
   border-radius: 999px;
-  border: 1px solid var(--mv-border);
-  background: var(--mv-surface-card);
-  color: var(--mv-text-faint);
-  font-size: 0.82rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.hero-dot {
+  width: 0.72rem;
+  height: 0.72rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.hero-dot.active {
+  background: var(--mv-gold);
+  transform: scale(1.15);
+}
+
+.hero-dot:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
+.hero-slide-enter-from {
+  opacity: 0;
+  transform: translateX(18px);
+}
+
+.hero-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-18px);
 }
 
 .stat-label {
@@ -407,7 +517,11 @@ const topClubs = computed(() =>
   }
 
   .hero-image-frame {
-    min-height: 180px;
+    height: 220px;
+  }
+
+  .hero-dots {
+    bottom: 1.45rem;
   }
 }
 </style>
