@@ -7,6 +7,7 @@
     <resultMap id="ClubResultMap" type="com.example.demo.club.model.Club">
         <id column="id" property="id" />
         <result column="name" property="name" />
+        <result column="slug" property="slug" />
         <result column="alias_name" property="aliasName" />
         <result column="description" property="description" />
         <result column="category" property="category" />
@@ -18,26 +19,37 @@
         <result column="image_url" property="imageUrl" />
         <result column="instagram_url" property="instagramUrl" />
         <result column="member_count" property="memberCount" />
-        <result column="achievements" property="achievements" typeHandler="com.example.demo.club.mapper.AchievementsTypeHandler" />
+        <result column="achievements" property="achievements"
+                typeHandler="com.example.demo.club.mapper.AchievementsTypeHandler" />
         <result column="school_id" property="schoolId" />
+        <result column="status" property="status" />
+        <result column="visibility" property="visibility" />
+        <result column="approved_at" property="approvedAt" />
+        <result column="approved_by_oauth_user_id" property="approvedByOauthUserId" />
         <result column="created_at" property="createdAt" />
         <result column="updated_at" property="updatedAt" />
     </resultMap>
 
     <sql id="BaseColumnList">
-        id, name, alias_name, description, category, meeting_schedule, schedule_note, location,
+        id, name, slug, alias_name, description, category, meeting_schedule, schedule_note, location,
         contact_email, advisor, image_url,
         (SELECT link_url
          FROM club_social_medias
          WHERE club_id = clubs.id
            AND social_type = 'instagram'
          LIMIT 1) AS instagram_url,
-        member_count, achievements, school_id, created_at, updated_at
+        member_count, achievements, school_id, status, visibility,
+        approved_at, approved_by_oauth_user_id, created_at, updated_at
+    </sql>
+
+    <sql id="ActiveClause">
+        status = 'active'
     </sql>
 
     <select id="findAll" resultMap="ClubResultMap">
         SELECT <include refid="BaseColumnList" />
         FROM clubs
+        WHERE <include refid="ActiveClause" />
         ORDER BY name ASC
     </select>
 
@@ -47,29 +59,60 @@
         WHERE id = #{id}
     </select>
 
-    <insert id="insert" parameterType="com.example.demo.club.model.Club" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO clubs (name, alias_name, description, category, meeting_schedule, schedule_note, location,
-                           contact_email, advisor, image_url, member_count, achievements, school_id)
-        VALUES (#{name}, #{aliasName}, #{description}, #{category}, #{meetingSchedule}, #{scheduleNote}, #{location},
-                #{contactEmail}, #{advisor}, #{imageUrl}, #{memberCount},
-                #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler}, #{schoolId})
+    <select id="findAllBySchoolId" resultMap="ClubResultMap" parameterType="long">
+        SELECT <include refid="BaseColumnList" />
+        FROM clubs
+        WHERE school_id = #{schoolId}
+          AND <include refid="ActiveClause" />
+        ORDER BY name ASC
+    </select>
+
+    <select id="findBySchoolIdAndSlug" resultMap="ClubResultMap">
+        SELECT <include refid="BaseColumnList" />
+        FROM clubs
+        WHERE school_id = #{schoolId}
+          AND slug = #{slug}
+        LIMIT 1
+    </select>
+
+    <select id="findBySchoolIdAndId" resultMap="ClubResultMap">
+        SELECT <include refid="BaseColumnList" />
+        FROM clubs
+        WHERE school_id = #{schoolId}
+          AND id = #{id}
+        LIMIT 1
+    </select>
+
+    <insert id="insert" parameterType="com.example.demo.club.model.Club"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO clubs (name, slug, alias_name, description, category, meeting_schedule,
+                           schedule_note, location, contact_email, advisor, image_url,
+                           member_count, achievements, school_id, status, visibility)
+        VALUES (#{name}, #{slug}, #{aliasName}, #{description}, #{category}, #{meetingSchedule},
+                #{scheduleNote}, #{location}, #{contactEmail}, #{advisor}, #{imageUrl},
+                #{memberCount},
+                #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
+                #{schoolId}, #{status}, #{visibility})
     </insert>
 
     <update id="update" parameterType="com.example.demo.club.model.Club">
         UPDATE clubs
-            SET name = #{name},
-                alias_name = #{aliasName},
-                description = #{description},
-                category = #{category},
-                meeting_schedule = #{meetingSchedule},
-                schedule_note = #{scheduleNote},
-                location = #{location},
-                contact_email = #{contactEmail},
-                advisor = #{advisor},
-                image_url = #{imageUrl},
-                member_count = #{memberCount},
-                achievements = #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
-                school_id = #{schoolId}
+        SET name = #{name},
+            slug = #{slug},
+            alias_name = #{aliasName},
+            description = #{description},
+            category = #{category},
+            meeting_schedule = #{meetingSchedule},
+            schedule_note = #{scheduleNote},
+            location = #{location},
+            contact_email = #{contactEmail},
+            advisor = #{advisor},
+            image_url = #{imageUrl},
+            member_count = #{memberCount},
+            achievements = #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
+            school_id = #{schoolId},
+            status = #{status},
+            visibility = #{visibility}
         WHERE id = #{id}
     </update>
 
@@ -98,6 +141,10 @@
         <result column="email" property="email" />
         <result column="avatar_url" property="avatarUrl" />
         <result column="created_at" property="createdAt" />
+        <result column="status" property="status" />
+        <result column="reviewed_at" property="reviewedAt" />
+        <result column="reviewed_by_oauth_user_id" property="reviewedByOauthUserId" />
+        <result column="note" property="note" />
     </resultMap>
 
     <select id="findMembersByClubId" resultMap="ClubMemberViewMap" parameterType="long">
@@ -135,10 +182,15 @@
                ou.display_name,
                ou.email,
                ou.avatar_url,
-               cmr.created_at
+               cmr.created_at,
+               cmr.status,
+               cmr.reviewed_at,
+               cmr.reviewed_by_oauth_user_id,
+               cmr.note
         FROM club_membership_requests cmr
             JOIN oauth_users ou ON ou.uid = cmr.oauth_user_id
         WHERE cmr.club_id = #{clubId}
+          AND cmr.status = 'pending'
         ORDER BY cmr.created_at ASC
     </select>
 
@@ -149,7 +201,11 @@
                ou.display_name,
                ou.email,
                ou.avatar_url,
-               cmr.created_at
+               cmr.created_at,
+               cmr.status,
+               cmr.reviewed_at,
+               cmr.reviewed_by_oauth_user_id,
+               cmr.note
         FROM club_membership_requests cmr
             JOIN oauth_users ou ON ou.uid = cmr.oauth_user_id
         WHERE cmr.club_id = #{clubId}
@@ -164,7 +220,11 @@
                ou.display_name,
                ou.email,
                ou.avatar_url,
-               cmr.created_at
+               cmr.created_at,
+               cmr.status,
+               cmr.reviewed_at,
+               cmr.reviewed_by_oauth_user_id,
+               cmr.note
         FROM club_membership_requests cmr
             JOIN oauth_users ou ON ou.uid = cmr.oauth_user_id
         WHERE cmr.id = #{id}
@@ -180,5 +240,14 @@
         DELETE FROM club_membership_requests
         WHERE id = #{id}
     </delete>
+
+    <update id="updateMembershipRequestStatus">
+        UPDATE club_membership_requests
+        SET status = #{status},
+            reviewed_at = CURRENT_TIMESTAMP,
+            reviewed_by_oauth_user_id = #{reviewedByOauthUserId},
+            note = #{note}
+        WHERE id = #{id}
+    </update>
 
 </mapper>

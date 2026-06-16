@@ -14,9 +14,18 @@ ON DUPLICATE KEY UPDATE
   role = VALUES(role),
   last_login_at = CURRENT_TIMESTAMP;
 
-INSERT INTO schools (id, school_name)
-VALUES (1, 'Mountain View High School')
-ON DUPLICATE KEY UPDATE school_name = VALUES(school_name);
+INSERT INTO schools (id, slug, school_name, short_name, logo_url, banner_url, primary_color, school_domain, timezone, status)
+VALUES (1, 'mvhs', 'Mountain View High School', 'MVHS', '/school-assets/mvhs-logo.png', '/school-assets/mvhs-banner.png', '#facc15', 'mvla.net', 'America/Los_Angeles', 'active')
+ON DUPLICATE KEY UPDATE
+  slug = VALUES(slug),
+  school_name = VALUES(school_name),
+  short_name = VALUES(short_name),
+  logo_url = VALUES(logo_url),
+  banner_url = VALUES(banner_url),
+  primary_color = VALUES(primary_color),
+  school_domain = VALUES(school_domain),
+  timezone = VALUES(timezone),
+  status = VALUES(status);
 
 INSERT INTO club_category (id, cate_name, logo, description)
 VALUES
@@ -323,3 +332,14 @@ ON DUPLICATE KEY UPDATE
   meeting_time = VALUES(meeting_time);
 
 SET SQL_MODE = @OLD_SQL_MODE;
+
+-- Add seed school_users (sample user-school relationships)
+INSERT INTO school_users (school_id, oauth_user_id, role, status)
+VALUES
+  (1, 1, 'student', 'active'),
+  (1, 2, 'student', 'active'),
+  (1, 3, 'school_admin', 'active'),
+  (1, 4, 'school_admin', 'active')
+ON DUPLICATE KEY UPDATE
+  role = VALUES(role),
+  status = VALUES(status);

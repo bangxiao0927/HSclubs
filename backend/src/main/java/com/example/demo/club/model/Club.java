@@ -10,6 +10,7 @@ public class Club {
 
     private Long id;
     private String name;
+    private String slug;
     private String aliasName;
     private String description;
     private String category;
@@ -23,6 +24,10 @@ public class Club {
     private Integer memberCount;
     private List<String> achievements;
     private Long schoolId;
+    private String status;
+    private String visibility;
+    private LocalDateTime approvedAt;
+    private Long approvedByOauthUserId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String viewerRole;
@@ -44,6 +49,14 @@ public class Club {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getSlug() {
+        return slug;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
     }
 
     public String getAliasName() {
@@ -148,6 +161,38 @@ public class Club {
 
     public void setSchoolId(Long schoolId) {
         this.schoolId = schoolId;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getVisibility() {
+        return visibility;
+    }
+
+    public void setVisibility(String visibility) {
+        this.visibility = visibility;
+    }
+
+    public LocalDateTime getApprovedAt() {
+        return approvedAt;
+    }
+
+    public void setApprovedAt(LocalDateTime approvedAt) {
+        this.approvedAt = approvedAt;
+    }
+
+    public Long getApprovedByOauthUserId() {
+        return approvedByOauthUserId;
+    }
+
+    public void setApprovedByOauthUserId(Long approvedByOauthUserId) {
+        this.approvedByOauthUserId = approvedByOauthUserId;
     }
 
     public LocalDateTime getCreatedAt() {
