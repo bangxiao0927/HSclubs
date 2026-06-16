@@ -27,15 +27,6 @@ CREATE TABLE IF NOT EXISTS oauth_users (
     CONSTRAINT uq_provider_user UNIQUE (provider, provider_user_id)
 );
 
-CREATE TABLE IF NOT EXISTS user_profiles (
-    oauth_user_id BIGINT PRIMARY KEY,
-    graduation_year INT NOT NULL,
-    home_school_id BIGINT NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_profiles_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE,
-    CONSTRAINT fk_user_profiles_home_school FOREIGN KEY (home_school_id) REFERENCES schools(id) ON DELETE SET NULL
-);
-
 CREATE TABLE IF NOT EXISTS schools (
     id            BIGINT PRIMARY KEY AUTO_INCREMENT,
     slug          VARCHAR(80)  NOT NULL,
@@ -51,6 +42,15 @@ CREATE TABLE IF NOT EXISTS schools (
     updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_schools_slug (slug),
     UNIQUE KEY uq_schools_domain (school_domain)
+);
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+    oauth_user_id BIGINT PRIMARY KEY,
+    graduation_year INT NOT NULL,
+    home_school_id BIGINT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_profiles_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE,
+    CONSTRAINT fk_user_profiles_home_school FOREIGN KEY (home_school_id) REFERENCES schools(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS school_users (

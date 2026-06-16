@@ -87,12 +87,12 @@
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO clubs (name, slug, alias_name, description, category, meeting_schedule,
                            schedule_note, location, contact_email, advisor, image_url,
-                           member_count, achievements, school_id, status, visibility)
+                           member_count, achievements, school_id)
         VALUES (#{name}, #{slug}, #{aliasName}, #{description}, #{category}, #{meetingSchedule},
                 #{scheduleNote}, #{location}, #{contactEmail}, #{advisor}, #{imageUrl},
                 #{memberCount},
                 #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
-                #{schoolId}, #{status}, #{visibility})
+                #{schoolId})
     </insert>
 
     <update id="update" parameterType="com.example.demo.club.model.Club">
