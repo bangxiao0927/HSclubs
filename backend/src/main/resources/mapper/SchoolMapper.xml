@@ -6,13 +6,59 @@
 
     <resultMap id="SchoolResultMap" type="com.example.demo.school.model.School">
         <id column="id" property="id" />
+        <result column="slug" property="slug" />
         <result column="school_name" property="schoolName" />
+        <result column="short_name" property="shortName" />
+        <result column="logo_url" property="logoUrl" />
+        <result column="banner_url" property="bannerUrl" />
+        <result column="primary_color" property="primaryColor" />
+        <result column="school_domain" property="schoolDomain" />
+        <result column="timezone" property="timezone" />
+        <result column="status" property="status" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
     </resultMap>
 
     <select id="findById" parameterType="long" resultMap="SchoolResultMap">
-        SELECT id, school_name
+        SELECT id, slug, school_name, short_name, logo_url, banner_url, primary_color,
+               school_domain, timezone, status, created_at, updated_at
         FROM schools
         WHERE id = #{id}
     </select>
+
+    <select id="findBySlug" parameterType="string" resultMap="SchoolResultMap">
+        SELECT id, slug, school_name, short_name, logo_url, banner_url, primary_color,
+               school_domain, timezone, status, created_at, updated_at
+        FROM schools
+        WHERE slug = #{slug}
+    </select>
+
+    <select id="findAllActive" resultMap="SchoolResultMap">
+        SELECT id, slug, school_name, short_name, logo_url, banner_url, primary_color,
+               school_domain, timezone, status, created_at, updated_at
+        FROM schools
+        WHERE status = 'active'
+        ORDER BY school_name ASC
+    </select>
+
+    <insert id="insert" parameterType="com.example.demo.school.model.School" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO schools (slug, school_name, short_name, logo_url, banner_url, primary_color,
+                             school_domain, timezone, status)
+        VALUES (#{slug}, #{schoolName}, #{shortName}, #{logoUrl}, #{bannerUrl}, #{primaryColor},
+                #{schoolDomain}, #{timezone}, #{status})
+    </insert>
+
+    <update id="update" parameterType="com.example.demo.school.model.School">
+        UPDATE schools
+        SET school_name = #{schoolName},
+            short_name = #{shortName},
+            logo_url = #{logoUrl},
+            banner_url = #{bannerUrl},
+            primary_color = #{primaryColor},
+            school_domain = #{schoolDomain},
+            timezone = #{timezone},
+            status = #{status}
+        WHERE slug = #{slug}
+    </update>
 
 </mapper>
