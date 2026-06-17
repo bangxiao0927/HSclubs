@@ -207,7 +207,7 @@ public class SchoolClubController {
 
     private School resolveSchoolSafe(String schoolSlug) {
         try {
-            return resolveSchoolSafe(schoolSlug);
+            return clubService.resolveSchool(schoolSlug);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
         }

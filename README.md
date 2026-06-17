@@ -1,56 +1,147 @@
-# HSclubs
+# HSclubs — Multi‑School Club Directory Platform
 
-## Project layout
+A full‑stack platform where multiple schools can onboard, operate their own club directories, and let students explore, apply to, and manage extracurricular clubs.
 
-- `backend/` – Spring Boot service (existing backend).
-- `frontend/` – Vue 3 + Vite application scaffolded with TypeScript, Vue Router, Pinia, Vitest, and ESLint + Prettier.
+## Tech Stack
 
-## Frontend quick start
+- **Frontend:** Vue 3 + Vite + TypeScript + Pinia + Vue Router
+- **Backend:** Spring Boot 4 + MyBatis + Spring Security OAuth2 (Google)
+- **Database:** MySQL (H2 for tests)
 
-```bash
-cd frontend
-npm install             # install deps (Node 18+ recommended; project tested with Node 24 via nvm)
-npm run dev
-npm run preview            # start Vite dev server on http://localhost:4173 (override via FRONTEND_PORT)
+## Project Layout
+
+```
+frontend/     Vue 3 + Vite application
+backend/      Spring Boot API
+docs/         Planning, migration SQL, API reference
+scripts/      Data generation utilities
 ```
 
-### Other useful scripts
+## Quick Start
 
-```bash
-npm run build           # production build output to dist/
-npm run test:unit       # run Vitest unit tests
-npm run lint            # ESLint + Prettier checks
-```
+### Prerequisites
 
-## Backend + database quick start
+- Java 17+
+- MySQL 8+
+- Node.js 20+ with npm
+- Google OAuth2 credentials
+
+### Backend
 
 ```bash
 cd backend
-./mvnw spring-boot:run    # starts the Spring Boot API on http://localhost:8080
+
+# Configure environment
+cp .env.example .env   # set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, DB creds
+
+# Start (creates tables + seeds data)
+./mvnw spring-boot:run     # http://localhost:8080
 ```
 
-The backend expects a MySQL instance (see `backend/src/main/resources/application.yaml`).
-On startup Spring Boot will create/seed `schools` and `clubs` tables (via `schema.sql`/`data.sql`), so an
-empty `mydb` schema is enough. Every club row references a valid school through `schoolId`.
-Once the service is running you can hit:
+### Frontend
 
-- `GET    http://localhost:8080/api/clubs` – list all clubs from MySQL.
-- `GET    http://localhost:8080/api/clubs/{id}` – fetch a single club.
-- `POST   http://localhost:8080/api/clubs` – create a club (JSON body, id omitted, include `schoolId`).
-- `PUT    http://localhost:8080/api/clubs/{id}` – update a club (include `schoolId`).
-- `DELETE http://localhost:8080/api/clubs/{id}` – delete a club.
+```bash
+cd frontend
+npm install
+npm run dev                  # http://localhost:4173
+```
 
-### OAuth2 endpoints
+## Multi‑School Architecture
 
-The backend now exposes an initial OAuth 2.0 surface backed by Google sign-in.
+```
+┌──────────────────────────────────┐
+│          Platform Layer           │
+│  /platform/admin · school CRUD    │
+└────────────┬─────────────────────┘
+             │
+   ┌─────────┼─────────┐
+   ▼         ▼         ▼
+School A  School B  School C
+   │
+   ├── /schools/{slug}/clubs
+   ├── /schools/{slug}/calendar
+   ├── /schools/{slug}/admin
+   └── /schools/{slug}/profile
+```
 
-- `GET  http://localhost:8080/api/auth/providers` – discover available OAuth providers and their authorization URLs.
-- `GET  http://localhost:8080/api/auth/me` – return the currently authenticated user (401 when not logged in).
-- `POST http://localhost:8080/api/auth/logout` – invalidate the Spring Security session cookie.
+### Roles
 
-Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (see `backend/.env` for local development) before starting the backend so Spring Security can complete the OAuth flow. The current configuration expects Google to redirect to `http://localhost:8080/api/auth/google/callback`, matching the OAuth client you shared.
+| Role | Scope | Capabilities |
+|------|-------|-------------|
+| Platform Owner | Global | Create/manage schools, view all data |
+| School Admin | Per school | Manage clubs, review applications |
+| Club President | Per club | Edit club info, manage members |
+| Student | Per school | Browse, apply to clubs |
 
-The Vue dev server is already allowed via CORS (`FRONTEND_ORIGIN`, default `http://localhost:4173`), so the frontend can
-call the backend without extra proxying.
+### School Onboarding
 
-Set `FRONTEND_PORT` or `FRONTEND_ORIGIN` (default redirect is `${FRONTEND_ORIGIN}/auth/callback`) if you need the backend to send users somewhere else after OAuth success/failure. On the frontend side, `VITE_API_BASE_URL` is optional now—dev builds automatically fall back to `http://localhost:8080`, but you can override it for other environments.
+1. Platform Owner creates a school via `/platform/admin`
+2. Students sign in with Google OAuth
+3. Students are assigned to their school via `school_users`
+4. School Admins manage clubs independently
+
+## API Overview
+
+Full reference: `docs/API.md`
+
+```
+GET    /api/schools                        List active schools
+GET    /api/schools/{slug}                 School detail + branding
+
+GET    /api/schools/{slug}/clubs           List school's clubs
+POST   /api/schools/{slug}/clubs           Create club [school_admin]
+GET    /api/schools/{slug}/clubs/{id}      Club detail + viewer status
+PUT    /api/schools/{slug}/clubs/{id}      Update club [admin|president]
+DELETE /api/schools/{slug}/clubs/{id}      Delete club [school_admin]
+
+POST   /api/schools/{slug}/clubs/{id}/members/apply     Apply to join
+DELETE /api/schools/{slug}/clubs/{id}/members/apply     Cancel application
+
+GET    /api/schools/{slug}/clubs/{id}/membership-requests        Pending list
+POST   .../membership-requests/{reqId}/approve                  Approve
+DELETE .../membership-requests/{reqId}                           Reject
+
+GET    /api/auth/providers                  OAuth providers
+GET    /api/auth/me                         Current user + school memberships
+POST   /api/auth/logout                     Sign out
+
+GET    /api/platform/schools                [platform_owner] All schools
+POST   /api/platform/schools                [platform_owner] Create school
+PUT    /api/platform/schools/{slug}         [platform_owner] Update school
+```
+
+## Useful Scripts
+
+```bash
+# Backend tests
+cd backend && ./mvnw test
+
+# Frontend type-check
+cd frontend && npm run type-check
+
+# Frontend lint
+cd frontend && npm run lint
+
+# Frontend unit tests
+cd frontend && npm run test:unit
+
+# Production build
+cd frontend && npm run build
+```
+
+## Configuration
+
+| Env Variable | Purpose | Default |
+|-------------|---------|--------|
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID | — |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | — |
+| `APP_OWNER_EMAILS` | Comma-separated platform owner emails | — |
+| `SPRING_DATASOURCE_URL` | MySQL JDBC URL | `jdbc:mysql://localhost:3306/mydb` |
+| `DB_USERNAME` | MySQL username | `root` |
+| `DB_PASSWORD` | MySQL password | — |
+| `FRONTEND_ORIGIN` | CORS allowed origin | `http://localhost:4173` |
+| `VITE_API_BASE_URL` | Backend base URL (frontend) | `http://localhost:8080` |
+
+## License
+
+MIT
