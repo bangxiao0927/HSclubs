@@ -267,4 +267,33 @@
         WHERE id = #{id}
     </update>
 
+
+    <select id="findClubsByOauthUserId" resultMap="ClubResultMap" parameterType="long">
+        SELECT c.id, c.name, c.slug, c.alias_name, c.description, c.category,
+               c.meeting_schedule, c.schedule_note, c.location, c.contact_email,
+               c.advisor, c.image_url,
+               (SELECT link_url FROM club_social_medias
+                WHERE club_id = c.id AND social_type = 'instagram' LIMIT 1) AS instagram_url,
+               c.member_count, c.achievements, c.school_id,
+               c.status, c.visibility, c.approved_at, c.approved_by_oauth_user_id,
+               c.created_at, c.updated_at
+        FROM clubs c
+        JOIN club_member cm ON cm.club_id = c.id
+        WHERE cm.oauth_user_id = #{oauthUserId}
+          AND c.status = 'active'
+        ORDER BY c.name ASC
+    </select>
+
+    <select id="findPendingRequestsByOauthUserId" resultMap="MembershipRequestViewMap" parameterType="long">
+        SELECT cmr.id, cmr.club_id, cmr.oauth_user_id,
+               ou.display_name, ou.email, ou.avatar_url,
+               cmr.created_at, cmr.status, cmr.reviewed_at,
+               cmr.reviewed_by_oauth_user_id, cmr.note
+        FROM club_membership_requests cmr
+        JOIN oauth_users ou ON ou.uid = cmr.oauth_user_id
+        WHERE cmr.oauth_user_id = #{oauthUserId}
+          AND cmr.status = 'pending'
+        ORDER BY cmr.created_at DESC
+    </select>
+
 </mapper>

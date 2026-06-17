@@ -61,4 +61,8 @@ public interface ClubMapper {
                                        @Param("status") String status,
                                        @Param("reviewedByOauthUserId") Long reviewedByOauthUserId,
                                        @Param("note") String note);
+
+    List<Club> findClubsByOauthUserId(@Param("oauthUserId") Long oauthUserId);
+
+    List<ClubMembershipRequest> findPendingRequestsByOauthUserId(@Param("oauthUserId") Long oauthUserId);
 }
