@@ -1,8 +1,12 @@
 package com.example.demo.user.controller;
 
+import com.example.demo.club.model.Club;
+import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.user.dto.UpdateGraduationYearRequest;
 import com.example.demo.user.service.UserService;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -14,8 +18,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
@@ -41,16 +43,34 @@ public class UserController {
         }
     }
 
+    @GetMapping("/me/clubs")
+    public List<Club> getMyClubs(Authentication authentication) {
+        String email = requireAuthenticatedEmail(authentication);
+        try {
+            return userService.findUserClubs(email);
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
+    @GetMapping("/me/membership-requests")
+    public List<ClubMembershipRequest> getMyMembershipRequests(Authentication authentication) {
+        String email = requireAuthenticatedEmail(authentication);
+        try {
+            return userService.findUserPendingRequests(email);
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
     private String requireAuthenticatedEmail(Authentication authentication) {
         if (!(authentication instanceof OAuth2AuthenticationToken token)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated");
         }
-
         OAuth2User principal = token.getPrincipal();
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated");
         }
-
         Map<String, Object> attributes = principal.getAttributes();
         Object emailAttribute = attributes.get("email");
         String email = emailAttribute instanceof String str ? str : null;
