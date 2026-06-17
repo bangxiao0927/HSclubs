@@ -320,3 +320,71 @@ spring:
 ```
 
 The `/api/auth/providers` endpoint auto-discovers all configured providers.
+
+---
+
+## Production Checklist
+
+- [ ] MySQL database created with `utf8mb4` charset
+- [ ] `backend/.env` configured with real credentials
+- [ ] `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set
+- [ ] `APP_OWNER_EMAILS` populated (comma-separated)
+- [ ] `FRONTEND_ORIGIN` matches production URL
+- [ ] Google OAuth redirect URIs include production URL
+- [ ] Frontend built with correct `VITE_API_BASE_URL`
+- [ ] Nginx configured with SSL (certbot)
+- [ ] Backend running as systemd service
+- [ ] Firewall allows ports 80 and 443 only
+- [ ] Backend port 8080 not exposed publicly
+- [ ] Database backups configured
+
+### First-run steps
+
+1. Deploy and start the backend — tables auto-create
+2. Open `/schools` — should show "Mountain View High School"
+3. Sign in as a platform owner (email in `APP_OWNER_EMAILS`)
+4. Visit `/platform/admin` — create additional schools
+5. Invite school admins via `/platform/admin` invite form
+
+---
+
+## Troubleshooting
+
+### Backend won't start
+
+```bash
+# Check logs
+sudo journalctl -u hsclubs -n 50 --no-pager
+
+# Common causes:
+# - MySQL not running: systemctl status mysql
+# - Wrong DB credentials: check .env
+# - Port 8080 in use: lsof -i :8080
+# - Google OAuth misconfig: check GOOGLE_CLIENT_ID
+```
+
+### CORS errors in browser
+
+Ensure `FRONTEND_ORIGIN` matches the actual frontend URL exactly (protocol + host + port).
+
+### OAuth redirect mismatch
+
+Google OAuth redirect URIs must match exactly:
+- Dev: `http://localhost:8080/api/auth/google/callback`
+- Prod: `https://yourdomain.com/api/auth/google/callback`
+
+### "School not found" on valid slug
+
+Check `schools.status` is `active`:
+
+```sql
+SELECT slug, school_name, status FROM schools;
+```
+
+Inactive or `pending` schools are hidden from the public API.
+
+### Invitation link not working
+
+- Invitations expire after 7 days
+- Each invitation can only be used once
+- Recipient must be signed in with the invited email address
