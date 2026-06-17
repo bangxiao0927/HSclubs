@@ -120,3 +120,73 @@ FROM school_users su
 JOIN oauth_users ou ON ou.uid = su.oauth_user_id
 JOIN schools s ON s.id = su.school_id;
 ```
+
+---
+
+## Backend Deployment
+
+### Local development
+
+```bash
+cd backend
+cp .env.example .env  # edit with your credentials
+./mvnw spring-boot:run
+# Starts on http://localhost:8080
+```
+
+### Production build
+
+```bash
+cd backend
+./mvnw package -DskipTests
+# Produces target/backend-0.0.1-SNAPSHOT.jar
+```
+
+### Run as a service (systemd)
+
+Create `/etc/systemd/system/hsclubs.service`:
+
+```ini
+[Unit]
+Description=HSclubs Backend
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=hsclubs
+WorkingDirectory=/opt/hsclubs/backend
+ExecStart=/usr/bin/java -jar /opt/hsclubs/backend/backend-0.0.1-SNAPSHOT.jar
+Restart=on-failure
+RestartSec=5
+
+# Pass environment variables
+EnvironmentFile=/opt/hsclubs/backend/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable hsclubs
+sudo systemctl start hsclubs
+sudo systemctl status hsclubs
+```
+
+### Health check
+
+```bash
+# List schools (public endpoint)
+curl http://localhost:8080/api/schools
+
+# Check auth providers
+curl http://localhost:8080/api/auth/providers
+```
+
+### Sizing guidelines
+
+| School count | RAM | CPU |
+|-------------|-----|-----|
+| 1–10 | 512 MB | 1 vCPU |
+| 10–50 | 1 GB | 2 vCPU |
+| 50+ | 2 GB+ | 2–4 vCPU |
