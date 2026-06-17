@@ -39,4 +39,8 @@ export interface ClubMembershipRequest {
   email: string | null
   avatarUrl: string | null
   createdAt: string
+  status?: string | null
+  reviewedAt?: string | null
+  reviewedByOauthUserId?: number | null
+  note?: string | null
 }
