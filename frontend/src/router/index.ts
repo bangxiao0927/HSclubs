@@ -117,6 +117,13 @@ const router = createRouter({
       component: () => import('../views/AcceptInvitationView.vue'),
     },
 
+    // ---- Settings ----
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('../views/SettingsView.vue'),
+    },
+
     // ---- Auth routes ----
     {
       path: '/auth',
