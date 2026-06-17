@@ -67,9 +67,9 @@ class SchoolClubControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setName("Robotics");
-        when(clubService.findAllBySchoolId(SCHOOL_ID)).thenReturn(List.of(club));
+        when(clubService.findAllBySchoolIdPaginated(eq(SCHOOL_ID), eq(0), eq(50))).thenReturn(List.of(club));
 
-        List<Club> result = controller.list(SCHOOL_SLUG);
+        List<Club> result = controller.list(SCHOOL_SLUG, 0, 50);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getName()).isEqualTo("Robotics");
@@ -77,9 +77,9 @@ class SchoolClubControllerTest {
 
     @Test
     void listShouldReturnEmptyForSchoolWithNoClubs() {
-        when(clubService.findAllBySchoolId(SCHOOL_ID)).thenReturn(Collections.emptyList());
+        when(clubService.findAllBySchoolIdPaginated(eq(SCHOOL_ID), eq(0), eq(50))).thenReturn(Collections.emptyList());
 
-        List<Club> result = controller.list(SCHOOL_SLUG);
+        List<Club> result = controller.list(SCHOOL_SLUG, 0, 50);
 
         assertThat(result).isEmpty();
     }
@@ -166,7 +166,7 @@ class SchoolClubControllerTest {
             .thenThrow(new IllegalArgumentException("School not found: nonexistent"));
 
         try {
-            controller.list("nonexistent");
+            controller.list("nonexistent", 0, 50);
             assertThat(true).as("Expected 404").isFalse();
         } catch (org.springframework.web.server.ResponseStatusException ex) {
             assertThat(ex.getStatusCode().value()).isEqualTo(404);

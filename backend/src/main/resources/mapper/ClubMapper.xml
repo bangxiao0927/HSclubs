@@ -83,6 +83,23 @@
         LIMIT 1
     </select>
 
+
+    <select id="findAllBySchoolIdPaginated" resultMap="ClubResultMap">
+        SELECT <include refid="BaseColumnList" />
+        FROM clubs
+        WHERE school_id = #{schoolId}
+          AND <include refid="ActiveClause" />
+        ORDER BY name ASC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countBySchoolId" resultType="int" parameterType="long">
+        SELECT COUNT(*)
+        FROM clubs
+        WHERE school_id = #{schoolId}
+          AND <include refid="ActiveClause" />
+    </select>
+
     <insert id="insert" parameterType="com.example.demo.club.model.Club"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO clubs (name, slug, alias_name, description, category, meeting_schedule,
