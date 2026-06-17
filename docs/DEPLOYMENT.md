@@ -190,3 +190,82 @@ curl http://localhost:8080/api/auth/providers
 | 1–10 | 512 MB | 1 vCPU |
 | 10–50 | 1 GB | 2 vCPU |
 | 50+ | 2 GB+ | 2–4 vCPU |
+
+---
+
+## Frontend Deployment
+
+### Build
+
+```bash
+cd frontend
+npm install
+npm run build
+# Output: dist/
+```
+
+Set `VITE_API_BASE_URL` before building for production:
+
+```bash
+VITE_API_BASE_URL=https://api.yourdomain.com npm run build
+```
+
+Or create `frontend/.env.production`:
+
+```bash
+VITE_API_BASE_URL=https://api.yourdomain.com
+```
+
+### Nginx reverse proxy
+
+Example `/etc/nginx/sites-available/hsclubs`:
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    # Frontend static files
+    root /opt/hsclubs/frontend/dist;
+    index index.html;
+
+    # SPA fallback
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API proxy to backend
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # OAuth2 callback passthrough
+    location /oauth2/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Gzip
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 256;
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/hsclubs /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### SSL with Certbot
+
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d yourdomain.com
+```
