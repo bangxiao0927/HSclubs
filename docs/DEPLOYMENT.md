@@ -78,3 +78,45 @@ VITE_API_BASE_URL=http://localhost:8080
 # For production builds, set to your backend URL:
 # VITE_API_BASE_URL=https://api.yourdomain.com
 ```
+
+---
+
+## Database Setup
+
+### Option A: Fresh install with auto-init
+
+Spring Boot runs `schema.sql` and `data.sql` on startup when `spring.sql.init.mode=always`. Create an empty schema and let the app bootstrap tables + seed data:
+
+```sql
+CREATE DATABASE mydb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+Start the backend — tables and initial MVHS data will be created automatically.
+
+### Option B: Existing database (additive migration)
+
+If you already have a running instance from an older version, apply the migration:
+
+```bash
+mysql -u root -p mydb < docs/schema-migration.sql
+```
+
+This script uses only `ALTER TABLE` and `CREATE TABLE IF NOT EXISTS` — safe to run multiple times.
+
+### Verify
+
+```sql
+-- Check schools
+SELECT id, slug, school_name, status FROM schools;
+
+-- Check clubs with school context
+SELECT c.name, s.school_name, c.status
+FROM clubs c JOIN schools s ON c.school_id = s.id
+LIMIT 5;
+
+-- Check user-school relationships
+SELECT ou.email, su.role, s.school_name
+FROM school_users su
+JOIN oauth_users ou ON ou.uid = su.oauth_user_id
+JOIN schools s ON s.id = su.school_id;
+```
