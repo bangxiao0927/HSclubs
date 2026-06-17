@@ -7,6 +7,7 @@ import { fetchClubById, fetchClubMembers, updateClub } from '../services/clubSer
 import type { Club, ClubMember } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubCategoryOptions } from '../utils/clubCategories'
+import { buildApiUrl } from '../services/httpClient'
 import { clubImage } from '../utils/clubImages'
 
 const route = useRoute()
@@ -20,7 +21,12 @@ const members = ref<ClubMember[]>([])
 const membersLoading = ref(false)
 const membersError = ref('')
 
-const form = reactive({
+const form = reactive<{
+  name: string; aliasName: string; description: string; category: string
+  meetingSchedule: string; scheduleNote: string; location: string
+  contactEmail: string; advisor: string; memberCount: number
+  achievementsText: string; imageUrl?: string
+}>({
   name: '',
   aliasName: '',
   description: '',
@@ -32,6 +38,7 @@ const form = reactive({
   advisor: '',
   memberCount: 0,
   achievementsText: '',
+  imageUrl: '',
 })
 
 const achievementPreview = computed(() =>
@@ -58,6 +65,7 @@ const hydrateForm = (data: Club) => {
   form.advisor = data.advisor ?? ''
   form.memberCount = data.memberCount
   form.achievementsText = (data.achievements ?? []).join('\n')
+  form.imageUrl = data.imageUrl ?? ''
 }
 
 
@@ -126,6 +134,39 @@ const retryLoad = () => {
   }
 }
 
+const imageUploading = ref(false)
+const imageError = ref('')
+
+const handleImageUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !club.value) return
+
+  imageUploading.value = true
+  imageError.value = ''
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const slug = schoolSlug.value || 'mvhs'
+    const url = buildApiUrl(`/api/schools/${slug}/clubs/${club.value.id}/image`)
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    })
+    if (!response.ok) {
+      const msg = await response.text()
+      throw new Error(msg || 'Upload failed')
+    }
+    const data = await response.json()
+    form.imageUrl = data.imageUrl
+  } catch (err) {
+    imageError.value = err instanceof Error ? err.message : 'Upload failed'
+  } finally {
+    imageUploading.value = false
+  }
+}
+
 const handleReset = () => {
   if (club.value) {
     hydrateForm(club.value)
@@ -155,9 +196,10 @@ const handleSave = async () => {
       advisor: nullable(form.advisor ?? ''),
       memberCount: form.memberCount,
       achievements: achievementPreview.value,
+      imageUrl: form.imageUrl || null,
     }
 
-    const updated = await updateClub(club.value.id, payload)
+    const updated = await updateClub(club.value.id, payload, schoolSlug.value)
     club.value = updated
     hydrateForm(updated)
     successMessage.value = 'Changes saved'
@@ -226,6 +268,13 @@ watch(
         <div class="hero-side">
           <div class="club-avatar xlarge">
             <img :src="clubImage(club)" :alt="`${club.name} avatar`" />
+          </div>
+          <div class="image-upload">
+            <label class="upload-btn">
+              {{ imageUploading ? 'Uploading…' : 'Change image' }}
+              <input type="file" accept="image/*" hidden @change="handleImageUpload" />
+            </label>
+            <p v-if="imageError" class="upload-error">{{ imageError }}</p>
           </div>
           <span class="club-id">Club ID · {{ club.id }}</span>
         </div>
@@ -722,4 +771,17 @@ textarea {
     width: 100%;
   }
 }
+.image-upload { margin-top: 0.5rem; }
+.upload-btn {
+  display: inline-block;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-soft);
+  color: var(--mv-text-soft);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.upload-btn:hover { background: var(--mv-surface-accent); }
+.upload-error { color: var(--mv-status-danger); font-size: 0.85rem; margin: 0.25rem 0 0; }
 </style>

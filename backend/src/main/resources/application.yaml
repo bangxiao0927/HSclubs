@@ -41,3 +41,11 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+app:
+  upload:
+    dir: uploads
+
+app:
+  upload:
+    dir: uploads
