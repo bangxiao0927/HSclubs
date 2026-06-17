@@ -7,6 +7,11 @@ import java.util.Map;
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.auth.model.AuthProvider;
 import com.example.demo.auth.model.AuthUser;
+import com.example.demo.auth.model.SchoolMembership;
+import com.example.demo.school.model.School;
+import com.example.demo.school.model.SchoolUser;
+import com.example.demo.school.service.SchoolService;
+import com.example.demo.school.service.SchoolUserService;
 import com.example.demo.user.service.UserService;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -23,12 +28,16 @@ public class AuthService {
     private final OAuthUserService oAuthUserService;
     private final SecurityProperties securityProperties;
     private final UserService userService;
+    private final SchoolService schoolService;
+    private final SchoolUserService schoolUserService;
     private final String authorizationRequestBaseUri;
 
     public AuthService(ClientRegistrationRepository clientRegistrationRepository,
                        OAuthUserService oAuthUserService,
                        SecurityProperties securityProperties,
-                       UserService userService) {
+                       UserService userService,
+                       SchoolService schoolService,
+                       SchoolUserService schoolUserService) {
         if (clientRegistrationRepository instanceof Iterable<?>) {
             this.clientRegistrations = (Iterable<ClientRegistration>) clientRegistrationRepository;
         } else {
@@ -37,6 +46,8 @@ public class AuthService {
         this.oAuthUserService = oAuthUserService;
         this.securityProperties = securityProperties;
         this.userService = userService;
+        this.schoolService = schoolService;
+        this.schoolUserService = schoolUserService;
         this.authorizationRequestBaseUri = resolveAuthorizationRequestBaseUri(securityProperties);
     }
 
@@ -44,7 +55,8 @@ public class AuthService {
         List<AuthProvider> providers = new ArrayList<>();
         for (ClientRegistration registration : clientRegistrations) {
             String authorizationPath = buildAuthorizationPath(registration.getRegistrationId());
-            providers.add(new AuthProvider(registration.getRegistrationId(), registration.getClientName(), authorizationPath));
+            providers.add(new AuthProvider(registration.getRegistrationId(),
+                registration.getClientName(), authorizationPath));
         }
         return providers;
     }
@@ -72,9 +84,50 @@ public class AuthService {
         if (storedGraduationYear != null) {
             user.setGraduationYear(storedGraduationYear);
         }
-        user.setOwner(isOwner(user.getEmail()));
+        user.setPlatformOwner(isPlatformOwner(user.getEmail()));
+
+        populateSchoolMemberships(user);
         oAuthUserService.recordLogin(provider, attributes);
         return user;
+    }
+
+    private void populateSchoolMemberships(AuthUser user) {
+        user.setSchoolMemberships(new ArrayList<>());
+
+        Long oauthUserId = oAuthUserService.findIdByEmail(user.getEmail());
+        if (oauthUserId == null) {
+            return;
+        }
+
+        List<SchoolUser> memberships = schoolUserService.findActiveByOauthUserId(oauthUserId);
+        if (memberships.isEmpty()) {
+            return;
+        }
+
+        for (SchoolUser membership : memberships) {
+            School school = schoolService.findById(membership.getSchoolId());
+            if (school == null || !"active".equalsIgnoreCase(school.getStatus())) {
+                continue;
+            }
+
+            SchoolMembership sm = new SchoolMembership();
+            sm.setSchoolId(school.getId());
+            sm.setSlug(school.getSlug());
+            sm.setSchoolName(school.getSchoolName());
+            sm.setRole(membership.getRole());
+            sm.setStatus(membership.getStatus());
+            user.addSchoolMembership(sm);
+        }
+
+        if (!user.getSchoolMemberships().isEmpty()) {
+            for (SchoolMembership sm : user.getSchoolMemberships()) {
+                if ("school_admin".equalsIgnoreCase(sm.getRole())) {
+                    user.setHomeSchool(sm);
+                    return;
+                }
+            }
+            user.setHomeSchool(user.getSchoolMemberships().get(0));
+        }
     }
 
     private String stringAttribute(Map<String, Object> attributes, String... keys) {
@@ -95,7 +148,7 @@ public class AuthService {
         return null;
     }
 
-    private boolean isOwner(String email) {
+    private boolean isPlatformOwner(String email) {
         if (!StringUtils.hasText(email)) {
             return false;
         }
@@ -124,14 +177,16 @@ public class AuthService {
             return null;
         }
 
-        Integer year = extractGraduationYear(attributes, "graduationYear", "gradYear", "classYear", "class_of", "classOf");
+        Integer year = extractGraduationYear(attributes, "graduationYear", "gradYear",
+            "classYear", "class_of", "classOf");
         if (year != null) {
             return year;
         }
 
         Object education = attributes.get("education");
         if (education instanceof Map<?, ?> nested) {
-            year = extractGraduationYear((Map<String, Object>) nested, "graduationYear", "gradYear", "classYear");
+            year = extractGraduationYear((Map<String, Object>) nested,
+                "graduationYear", "gradYear", "classYear");
             if (year != null) {
                 return year;
             }
