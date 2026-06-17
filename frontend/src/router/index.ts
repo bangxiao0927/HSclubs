@@ -103,6 +103,13 @@ const router = createRouter({
       component: () => import('../views/ProfileView.vue'),
     },
 
+    // ---- Platform routes ----
+    {
+      path: '/platform/admin',
+      name: 'platform-admin',
+      component: () => import('../views/PlatformAdminView.vue'),
+    },
+
     // ---- Auth routes ----
     {
       path: '/auth',
