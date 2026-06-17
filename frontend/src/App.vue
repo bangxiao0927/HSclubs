@@ -4,12 +4,50 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from './stores/auth'
+import { useSchoolStore } from './stores/school'
 
 const searchQuery = ref('')
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const schoolStore = useSchoolStore()
 const { isAuthenticated, currentUser } = storeToRefs(authStore)
+const { currentSchool, currentSchoolSlug } = storeToRefs(schoolStore)
+
+const schoolSlug = computed(() => {
+  const slug = route.params.schoolSlug
+  return typeof slug === 'string' ? slug : ''
+})
+
+// Sync school context from route
+watch(
+  schoolSlug,
+  (slug) => {
+    if (slug && slug !== currentSchoolSlug.value) {
+      schoolStore.setCurrentSchoolBySlug(slug)
+    }
+  },
+  { immediate: true },
+)
+
+const isSchoolRoute = computed(() => {
+  const name = route.name
+  return typeof name === 'string' && name.startsWith('school-')
+})
+
+const navHome = computed(() => (schoolSlug.value ? `/schools/${schoolSlug.value}` : '/'))
+const navCategories = computed(() =>
+  schoolSlug.value ? `/schools/${schoolSlug.value}/categories` : '/about',
+)
+const navCalendar = computed(() =>
+  schoolSlug.value ? `/schools/${schoolSlug.value}/calendar` : '/calendar',
+)
+const navAdmin = computed(() =>
+  schoolSlug.value ? `/schools/${schoolSlug.value}/admin` : '/admin',
+)
+const navProfile = computed(() =>
+  schoolSlug.value ? `/schools/${schoolSlug.value}/profile` : '/profile',
+)
 
 const handleLogout = () => {
   authStore.logout()
@@ -46,10 +84,18 @@ const syncSearchQueryFromRoute = () => {
 
 const submitSearch = () => {
   const q = searchQuery.value.trim()
-  void router.push({
-    name: q ? 'club-search' : 'home',
-    query: q ? { q } : {},
-  })
+  if (schoolSlug.value) {
+    void router.push({
+      name: q ? 'school-club-search' : 'school-home',
+      params: { schoolSlug: schoolSlug.value },
+      query: q ? { q } : {},
+    })
+  } else {
+    void router.push({
+      name: q ? 'club-search' : 'home',
+      query: q ? { q } : {},
+    })
+  }
 }
 
 watch(
@@ -78,30 +124,32 @@ watch(
       <div class="header-inner page-shell">
         <div class="header-left">
           <div class="logo">
-            <img class="logo-icon" src="/android-chrome-512x512.png" alt="MVHS Clubs logo" />
-            <span class="logo-text">MV Clubs</span>
+            <RouterLink to="/schools" class="logo-link">
+              <img class="logo-icon" src="/android-chrome-512x512.png" alt="HS Clubs logo" />
+              <span class="logo-text">{{ currentSchool?.shortName || currentSchool?.schoolName || 'HS Clubs' }}</span>
+            </RouterLink>
           </div>
           <nav class="nav">
             <RouterLink
-              to="/"
+              :to="navHome"
               class="nav-link"
-              :class="{ active: route.name === 'home' }"
+              :class="{ active: route.name === 'home' || route.name === 'school-home' }"
             >Home</RouterLink>
             <RouterLink
-              to="/about"
+              :to="navCategories"
               class="nav-link"
-              :class="{ active: route.name === 'about' }"
+              :class="{ active: route.name === 'about' || route.name === 'school-about' }"
             >Category</RouterLink>
             <RouterLink
-              to="/calendar"
+              :to="navCalendar"
               class="nav-link"
-              :class="{ active: route.name === 'calendar' }"
+              :class="{ active: route.name === 'calendar' || route.name === 'school-calendar' }"
             >Calendar</RouterLink>
             <RouterLink
+              :to="navAdmin"
               v-if="currentUser?.isOwner"
-              to="/admin"
               class="nav-link"
-              :class="{ active: route.name === 'owner-clubs' }"
+              :class="{ active: route.name === 'owner-clubs' || route.name === 'school-owner-clubs' }"
             >Admin</RouterLink>
           </nav>
         </div>
@@ -119,11 +167,16 @@ watch(
         </form>
 
         <div class="header-right">
+          <RouterLink
+            v-if="schoolSlug"
+            to="/schools"
+            class="nav-link school-switch"
+          >Change school</RouterLink>
           <button type="button" class="theme-toggle" @click="toggleTheme">
             <span class="theme-icon" aria-hidden="true">{{ theme === 'light' ? '🌙' : '☀️' }}</span>
             <span>{{ themeLabel }}</span>
           </button>
-          <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link">
+          <RouterLink v-if="isAuthenticated" :to="navProfile" class="profile-link">
             <span class="profile-icon">👤</span>
             <span>Profile</span>
           </RouterLink>
@@ -185,10 +238,12 @@ watch(
   gap: 1.5rem;
 }
 
-.logo {
+.logo-link {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  text-decoration: none;
+  color: inherit;
 }
 
 .logo-icon {
@@ -231,6 +286,11 @@ watch(
   color: var(--mv-nav-text-hover);
 }
 
+.school-switch {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
 .search-bar {
   display: flex;
   align-items: center;
@@ -260,20 +320,16 @@ watch(
 
 .search-button {
   border: none;
-  background: transparent;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 999px;
-  padding: 0;
-  display: inline-flex;
+  background: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
 }
 
 .search-icon {
-  color: var(--mv-search-icon);
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 
 .header-right {
@@ -282,133 +338,60 @@ watch(
   gap: 1rem;
 }
 
-.profile-link {
-  display: inline-flex;
+.theme-toggle {
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 1rem;
+  gap: 0.35rem;
+  border: 1px solid var(--mv-ghost-border);
   border-radius: 999px;
-  border: 1px solid var(--mv-profile-border);
-  text-decoration: none;
-  color: var(--mv-profile-text);
-  transition: background 0.2s, border-color 0.2s;
+  padding: 0.4rem 0.8rem;
+  background: var(--mv-surface-muted);
+  color: var(--mv-ghost-text);
+  cursor: pointer;
+  font-size: 0.85rem;
 }
 
-.profile-link:hover {
-  border-color: var(--mv-profile-hover-border);
-  background: var(--mv-profile-hover-bg);
+.profile-link {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-decoration: none;
+  color: var(--mv-nav-text);
+  font-size: 0.9rem;
 }
 
 .profile-icon {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
 }
 
 .auth-actions {
   display: flex;
-  align-items: center;
   gap: 0.5rem;
 }
 
 .auth-btn {
-  padding: 0.45rem 1.15rem;
+  padding: 0.5rem 1rem;
   border-radius: 999px;
-  text-decoration: none;
   font-weight: 600;
-  font-size: 0.9rem;
-  transition: transform 0.2s, box-shadow 0.2s;
+  font-size: 0.85rem;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .auth-btn.ghost {
   border: 1px solid var(--mv-ghost-border);
+  background: transparent;
   color: var(--mv-ghost-text);
 }
 
 .auth-btn.primary {
   background: var(--mv-primary-bg);
   color: var(--mv-primary-text);
-  box-shadow: var(--mv-primary-shadow);
 }
 
-.theme-toggle {
+.logout-btn {
+  background: transparent;
   border: 1px solid var(--mv-ghost-border);
   color: var(--mv-ghost-text);
-  background: transparent;
-  border-radius: 999px;
-  padding: 0.4rem 0.9rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.theme-toggle:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--mv-shadow-card);
-}
-
-.theme-icon {
-  font-size: 1rem;
-}
-
-.auth-btn:hover {
-  transform: translateY(-1px);
-}
-
-.view-container {
-  flex: 1;
-  width: 100%;
-}
-
-@media (max-width: 1024px) {
-  .header-inner {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .header-left {
-    justify-content: space-between;
-  }
-}
-
-@media (max-width: 640px) {
-  .header {
-    padding-block: 0.75rem;
-  }
-
-  .header-left {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.85rem;
-  }
-
-  .nav {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .search-bar {
-    max-width: none;
-    width: 100%;
-    min-width: 0;
-    padding: 0.32rem 0.45rem 0.32rem 0.9rem;
-  }
-
-  .search-input {
-    font-size: 16px;
-  }
-
-  .search-button {
-    width: 2rem;
-    height: 2rem;
-  }
-}
-
-@media (pointer: coarse) {
-  .search-input {
-    font-size: 16px;
-  }
 }
 </style>

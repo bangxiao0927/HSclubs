@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
@@ -9,6 +9,12 @@ import { clubImage } from '../utils/clubImages'
 const clubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
+
+const route = useRoute()
+const schoolSlug = computed(() => {
+  const slug = route.params.schoolSlug
+  return typeof slug === 'string' ? slug : undefined
+})
 const currentHeroImageIndex = ref(0)
 let heroInterval: number | undefined
 
@@ -16,7 +22,7 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    clubs.value = await fetchClubs()
+    clubs.value = await fetchClubs({ schoolSlug: schoolSlug.value })
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load clubs'
   } finally {
@@ -116,7 +122,7 @@ const showHeroImage = (index: number) => {
         <p class="section-subtitle">Sorted automatically from roster submissions.</p>
       </div>
       <div v-if="topClubs.length" class="top-grid">
-        <RouterLink v-for="club in topClubs" :key="club.id" :to="`/clubs/${club.id}`" custom v-slot="{ navigate }">
+        <RouterLink v-for="club in topClubs" :key="club.id" :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`" custom v-slot="{ navigate }">
           <article
             class="top-card"
             role="link"
@@ -149,7 +155,7 @@ const showHeroImage = (index: number) => {
         <p class="section-subtitle">Use the header search to open a separate results page for club names, advisors, or keywords.</p>
       </div>
       <div v-if="clubs.length" class="club-directory">
-        <RouterLink v-for="club in clubs" :key="club.id" :to="`/clubs/${club.id}`" custom v-slot="{ navigate }">
+        <RouterLink v-for="club in clubs" :key="club.id" :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`" custom v-slot="{ navigate }">
           <div
             class="club-row"
             role="link"

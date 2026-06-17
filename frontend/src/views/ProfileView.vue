@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from '../stores/auth'
@@ -17,6 +17,13 @@ const reminders = [
   'Sign in to track application status and event check-ins.',
   'Keeping details current helps advisors reach you quickly.',
 ]
+
+
+const route = useRoute()
+const schoolSlug = computed(() => {
+  const slug = route.params.schoolSlug
+  return typeof slug === 'string' ? slug : undefined
+})
 
 const authStore = useAuthStore()
 const { isAuthenticated, currentUser, userLoading, userError } = storeToRefs(authStore)

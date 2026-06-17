@@ -1,6 +1,7 @@
 export interface Club {
   id: number
   name: string
+  slug?: string | null
   aliasName: string | null
   description: string
   category: string
@@ -14,6 +15,8 @@ export interface Club {
   memberCount: number
   achievements: string[]
   schoolId: number
+  status?: string | null
+  visibility?: string | null
   viewerRole?: string | null
   viewerIsMember?: boolean
   canManage?: boolean

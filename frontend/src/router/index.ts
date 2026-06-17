@@ -4,6 +4,7 @@ import HomeView from '../views/HomeView.vue'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    // ---- Legacy routes (backward compat, redirect to MVHS eventually) ----
     {
       path: '/',
       name: 'home',
@@ -12,9 +13,6 @@ const router = createRouter({
     {
       path: '/about',
       name: 'about',
-      // route level code-splitting
-      // this generates a separate chunk (About.[hash].js) for this route
-      // which is lazy-loaded when the route is visited.
       component: () => import('../views/AboutView.vue'),
     },
     {
@@ -52,6 +50,60 @@ const router = createRouter({
       name: 'profile',
       component: () => import('../views/ProfileView.vue'),
     },
+
+    // ---- School-scoped routes ----
+    {
+      path: '/schools',
+      name: 'school-picker',
+      component: () => import('../views/SchoolPickerView.vue'),
+    },
+    {
+      path: '/schools/:schoolSlug',
+      name: 'school-home',
+      component: HomeView,
+    },
+    {
+      path: '/schools/:schoolSlug/search',
+      name: 'school-club-search',
+      component: () => import('../views/ClubSearchView.vue'),
+    },
+    {
+      path: '/schools/:schoolSlug/calendar',
+      name: 'school-calendar',
+      component: () => import('../views/CalendarView.vue'),
+    },
+    {
+      path: '/schools/:schoolSlug/categories',
+      name: 'school-about',
+      component: () => import('../views/AboutView.vue'),
+    },
+    {
+      path: '/schools/:schoolSlug/clubs/:clubSlugOrId',
+      name: 'school-club-detail',
+      component: () => import('../views/ClubDetailView.vue'),
+    },
+    {
+      path: '/schools/:schoolSlug/clubs/:clubSlugOrId/admin',
+      name: 'school-club-admin',
+      component: () => import('../views/ClubAdminView.vue'),
+    },
+    {
+      path: '/schools/:schoolSlug/clubs/:clubSlugOrId/admin/pending',
+      name: 'school-club-admin-pending',
+      component: () => import('../views/ClubPendingView.vue'),
+    },
+    {
+      path: '/schools/:schoolSlug/admin',
+      name: 'school-owner-clubs',
+      component: () => import('../views/OwnerAdminView.vue'),
+    },
+    {
+      path: '/schools/:schoolSlug/profile',
+      name: 'school-profile',
+      component: () => import('../views/ProfileView.vue'),
+    },
+
+    // ---- Auth routes ----
     {
       path: '/auth',
       name: 'auth-choice',

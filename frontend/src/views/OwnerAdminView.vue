@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
+
+
+const route = useRoute()
+const schoolSlug = computed(() => {
+  const slug = route.params.schoolSlug
+  return typeof slug === 'string' ? slug : undefined
+})
 
 const authStore = useAuthStore()
 const { currentUser, userLoading, hasCheckedSession } = storeToRefs(authStore)
@@ -29,7 +36,7 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    clubs.value = await fetchClubs({ force: hasLoadedOnce.value })
+    clubs.value = await fetchClubs({ force: hasLoadedOnce.value, schoolSlug: schoolSlug.value })
     hasLoadedOnce.value = true
     lastFetchedAt.value = new Date()
   } catch (err) {
@@ -180,8 +187,8 @@ const resetFilters = () => {
             <span>{{ club.advisor || 'Advisor TBD' }}</span>
           </div>
           <div class="row-actions">
-            <RouterLink :to="`/clubs/${club.id}`" class="ghost-btn small">View</RouterLink>
-            <RouterLink :to="`/clubs/${club.id}/admin`" class="primary-btn small">Manage</RouterLink>
+            <RouterLink :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`" class="ghost-btn small">View</RouterLink>
+            <RouterLink :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}/admin` : `/clubs/${club.id}/admin`" class="primary-btn small">Manage</RouterLink>
           </div>
         </article>
       </div>
