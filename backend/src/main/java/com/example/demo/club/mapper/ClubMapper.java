@@ -18,6 +18,12 @@ public interface ClubMapper {
 
     List<Club> findAllBySchoolId(@Param("schoolId") Long schoolId);
 
+    List<Club> findAllBySchoolIdPaginated(@Param("schoolId") Long schoolId,
+                                          @Param("offset") int offset,
+                                          @Param("limit") int limit);
+
+    int countBySchoolId(@Param("schoolId") Long schoolId);
+
     Club findBySchoolIdAndSlug(@Param("schoolId") Long schoolId,
                                @Param("slug") String slug);
 

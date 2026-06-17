@@ -84,7 +84,17 @@ public class ClubService {
         return clubMapper.findAllBySchoolId(schoolId);
     }
 
-    public Club findBySchoolAndClubSlug(Long schoolId, String clubSlug, String viewerEmail) {
+    public List<Club> findAllBySchoolIdPaginated(Long schoolId, int page, int size) {
+        int offset = Math.max(0, page) * size;
+        int limit = Math.max(1, Math.min(size, 100));
+        return clubMapper.findAllBySchoolIdPaginated(schoolId, offset, limit);
+    }
+
+    public int countBySchoolId(Long schoolId) {
+        return clubMapper.countBySchoolId(schoolId);
+    }
+
+        public Club findBySchoolAndClubSlug(Long schoolId, String clubSlug, String viewerEmail) {
         Club club = clubMapper.findBySchoolIdAndSlug(schoolId, clubSlug);
         applyViewerPermissions(club, viewerEmail);
         return club;
