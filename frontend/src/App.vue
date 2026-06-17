@@ -146,6 +146,12 @@ watch(
               class="nav-link"
               :class="{ active: route.name === 'owner-clubs' || route.name === 'school-owner-clubs' }"
             >Admin</RouterLink>
+            <RouterLink
+              v-if="currentUser?.isOwner"
+              to="/platform/admin"
+              class="nav-link"
+              :class="{ active: route.name === 'platform-admin' }"
+            >Platform</RouterLink>
           </nav>
         </div>
 
