@@ -2,6 +2,8 @@ package com.example.demo.platform.controller;
 
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.platform.service.PlatformService;
+import com.example.demo.school.model.SchoolAdminInvitation;
+import com.example.demo.school.service.SchoolAdminInvitationService;
 import com.example.demo.school.model.School;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -20,6 +22,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/platform")
@@ -27,11 +30,14 @@ public class PlatformAdminController {
 
     private final PlatformService platformService;
     private final SecurityProperties securityProperties;
+    private final SchoolAdminInvitationService invitationService;
 
     public PlatformAdminController(PlatformService platformService,
-                                    SecurityProperties securityProperties) {
+                                    SecurityProperties securityProperties,
+                                    SchoolAdminInvitationService invitationService) {
         this.platformService = platformService;
         this.securityProperties = securityProperties;
+        this.invitationService = invitationService;
     }
 
     @GetMapping("/schools")
@@ -65,6 +71,41 @@ public class PlatformAdminController {
             return updated;
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @PostMapping("/schools/{slug}/invitations")
+    @ResponseStatus(HttpStatus.CREATED)
+    public SchoolAdminInvitation createInvitation(@PathVariable String slug,
+                                                   @RequestBody Map<String, String> body,
+                                                   Authentication authentication) {
+        requirePlatformOwner(authentication);
+        String email = body.get("email");
+        if (email == null || email.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email is required");
+        }
+        try {
+            String inviterEmail = resolveViewerEmail(authentication);
+            return invitationService.createInvitation(slug, email.trim(), inviterEmail);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @PostMapping("/invitations/{token}/accept")
+    public Map<String, Object> acceptInvitation(@PathVariable String token,
+                                                 Authentication authentication) {
+        String email = resolveViewerEmail(authentication);
+        if (email == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        try {
+            invitationService.acceptInvitation(token, email);
+            return Map.of("status", "accepted", "message", "You are now a school admin.");
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, ex.getMessage());
         }
     }
 

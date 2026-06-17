@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { buildApiUrl } from '../services/httpClient'
 import {
   fetchPlatformSchools,
   createSchool,
@@ -44,6 +45,41 @@ const resetForm = () => {
   form.timezone = 'America/Los_Angeles'
   form.status = 'active'
   formError.value = ''
+}
+
+const inviteEmail = ref('')
+const inviteSchool = ref('')
+const inviteLoading = ref(false)
+const inviteError = ref('')
+const inviteSuccess = ref('')
+
+const handleInvite = async (schoolSlug: string) => {
+  if (!inviteEmail.value.trim()) {
+    inviteError.value = 'Email is required.'
+    return
+  }
+  inviteLoading.value = true
+  inviteError.value = ''
+  inviteSuccess.value = ''
+  try {
+    const url = buildApiUrl(`/api/platform/schools/${schoolSlug}/invitations`)
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inviteEmail.value.trim() }),
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(text || 'Failed to send invitation')
+    }
+    inviteSuccess.value = `Invitation sent to ${inviteEmail.value}.`
+    inviteEmail.value = ''
+  } catch (err) {
+    inviteError.value = err instanceof Error ? err.message : 'Failed to send invitation'
+  } finally {
+    inviteLoading.value = false
+  }
 }
 
 const handleCreate = async () => {
@@ -114,6 +150,25 @@ const handleCreate = async () => {
         </button>
       </div>
     </form>
+
+    <section class="invite-section" v-if="schools.length">
+      <h2>Invite school admin</h2>
+      <p>Send an invitation link to someone who will manage a school.</p>
+      <form class="invite-form" @submit.prevent="handleInvite(inviteSchool)">
+        <select v-model="inviteSchool" required>
+          <option value="" disabled>Select a school</option>
+          <option v-for="school in schools" :key="school.slug" :value="school.slug">
+            {{ school.schoolName }}
+          </option>
+        </select>
+        <input v-model="inviteEmail" type="email" placeholder="admin@school.edu" required />
+        <button type="submit" class="btn primary" :disabled="inviteLoading">
+          {{ inviteLoading ? 'Sending…' : 'Send invitation' }}
+        </button>
+      </form>
+      <p v-if="inviteError" class="form-feedback error">{{ inviteError }}</p>
+      <p v-if="inviteSuccess" class="form-feedback success">{{ inviteSuccess }}</p>
+    </section>
 
     <section v-if="schools.length" class="school-list">
       <article v-for="school in schools" :key="school.slug" class="school-row">
@@ -300,4 +355,34 @@ const handleCreate = async () => {
   background: var(--mv-surface-muted);
   color: var(--mv-text-muted);
 }
+.invite-section {
+  padding: 1.5rem;
+  border-radius: 24px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card-strong);
+}
+
+.invite-section h2 { margin: 0 0 0.25rem; }
+.invite-section p { color: var(--mv-text-muted); margin: 0 0 1rem; }
+
+.invite-form {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.invite-form select,
+.invite-form input {
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+  color: var(--mv-text);
+  flex: 1;
+  min-width: 180px;
+}
+
+.form-feedback { margin: 0.5rem 0 0; font-size: 0.9rem; }
+.form-feedback.error { color: var(--mv-status-danger); }
+.form-feedback.success { color: var(--mv-status-success); }
 </style>

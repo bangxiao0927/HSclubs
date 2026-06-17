@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.school.mapper.SchoolAdminInvitationMapper">
+
+    <resultMap id="InvitationResultMap" type="com.example.demo.school.model.SchoolAdminInvitation">
+        <id column="id" property="id" />
+        <result column="school_id" property="schoolId" />
+        <result column="email" property="email" />
+        <result column="role" property="role" />
+        <result column="status" property="status" />
+        <result column="token" property="token" />
+        <result column="expires_at" property="expiresAt" />
+        <result column="created_at" property="createdAt" />
+        <result column="invited_by_oauth_user_id" property="invitedByOauthUserId" />
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO school_admin_invitations
+            (school_id, email, role, status, token, expires_at, invited_by_oauth_user_id)
+        VALUES (#{schoolId}, #{email}, #{role}, #{status}, #{token}, #{expiresAt}, #{invitedByOauthUserId})
+    </insert>
+
+    <select id="findByToken" resultMap="InvitationResultMap">
+        SELECT * FROM school_admin_invitations WHERE token = #{token} LIMIT 1
+    </select>
+
+    <update id="updateStatus">
+        UPDATE school_admin_invitations SET status = #{status} WHERE id = #{id}
+    </update>
+
+    <select id="findBySchoolAndEmail" resultMap="InvitationResultMap">
+        SELECT * FROM school_admin_invitations
+        WHERE school_id = #{schoolId} AND email = #{email} AND status = 'pending'
+        LIMIT 1
+    </select>
+</mapper>

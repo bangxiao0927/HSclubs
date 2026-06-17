@@ -110,6 +110,13 @@ const router = createRouter({
       component: () => import('../views/PlatformAdminView.vue'),
     },
 
+    // ---- Invitation ----
+    {
+      path: '/accept-invitation',
+      name: 'accept-invitation',
+      component: () => import('../views/AcceptInvitationView.vue'),
+    },
+
     // ---- Auth routes ----
     {
       path: '/auth',
