@@ -269,3 +269,54 @@ sudo systemctl reload nginx
 sudo apt install certbot python3-certbot-nginx
 sudo certbot --nginx -d yourdomain.com
 ```
+
+---
+
+## OAuth2 Configuration
+
+### Google Cloud Console
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create a project or select existing
+3. Configure OAuth consent screen:
+   - Type: **External**
+   - Scopes: `email`, `profile`, `openid`
+   - Add test users during development
+4. Create OAuth 2.0 Client ID:
+   - Application type: **Web application**
+   - Authorized redirect URIs:
+     ```
+     http://localhost:8080/api/auth/google/callback   (dev)
+     https://yourdomain.com/api/auth/google/callback   (prod)
+     ```
+5. Copy **Client ID** and **Client Secret** into `backend/.env`
+
+### Redirect flow
+
+```
+User clicks "Sign in with Google"
+  → GET /oauth2/authorization/google
+  → Google OAuth consent screen
+  → Google redirects to /api/auth/google/callback
+  → Spring Security exchanges code for token
+  → Redirect to FRONTEND_ORIGIN/auth/callback
+  → Frontend reads /api/auth/me
+```
+
+### Adding more OAuth providers
+
+Add provider config in `application.yaml`:
+
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID}
+            client-secret: ${GITHUB_CLIENT_SECRET}
+            scope: read:user,user:email
+```
+
+The `/api/auth/providers` endpoint auto-discovers all configured providers.
