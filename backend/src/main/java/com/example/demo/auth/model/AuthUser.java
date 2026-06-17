@@ -15,7 +15,7 @@ public class AuthUser {
     private String avatarUrl;
     private String provider;
     private Integer graduationYear;
-    @JsonProperty("isPlatformOwner")
+    @JsonProperty("isOwner")
     private boolean platformOwner;
     private SchoolMembership homeSchool;
     private List<SchoolMembership> schoolMemberships;

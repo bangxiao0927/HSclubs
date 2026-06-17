@@ -44,7 +44,7 @@ public class SchoolClubController {
 
     @GetMapping
     public List<Club> list(@PathVariable String schoolSlug) {
-        School school = clubService.resolveSchool(schoolSlug);
+        School school = resolveSchoolSafe(schoolSlug);
         return clubService.findAllBySchoolId(school.getId());
     }
 
@@ -52,7 +52,7 @@ public class SchoolClubController {
     public Club get(@PathVariable String schoolSlug,
                     @PathVariable String clubSlugOrId,
                     Authentication authentication) {
-        School school = clubService.resolveSchool(schoolSlug);
+        School school = resolveSchoolSafe(schoolSlug);
         Club club = resolveClub(school.getId(), clubSlugOrId, resolveViewerEmail(authentication));
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
@@ -68,7 +68,7 @@ public class SchoolClubController {
                        @RequestBody Club club,
                        Authentication authentication) {
         requireSchoolAdmin(schoolSlug, authentication);
-        School school = clubService.resolveSchool(schoolSlug);
+        School school = resolveSchoolSafe(schoolSlug);
         try {
             return clubService.createInSchool(school.getId(), club);
         } catch (IllegalArgumentException ex) {
@@ -82,7 +82,7 @@ public class SchoolClubController {
                        @RequestBody Club club,
                        Authentication authentication) {
         requireManageAccess(schoolSlug, clubSlugOrId, authentication);
-        School school = clubService.resolveSchool(schoolSlug);
+        School school = resolveSchoolSafe(schoolSlug);
         Club existing = resolveClub(school.getId(), clubSlugOrId, null);
         if (existing == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
@@ -100,7 +100,7 @@ public class SchoolClubController {
                        @PathVariable String clubSlugOrId,
                        Authentication authentication) {
         requireSchoolAdmin(schoolSlug, authentication);
-        School school = clubService.resolveSchool(schoolSlug);
+        School school = resolveSchoolSafe(schoolSlug);
         Club existing = resolveClub(school.getId(), clubSlugOrId, null);
         if (existing == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
@@ -129,7 +129,7 @@ public class SchoolClubController {
         if (viewerEmail == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        School school = clubService.resolveSchool(schoolSlug);
+        School school = resolveSchoolSafe(schoolSlug);
         Club club = resolveClub(school.getId(), clubSlugOrId, viewerEmail);
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
@@ -152,7 +152,7 @@ public class SchoolClubController {
         if (viewerEmail == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        School school = clubService.resolveSchool(schoolSlug);
+        School school = resolveSchoolSafe(schoolSlug);
         Club club = resolveClub(school.getId(), clubSlugOrId, viewerEmail);
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
@@ -204,6 +204,15 @@ public class SchoolClubController {
         }
     }
 
+
+    private School resolveSchoolSafe(String schoolSlug) {
+        try {
+            return resolveSchoolSafe(schoolSlug);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
     // ---- Permission helpers ----
 
     private Club resolveClub(Long schoolId, String clubSlugOrId, String viewerEmail) {
@@ -242,7 +251,7 @@ public class SchoolClubController {
         if (email == null) {
             return false;
         }
-        School school = clubService.resolveSchool(schoolSlug);
+        School school = resolveSchoolSafe(schoolSlug);
         if (school == null) {
             return false;
         }
@@ -270,7 +279,7 @@ public class SchoolClubController {
         if (viewerEmail == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        School school = clubService.resolveSchool(schoolSlug);
+        School school = resolveSchoolSafe(schoolSlug);
         Club club = resolveClub(school.getId(), clubSlugOrId, viewerEmail);
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
