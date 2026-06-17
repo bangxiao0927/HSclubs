@@ -16,7 +16,6 @@ const schoolSlug = computed(() => {
   const slug = route.params.schoolSlug
   return typeof slug === 'string' ? slug : undefined
 })
-const route = useRoute()
 
 const loadClubs = async () => {
   loading.value = true

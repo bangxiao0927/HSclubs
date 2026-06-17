@@ -30,11 +30,6 @@ watch(
   { immediate: true },
 )
 
-const isSchoolRoute = computed(() => {
-  const name = route.name
-  return typeof name === 'string' && name.startsWith('school-')
-})
-
 const navHome = computed(() => (schoolSlug.value ? `/schools/${schoolSlug.value}` : '/'))
 const navCategories = computed(() =>
   schoolSlug.value ? `/schools/${schoolSlug.value}/categories` : '/about',

@@ -25,7 +25,6 @@ const approvingRequestId = ref<number | null>(null)
 const decliningRequestId = ref<number | null>(null)
 
 
-const route = useRoute()
 const schoolSlug = computed(() => {
   const slug = route.params.schoolSlug
   return typeof slug === 'string' ? slug : undefined

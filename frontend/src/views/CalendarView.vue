@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
@@ -22,11 +22,6 @@ const today = new Date()
 const loading = ref(true)
 const error = ref('')
 
-const route = useRoute()
-const schoolSlug = computed(() => {
-  const slug = route.params.schoolSlug
-  return typeof slug === 'string' ? slug : undefined
-})
 const dailySchedule = ref<Record<string, DailyEvent[]>>(createEmptySchedule())
 
 const weekDates = computed(() => {

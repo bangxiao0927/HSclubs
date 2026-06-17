@@ -1,4 +1,3 @@
-import type { SchoolMembership } from '../types/auth'
 import { buildApiUrl } from './httpClient'
 
 export interface SchoolSummary {

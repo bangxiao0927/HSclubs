@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import type { AuthProvider, AuthUser, SchoolMembership } from '../types/auth'
+import type { AuthProvider, AuthUser } from '../types/auth'
 import {
   fetchAuthProviders,
   fetchAuthenticatedUser,

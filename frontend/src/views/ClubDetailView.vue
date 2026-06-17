@@ -30,7 +30,6 @@ const canApply = computed(
 const hasPendingRequest = computed(() => Boolean(club.value?.viewerHasPendingRequest))
 
 
-const route = useRoute()
 const schoolSlug = computed(() => {
   const slug = route.params.schoolSlug
   return typeof slug === 'string' ? slug : undefined
