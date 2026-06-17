@@ -49,4 +49,12 @@ public class OAuthUserService {
         }
         return null;
     }
+
+    public Long findIdByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return oAuthUserMapper.findIdByEmail(email);
+    }
+
 }

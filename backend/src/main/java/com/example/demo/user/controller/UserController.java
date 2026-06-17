@@ -7,12 +7,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
@@ -28,6 +31,17 @@ public class UserController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void updateGraduationYear(@Valid @RequestBody UpdateGraduationYearRequest request,
                                      Authentication authentication) {
+        String email = requireAuthenticatedEmail(authentication);
+        try {
+            userService.updateGraduationYear(email, request.getGraduationYear());
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
+    private String requireAuthenticatedEmail(Authentication authentication) {
         if (!(authentication instanceof OAuth2AuthenticationToken token)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated");
         }
@@ -37,18 +51,12 @@ public class UserController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated");
         }
 
-        Object emailAttribute = principal.getAttributes().get("email");
+        Map<String, Object> attributes = principal.getAttributes();
+        Object emailAttribute = attributes.get("email");
         String email = emailAttribute instanceof String str ? str : null;
         if (email == null || email.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Authenticated email is required");
         }
-
-        try {
-            userService.updateGraduationYear(email, request.getGraduationYear());
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
-        } catch (IllegalStateException ex) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
-        }
+        return email;
     }
 }
