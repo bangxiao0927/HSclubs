@@ -60,6 +60,12 @@ const hydrateForm = (data: Club) => {
   form.achievementsText = (data.achievements ?? []).join('\n')
 }
 
+
+const schoolSlug = computed(() => {
+  const slug = route.params.schoolSlug
+  return typeof slug === 'string' ? slug : undefined
+})
+
 const authStore = useAuthStore()
 const { currentUser } = storeToRefs(authStore)
 const canManageMembers = computed(() => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner))
@@ -70,7 +76,7 @@ const loadClub = async (id: string) => {
   formError.value = ''
   successMessage.value = ''
   try {
-    const response = await fetchClubById(id)
+    const response = await fetchClubById(id, schoolSlug.value)
     club.value = response
     hydrateForm(response)
     if (canManageMembers.value) {
@@ -98,7 +104,7 @@ const loadMembers = async (id: string) => {
   membersLoading.value = true
   membersError.value = ''
   try {
-    members.value = await fetchClubMembers(id)
+    members.value = await fetchClubMembers(id, schoolSlug.value)
   } catch (err) {
     membersError.value = err instanceof Error ? err.message : 'Failed to load members'
     members.value = []
@@ -191,7 +197,7 @@ watch(
       <div class="toolbar-actions" v-if="!loading">
         <RouterLink
           v-if="club"
-          :to="`/clubs/${club.id}`"
+          :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`"
           class="ghost-btn"
         >View public page</RouterLink>
         <button type="button" class="ghost-btn" @click="handleReset" :disabled="!club || saving">
@@ -325,7 +331,7 @@ watch(
           <div class="member-panel__actions">
             <RouterLink
               v-if="club && canManageMembers"
-              :to="`/clubs/${club.id}/admin/pending`"
+              :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}/admin/pending` : `/clubs/${club.id}/admin/pending`"
               class="ghost-btn"
             >
               Review pending requests

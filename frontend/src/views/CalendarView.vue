@@ -21,6 +21,7 @@ const today = new Date()
 
 const loading = ref(true)
 const error = ref('')
+
 const dailySchedule = ref<Record<string, DailyEvent[]>>(createEmptySchedule())
 
 const weekDates = computed(() => {

@@ -2,7 +2,11 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import type { AuthProvider, AuthUser } from '../types/auth'
-import { fetchAuthProviders, fetchAuthenticatedUser, logout as apiLogout } from '../services/authService'
+import {
+  fetchAuthProviders,
+  fetchAuthenticatedUser,
+  logout as apiLogout,
+} from '../services/authService'
 import { buildApiUrl } from '../services/httpClient'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -18,17 +22,15 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => currentUser.value !== null)
 
   const ensureProvidersLoaded = async () => {
-    if (providersLoaded.value || providersLoading.value) {
-      return
-    }
-
+    if (providersLoaded.value || providersLoading.value) return
     providersLoading.value = true
     try {
       providers.value = await fetchAuthProviders()
       providersError.value = null
       providersLoaded.value = true
     } catch (error) {
-      providersError.value = error instanceof Error ? error.message : 'Unable to load providers'
+      providersError.value =
+        error instanceof Error ? error.message : 'Unable to load providers'
     } finally {
       providersLoading.value = false
     }
@@ -40,14 +42,14 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const normalizeUser = (user: AuthUser | null): AuthUser | null => {
-    if (!user) {
-      return null
-    }
-
+    if (!user) return null
     const trimmed = user.avatarUrl?.trim()
     return {
       ...user,
       avatarUrl: trimmed ? buildApiUrl(trimmed) : buildFallbackAvatar(user),
+      // Support both isOwner (backward compat) and isPlatformOwner
+      isOwner: user.isOwner ?? user.isPlatformOwner ?? false,
+      schoolMemberships: user.schoolMemberships ?? [],
     }
   }
 
@@ -58,7 +60,8 @@ export const useAuthStore = defineStore('auth', () => {
       currentUser.value = normalizeUser(fetched)
       userError.value = null
     } catch (error) {
-      userError.value = error instanceof Error ? error.message : 'Unable to verify session'
+      userError.value =
+        error instanceof Error ? error.message : 'Unable to verify session'
       currentUser.value = null
     } finally {
       userLoading.value = false
@@ -73,12 +76,13 @@ export const useAuthStore = defineStore('auth', () => {
   const beginLogin = (providerId: string) => {
     const sanitizedId = providerId?.trim()
     if (!sanitizedId) {
-      providersError.value = 'No OAuth provider was selected. Please refresh and try again.'
+      providersError.value =
+        'No OAuth provider was selected. Please refresh and try again.'
       return
     }
-
     const provider = providers.value.find((item) => item.id === sanitizedId)
-    const authorizationPath = provider?.authorizationUrl ?? `/oauth2/authorization/${sanitizedId}`
+    const authorizationPath =
+      provider?.authorizationUrl ?? `/oauth2/authorization/${sanitizedId}`
     window.location.href = buildApiUrl(authorizationPath)
   }
 

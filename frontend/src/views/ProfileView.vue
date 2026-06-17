@@ -18,6 +18,8 @@ const reminders = [
   'Keeping details current helps advisors reach you quickly.',
 ]
 
+
+
 const authStore = useAuthStore()
 const { isAuthenticated, currentUser, userLoading, userError } = storeToRefs(authStore)
 

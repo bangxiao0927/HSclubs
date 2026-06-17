@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
@@ -10,13 +10,19 @@ import { clubImage } from '../utils/clubImages'
 const clubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
+
+const route = useRoute()
+const schoolSlug = computed(() => {
+  const slug = route.params.schoolSlug
+  return typeof slug === 'string' ? slug : undefined
+})
 const selectedCategoryTitle = ref(clubCategoryOptions[0]?.title ?? '')
 
 const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    clubs.value = await fetchClubs()
+    clubs.value = await fetchClubs({ schoolSlug: schoolSlug.value })
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load clubs'
   } finally {
@@ -108,7 +114,7 @@ const activeCategory = computed(
           <article v-if="!activeCategory.clubs.length" class="empty-card">
             <p>No clubs have been assigned to {{ activeCategory.title }} yet.</p>
           </article>
-          <RouterLink v-for="club in activeCategory.clubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
+          <RouterLink v-for="club in activeCategory.clubs" :key="club.id" class="top-card" :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`">
             <div class="club-avatar large">
               <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
             </div>
