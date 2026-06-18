@@ -23,6 +23,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
+/**
+ * Legacy global club endpoints — retained for backward compatibility.
+ * Prefer {@link SchoolClubController} for new development.
+ *
+ * @deprecated Use school-scoped {@code /api/schools/{slug}/clubs/...} instead.
+ */
+@Deprecated
 @RestController
 @RequestMapping("/api/clubs")
 @CrossOrigin(origins = "*", maxAge = 3600)
