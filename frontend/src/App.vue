@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onErrorCaptured, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from './stores/auth'
 import { useSchoolStore } from './stores/school'
+import ErrorDisplay from './components/ErrorDisplay.vue'
 
 const searchQuery = ref('')
 const route = useRoute()
@@ -76,6 +77,22 @@ try {
 const syncSearchQueryFromRoute = () => {
   searchQuery.value = typeof route.query.q === 'string' ? route.query.q : ''
 }
+
+const appError = ref<string | null>(null)
+
+const handleAppError = (err: unknown) => {
+  console.error('Global error:', err)
+  appError.value = err instanceof Error ? err.message : 'An unexpected error occurred'
+}
+
+const resetError = () => {
+  appError.value = null
+}
+
+onErrorCaptured((err) => {
+  handleAppError(err)
+  return false // prevent error propagation
+})
 
 const submitSearch = () => {
   const q = searchQuery.value.trim()
@@ -196,7 +213,8 @@ watch(
     </header>
 
     <main class="view-container">
-      <RouterView />
+      <ErrorDisplay v-if="appError" :message="appError" @retry="resetError" />
+      <RouterView v-else />
     </main>
   </div>
 </template>

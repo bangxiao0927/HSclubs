@@ -134,7 +134,7 @@ const showHeroImage = (index: number) => {
       </div>
     </section>
 
-    <section v-if="loading" class="status-banner">Loading clubs…</section>
+    <section v-if="loading" class="page-shell"><SkeletonLoader :count="4" /></section>
     <section v-else-if="error" class="status-banner error">{{ error }}</section>
 
     <section class="top-clubs-section page-shell">

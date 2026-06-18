@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
+import SkeletonLoader from '../components/SkeletonLoader.vue'
 import { storeToRefs } from 'pinia'
 import { useSchoolStore } from '../stores/school'
 
@@ -20,7 +21,7 @@ onMounted(() => {
       <p>Choose a school to browse its club directory, calendar, and manage your memberships.</p>
     </section>
 
-    <section v-if="loading" class="status-banner page-shell">Loading schools…</section>
+    <section v-if="loading" class="page-shell"><SkeletonLoader :count="3" height="80px" /></section>
     <section v-else-if="error" class="status-banner error page-shell">{{ error }}</section>
 
     <section v-else class="school-grid page-shell">
