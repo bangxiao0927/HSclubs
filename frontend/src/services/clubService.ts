@@ -4,6 +4,8 @@ import { buildApiUrl } from './httpClient'
 type FetchClubsOptions = {
   force?: boolean
   schoolSlug?: string
+  page?: number
+  size?: number
 }
 
 const CLUBS_CACHE_TTL_MS = 5 * 60 * 1000
@@ -48,11 +50,15 @@ export const invalidateClubCache = () => {
   clubsRequest = null
 }
 
-const clubPath = (schoolSlug: string | undefined, suffix: string) => {
-  if (schoolSlug) {
-    return `/api/schools/${schoolSlug}/clubs${suffix}`
+const clubPath = (schoolSlug: string | undefined, suffix: string, page?: number, size?: number) => {
+  let path = schoolSlug
+    ? `/api/schools/${schoolSlug}/clubs${suffix}`
+    : `/api/clubs${suffix}`
+  if (page !== undefined && size !== undefined) {
+    const sep = path.includes('?') ? '&' : '?'
+    path += `${sep}page=${page}&size=${size}`
   }
-  return `/api/clubs${suffix}`
+  return path
 }
 
 export const fetchClubs = async (options: FetchClubsOptions = {}) => {
@@ -68,7 +74,8 @@ export const fetchClubs = async (options: FetchClubsOptions = {}) => {
     return cloneClubs(await clubsRequest)
   }
 
-  clubsRequest = request<Club[]>(clubPath(schoolSlug, ''))
+  const { page, size } = options
+  clubsRequest = request<Club[]>(clubPath(schoolSlug, '', page, size))
 
   try {
     const clubs = await clubsRequest
@@ -128,6 +135,20 @@ export const approveMembershipRequest = (
     clubPath(schoolSlug, `/${clubId}/membership-requests/${requestId}/approve`),
     { method: 'POST', body: JSON.stringify({}) },
   )
+
+export interface CalendarEvent {
+  clubId: number
+  clubName: string
+  clubSlug: string | null
+  category: string
+  meetingSchedule: string
+  scheduleNote: string | null
+  location: string | null
+  advisor: string | null
+}
+
+export const fetchSchoolCalendar = (schoolSlug: string) =>
+  request<CalendarEvent[]>(`/api/schools/${schoolSlug}/clubs/calendar`)
 
 export const rejectMembershipRequest = (
   clubId: number | string,

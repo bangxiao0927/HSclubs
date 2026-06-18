@@ -135,6 +135,13 @@ const router = createRouter({
       name: 'auth-callback',
       component: () => import('../views/AuthCallbackView.vue'),
     },
+
+    // ---- 404 (must be last) ----
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../views/NotFoundView.vue'),
+    },
   ],
 })
 

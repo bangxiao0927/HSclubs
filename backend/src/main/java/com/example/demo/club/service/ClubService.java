@@ -40,6 +40,10 @@ public class ClubService {
 
     // ---- Global (deprecated, kept for backward compatibility) ----
 
+    /**
+     * @deprecated Use {@link #findAllBySchoolId(Long)} or {@link #findAllBySchoolIdPaginated(Long, int, int)} instead.
+     */
+    @Deprecated
     public List<Club> findAll() {
         return clubMapper.findAll();
     }

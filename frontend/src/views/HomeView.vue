@@ -18,15 +18,37 @@ const schoolSlug = computed(() => {
 const currentHeroImageIndex = ref(0)
 let heroInterval: number | undefined
 
+const page = ref(0)
+const pageSize = 50
+const hasMore = ref(true)
+const loadingMore = ref(false)
+
 const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    clubs.value = await fetchClubs({ schoolSlug: schoolSlug.value })
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load clubs'
+    const newClubs = await fetchClubs({ schoolSlug: schoolSlug.value, page: 0, size: pageSize })
+    clubs.value = newClubs
+    hasMore.value = newClubs.length >= pageSize
+  } catch {
+    error.value = 'Failed to load clubs'
   } finally {
     loading.value = false
+  }
+}
+
+const loadMore = async () => {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  page.value++
+  try {
+    const moreClubs = await fetchClubs({ schoolSlug: schoolSlug.value, page: page.value, size: pageSize })
+    clubs.value = [...clubs.value, ...moreClubs]
+    hasMore.value = moreClubs.length >= pageSize
+  } catch {
+    // silently ignore load-more failures
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -182,6 +204,11 @@ const showHeroImage = (index: number) => {
       </div>
       <div v-else-if="!loading && !error" class="empty-state">
         <p>No clubs are available yet.</p>
+      </div>
+      <div v-if="hasMore && clubs.length >= pageSize" class="load-more">
+        <button type="button" class="btn ghost" @click="loadMore" :disabled="loadingMore">
+          {{ loadingMore ? 'Loading…' : 'Load more' }}
+        </button>
       </div>
     </section>
   </div>
@@ -530,4 +557,20 @@ const showHeroImage = (index: number) => {
     bottom: 1.45rem;
   }
 }
+.load-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 1rem;
+}
+.load-more .btn {
+  padding: 0.65rem 1.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--mv-ghost-border);
+  background: transparent;
+  color: var(--mv-ghost-text);
+}
+.load-more .btn:hover { background: var(--mv-surface-accent); }
+.load-more .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

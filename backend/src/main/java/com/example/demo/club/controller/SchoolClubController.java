@@ -23,7 +23,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/schools/{schoolSlug}/clubs")
@@ -214,6 +217,26 @@ public class SchoolClubController {
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
         }
+    }
+
+    @GetMapping("/calendar")
+    public List<java.util.Map<String, Object>> schoolCalendar(@PathVariable String schoolSlug) {
+        School school = resolveSchoolSafe(schoolSlug);
+        List<Club> clubs = clubService.findAllBySchoolId(school.getId());
+        java.util.List<java.util.Map<String, Object>> events = new java.util.ArrayList<>();
+        for (Club club : clubs) {
+            java.util.Map<String, Object> event = new java.util.HashMap<>();
+            event.put("clubId", club.getId());
+            event.put("clubName", club.getName());
+            event.put("clubSlug", club.getSlug());
+            event.put("category", club.getCategory());
+            event.put("meetingSchedule", club.getMeetingSchedule());
+            event.put("scheduleNote", club.getScheduleNote());
+            event.put("location", club.getLocation());
+            event.put("advisor", club.getAdvisor());
+            events.add(event);
+        }
+        return events;
     }
 
     // ---- Permission helpers ----
