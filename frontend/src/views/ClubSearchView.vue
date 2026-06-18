@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import SkeletonLoader from '../components/SkeletonLoader.vue'
 
 import { fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
@@ -52,7 +53,7 @@ const filteredClubs = computed(() =>
       </div>
     </section>
 
-    <section v-if="loading" class="status-banner">Loading clubs…</section>
+    <section v-if="loading" class="page-shell"><SkeletonLoader :count="3" /></section>
     <section v-else-if="error" class="status-banner error">{{ error }}</section>
 
     <section class="results-section page-shell">
