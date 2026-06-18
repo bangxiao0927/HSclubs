@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 
-import { fetchClubs } from '../services/clubService'
+import { fetchClubs, fetchSchoolCalendar, type CalendarEvent } from '../services/clubService'
 import type { Club } from '../types/club'
 
 type DailyEvent = {
@@ -78,8 +78,15 @@ onMounted(async () => {
   loading.value = true
   error.value = ''
   try {
-    const clubs = await fetchClubs()
-    dailySchedule.value = buildSchedule(clubs)
+    const route = useRoute()
+    const slug = typeof route.params.schoolSlug === 'string' ? route.params.schoolSlug : ''
+    if (slug) {
+      const events = await fetchSchoolCalendar(slug)
+      dailySchedule.value = buildScheduleFromEvents(events)
+    } else {
+      const clubs = await fetchClubs()
+      dailySchedule.value = buildSchedule(clubs)
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load schedule'
   } finally {
@@ -92,6 +99,37 @@ function createEmptySchedule() {
     acc[day] = []
     return acc
   }, {} as Record<string, DailyEvent[]>)
+}
+
+function buildScheduleFromEvents(events: CalendarEvent[]) {
+  const schedule = createEmptySchedule()
+  events.forEach((event) => {
+    const parsed = parseMeetingSchedule(event.meetingSchedule)
+    if (!parsed) return
+    const meetingDate = getWeekDate(parsed.day)
+    if (!meetingDate || !occursOnDate(parsed, meetingDate)) return
+
+    const entry: DailyEvent = {
+      id: event.clubId,
+      title: event.clubName,
+      category: event.category,
+      cadence: parsed.cadence,
+      timeLabel: parsed.timeLabel,
+      scheduleNote: event.scheduleNote ?? null,
+      location: event.location ?? null,
+      advisor: event.advisor ?? null,
+    }
+
+    const bucket = schedule[parsed.day] ?? []
+    bucket.push(entry)
+    schedule[parsed.day] = bucket
+  })
+
+  Object.values(schedule).forEach((events) => {
+    events.sort((a, b) => a.title.localeCompare(b.title))
+  })
+
+  return schedule
 }
 
 function buildSchedule(clubs: Club[]) {

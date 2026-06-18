@@ -31,7 +31,7 @@ const loadClubs = async () => {
     clubs.value = newClubs
     hasMore.value = newClubs.length >= pageSize
   } catch {
-    error.value = err instanceof Error ? err.message : 'Failed to load clubs'
+    error.value = 'Failed to load clubs'
   } finally {
     loading.value = false
   }

@@ -136,6 +136,20 @@ export const approveMembershipRequest = (
     { method: 'POST', body: JSON.stringify({}) },
   )
 
+export interface CalendarEvent {
+  clubId: number
+  clubName: string
+  clubSlug: string | null
+  category: string
+  meetingSchedule: string
+  scheduleNote: string | null
+  location: string | null
+  advisor: string | null
+}
+
+export const fetchSchoolCalendar = (schoolSlug: string) =>
+  request<CalendarEvent[]>(`/api/schools/${schoolSlug}/clubs/calendar`)
+
 export const rejectMembershipRequest = (
   clubId: number | string,
   requestId: number | string,
