@@ -15,6 +15,24 @@ const schoolStore = useSchoolStore()
 const { isAuthenticated, currentUser } = storeToRefs(authStore)
 const { currentSchool, currentSchoolSlug } = storeToRefs(schoolStore)
 
+const mobileMenuOpen = ref(false)
+
+const toggleMobileMenu = () => {
+  mobileMenuOpen.value = !mobileMenuOpen.value
+}
+
+const closeMobileMenu = () => {
+  mobileMenuOpen.value = false
+}
+
+// Close the mobile menu whenever the route changes
+watch(
+  () => route.fullPath,
+  () => {
+    mobileMenuOpen.value = false
+  },
+)
+
 const schoolSlug = computed(() => {
   const slug = route.params.schoolSlug
   return typeof slug === 'string' ? slug : ''
@@ -96,6 +114,7 @@ onErrorCaptured((err) => {
 
 const submitSearch = () => {
   const q = searchQuery.value.trim()
+  closeMobileMenu()
   if (schoolSlug.value) {
     void router.push({
       name: q ? 'school-club-search' : 'school-home',
@@ -180,9 +199,20 @@ watch(
             class="search-input"
           />
           <button type="submit" class="search-button" aria-label="Search clubs">
-            <span class="search-icon">🔍</span>
+          <span class="search-icon">🔍</span>
           </button>
         </form>
+
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          :class="{ open: mobileMenuOpen }"
+          :aria-expanded="mobileMenuOpen"
+          aria-label="Toggle menu"
+          @click="toggleMobileMenu"
+        >
+          <span class="hamburger"></span>
+        </button>
 
         <div class="header-right">
           <RouterLink
@@ -210,6 +240,58 @@ watch(
           >Log out</button>
         </div>
       </div>
+
+      <Transition name="mobile-menu">
+        <div v-if="mobileMenuOpen" class="mobile-menu">
+          <form class="search-bar" @submit.prevent="submitSearch">
+            <input
+              v-model="searchQuery"
+              type="search"
+              placeholder="Search your favorite clubs"
+              class="search-input"
+            />
+            <button type="submit" class="search-button" aria-label="Search clubs">
+              <span class="search-icon">🔍</span>
+            </button>
+          </form>
+          <nav class="mobile-nav">
+            <RouterLink :to="navHome" class="mobile-nav-link" @click="closeMobileMenu">Home</RouterLink>
+            <RouterLink :to="navCategories" class="mobile-nav-link" @click="closeMobileMenu">Category</RouterLink>
+            <RouterLink :to="navCalendar" class="mobile-nav-link" @click="closeMobileMenu">Calendar</RouterLink>
+            <RouterLink
+              v-if="currentUser?.isOwner"
+              :to="navAdmin"
+              class="mobile-nav-link"
+              @click="closeMobileMenu"
+            >Admin</RouterLink>
+            <RouterLink
+              v-if="currentUser?.isOwner"
+              to="/platform/admin"
+              class="mobile-nav-link"
+              @click="closeMobileMenu"
+            >Platform</RouterLink>
+          </nav>
+          <div class="mobile-actions">
+            <RouterLink
+              v-if="schoolSlug"
+              to="/schools"
+              class="mobile-nav-link"
+              @click="closeMobileMenu"
+            >Change school</RouterLink>
+            <button type="button" class="mobile-nav-link" @click="toggleTheme">
+              {{ themeLabel }}
+            </button>
+            <template v-if="isAuthenticated">
+              <RouterLink :to="navProfile" class="mobile-nav-link" @click="closeMobileMenu">Profile</RouterLink>
+              <button type="button" class="mobile-nav-link" @click="closeMobileMenu(); handleLogout()">Log out</button>
+            </template>
+            <template v-else>
+              <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu">Log in</RouterLink>
+              <RouterLink to="/auth?intent=register" class="auth-btn primary" @click="closeMobileMenu">Register</RouterLink>
+            </template>
+          </div>
+        </div>
+      </Transition>
     </header>
 
     <main class="view-container">
@@ -412,5 +494,184 @@ watch(
   background: transparent;
   border: 1px solid var(--mv-ghost-border);
   color: var(--mv-ghost-text);
+}
+
+/* ---- Mobile menu toggle (hamburger) ---- */
+.mobile-menu-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--mv-ghost-border);
+  border-radius: 12px;
+  background: var(--mv-surface-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.hamburger,
+.hamburger::before,
+.hamburger::after {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--mv-ghost-text);
+  transition: transform 0.25s ease, opacity 0.2s ease;
+}
+
+.hamburger::before,
+.hamburger::after {
+  content: '';
+}
+
+.mobile-menu-toggle.open .hamburger {
+  background: transparent;
+}
+
+.mobile-menu-toggle.open .hamburger::before {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.mobile-menu-toggle.open .hamburger::after {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+/* ---- Mobile dropdown menu ---- */
+.mobile-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem var(--page-padding-inline) 1.25rem;
+  border-top: 1px solid var(--mv-header-border);
+  background: var(--mv-header-bg);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+.mobile-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.mobile-nav-link {
+  display: block;
+  padding: 0.7rem 0.5rem;
+  border-radius: 12px;
+  color: var(--mv-nav-text);
+  text-decoration: none;
+  font-size: 1rem;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.mobile-nav-link:active,
+.mobile-nav-link:hover {
+  background: var(--mv-surface-accent);
+  color: var(--mv-nav-text-active);
+}
+
+.mobile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--mv-header-border);
+}
+
+.mobile-actions .auth-btn.primary {
+  text-align: center;
+  padding: 0.7rem 1rem;
+}
+
+.mobile-menu-enter-active,
+.mobile-menu-leave-active {
+  transition: max-height 0.3s ease, opacity 0.25s ease;
+  max-height: 500px;
+}
+
+.mobile-menu-enter-from,
+.mobile-menu-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* ---- Responsive header breakpoints ---- */
+@media (max-width: 1024px) {
+  .header-inner {
+    gap: 0.85rem;
+  }
+
+  .nav {
+    gap: 1rem;
+  }
+
+  .search-bar {
+    max-width: 280px;
+  }
+}
+
+@media (max-width: 860px) {
+  .header-inner {
+    flex-wrap: wrap;
+  }
+
+  .header-left {
+    gap: 1rem;
+  }
+
+  .search-bar {
+    order: 3;
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .header {
+    padding-block: 0.65rem;
+  }
+
+  .header-inner {
+    flex-wrap: nowrap;
+  }
+
+  .nav,
+  .header-right,
+  .search-bar {
+    display: none;
+  }
+
+  .mobile-menu-toggle {
+    display: flex;
+  }
+
+  .mobile-menu .search-bar {
+    display: flex;
+    order: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo-text {
+    font-size: 0.95rem;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+  }
 }
 </style>
