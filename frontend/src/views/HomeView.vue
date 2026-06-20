@@ -557,6 +557,80 @@ const showHeroImage = (index: number) => {
     bottom: 1.45rem;
   }
 }
+ 
+@media (max-width: 720px) {
+  .home-hero {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .hero-copy {
+    max-width: 100%;
+  }
+
+  .home-hero {
+    padding: 1.5rem;
+    border-radius: 24px;
+  }
+
+  .club-directory {
+    border-radius: 20px;
+  }
+
+  .club-row {
+    padding: 1rem 1.25rem;
+  }
+
+  .club-main {
+    gap: 0.75rem;
+  }
+
+  .club-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+  }
+
+  .top-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.85rem;
+  }
+
+  .top-card {
+    padding: 1.1rem;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .home-hero {
+    padding: 1.25rem;
+    border-radius: 20px;
+  }
+
+  .hero-copy h1 {
+    font-size: 1.6rem;
+  }
+
+  .top-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .club-details {
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .club-avatar.large {
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+  }
+
+  .stat-card {
+    min-width: 140px;
+  }
+}
 .load-more {
   display: flex;
   justify-content: center;
