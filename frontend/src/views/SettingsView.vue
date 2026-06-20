@@ -115,4 +115,21 @@ const clearCache = () => {
   flex-shrink: 0;
 }
 .btn:hover { background: var(--mv-surface-accent); }
+
+@media (max-width: 480px) {
+  .setting-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .setting-row .btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .settings-hero h1 {
+    font-size: 1.5rem;
+  }
+}
 </style>

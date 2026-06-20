@@ -498,4 +498,52 @@ watch(
     align-items: flex-start;
   }
 }
+
+@media (max-width: 720px) {
+  .pending-hero {
+    padding: 1.5rem;
+    border-radius: 22px;
+  }
+
+  .pending-panel {
+    padding: 1.25rem;
+    border-radius: 22px;
+  }
+
+  .member-entry {
+    grid-template-columns: auto 1fr;
+  }
+
+  .pending-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .pending-panel__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .pending-hero h1 {
+    font-size: 1.5rem;
+  }
+
+  .pending-hero,
+  .pending-panel {
+    padding: 1.15rem;
+    border-radius: 18px;
+  }
+
+  .pending-actions {
+    flex-direction: column;
+  }
+
+  .pending-actions .ghost-btn,
+  .pending-actions .primary-btn {
+    width: 100%;
+    text-align: center;
+  }
+}
 </style>
