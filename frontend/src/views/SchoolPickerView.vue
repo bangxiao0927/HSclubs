@@ -173,4 +173,31 @@ onMounted(() => {
   border-color: rgba(239, 68, 68, 0.35);
   color: var(--mv-status-danger);
 }
+
+@media (max-width: 720px) {
+  .school-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .picker-hero h1 {
+    font-size: clamp(1.6rem, 5vw, 2rem);
+  }
+}
+
+@media (max-width: 480px) {
+  .school-card {
+    padding: 1rem 1.25rem;
+    border-radius: 18px;
+  }
+
+  .school-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+  }
+
+  .school-meta h2 {
+    font-size: 1rem;
+  }
+}
 </style>
