@@ -51,4 +51,20 @@ import { RouterLink } from 'vue-router'
 }
 .btn.primary { background: var(--mv-primary-bg); color: var(--mv-primary-text); }
 .btn.ghost { border: 1px solid var(--mv-ghost-border); color: var(--mv-ghost-text); }
+
+@media (max-width: 480px) {
+  .nf-code {
+    font-size: 3.5rem;
+  }
+
+  .nf-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .nf-actions .btn {
+    width: 100%;
+    text-align: center;
+  }
+}
 </style>
