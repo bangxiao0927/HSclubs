@@ -468,4 +468,69 @@ select {
     min-width: 0;
   }
 }
+
+@media (max-width: 720px) {
+  .owner-hero {
+    flex-direction: column;
+    border-radius: 24px;
+    padding: 1.5rem;
+  }
+
+  .hero-copy {
+    flex: 1 1 100%;
+  }
+
+  .hero-actions {
+    align-items: flex-start;
+  }
+
+  .stat-card {
+    min-width: 120px;
+    padding: 0.65rem 0.9rem;
+  }
+
+  .stat-card strong {
+    font-size: 1.2rem;
+  }
+
+  .club-table {
+    border-radius: 20px;
+  }
+
+  .club-row {
+    padding: 1rem 1.1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .owner-hero {
+    padding: 1.15rem;
+    border-radius: 20px;
+  }
+
+  .hero-copy h1 {
+    font-size: 1.5rem;
+  }
+
+  .hero-stats {
+    gap: 0.5rem;
+  }
+
+  .stat-card {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 0;
+  }
+
+  .row-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .row-actions .ghost-btn,
+  .row-actions .primary-btn {
+    width: 100%;
+    text-align: center;
+  }
+}
 </style>
