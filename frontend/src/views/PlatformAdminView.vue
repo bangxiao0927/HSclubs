@@ -385,4 +385,94 @@ const handleCreate = async () => {
 .form-feedback { margin: 0.5rem 0 0; font-size: 0.9rem; }
 .form-feedback.error { color: var(--mv-status-danger); }
 .form-feedback.success { color: var(--mv-status-success); }
+
+@media (max-width: 720px) {
+  .admin-hero {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .hero-actions {
+    width: 100%;
+  }
+
+  .hero-actions .btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .create-form {
+    padding: 1.25rem;
+    border-radius: 20px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .invite-section {
+    padding: 1.25rem;
+    border-radius: 20px;
+  }
+
+  .invite-form {
+    flex-direction: column;
+  }
+
+  .invite-form select,
+  .invite-form input {
+    width: 100%;
+  }
+
+  .invite-form .btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .school-row {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1.25rem;
+    border-radius: 18px;
+  }
+
+  .school-actions {
+    width: 100%;
+  }
+
+  .school-actions .btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-hero h1 {
+    font-size: 1.5rem;
+  }
+
+  .create-form,
+  .invite-section {
+    padding: 1rem;
+    border-radius: 16px;
+  }
+
+  .school-row {
+    padding: 1rem;
+  }
+
+  .school-meta {
+    gap: 0.5rem;
+  }
+}
 </style>
