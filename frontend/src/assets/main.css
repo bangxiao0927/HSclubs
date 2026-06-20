@@ -61,3 +61,24 @@ a {
   color: var(--mv-text-muted);
   max-width: 720px;
 }
+
+/* ---- Global mobile responsive adjustments ---- */
+@media (max-width: 720px) {
+  :root {
+    --page-padding-inline: 1rem;
+  }
+
+  .section-title {
+    font-size: clamp(1.5rem, 5vw, 2rem);
+  }
+
+  .section-subtitle {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --page-padding-inline: 0.85rem;
+  }
+}
