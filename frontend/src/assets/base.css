@@ -1,5 +1,132 @@
-/* Mountain View color tokens */
+/* Platform color tokens with school-specific overrides */
 :root {
+  --mv-night: #eef4ff;
+  --mv-ink: #f8fbff;
+  --mv-graphite: #dce7f7;
+  --mv-card: #ffffff;
+  --mv-border: rgba(37, 99, 235, 0.16);
+  --mv-border-strong: rgba(37, 99, 235, 0.28);
+  --mv-gold: #2563eb;
+  --mv-gold-soft: rgba(37, 99, 235, 0.12);
+  --mv-text: #0f172a;
+  --mv-text-muted: #475569;
+  --mv-radius: 28px;
+  --app-body-bg:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 32%),
+    radial-gradient(circle at 85% 12%, rgba(14, 165, 233, 0.14), transparent 30%),
+    linear-gradient(180deg, #f8fbff 0%, #eef5ff 58%, #e7effc 100%);
+  --app-body-text: var(--mv-text);
+  --mv-header-bg: rgba(248, 251, 255, 0.86);
+  --mv-header-border: rgba(37, 99, 235, 0.12);
+  --mv-header-shadow: 0 14px 32px rgba(59, 130, 246, 0.12);
+  --mv-logo-text: #0f172a;
+  --mv-nav-text: rgba(15, 23, 42, 0.72);
+  --mv-nav-text-active: #0f172a;
+  --mv-nav-text-hover: #2563eb;
+  --mv-search-bg: rgba(255, 255, 255, 0.92);
+  --mv-search-border: rgba(37, 99, 235, 0.18);
+  --mv-search-text: #0f172a;
+  --mv-search-placeholder: rgba(71, 85, 105, 0.74);
+  --mv-search-icon: rgba(71, 85, 105, 0.84);
+  --mv-profile-border: rgba(37, 99, 235, 0.18);
+  --mv-profile-text: rgba(15, 23, 42, 0.88);
+  --mv-profile-hover-bg: rgba(37, 99, 235, 0.1);
+  --mv-profile-hover-border: rgba(37, 99, 235, 0.32);
+  --mv-ghost-border: rgba(37, 99, 235, 0.22);
+  --mv-ghost-text: rgba(15, 23, 42, 0.86);
+  --mv-primary-bg: #2563eb;
+  --mv-primary-text: #ffffff;
+  --mv-primary-shadow: 0 12px 24px rgba(37, 99, 235, 0.24);
+  --mv-surface-hero: linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(219, 234, 254, 0.92));
+  --mv-surface-hero-strong: linear-gradient(
+    135deg,
+    rgba(219, 234, 254, 0.96),
+    rgba(191, 219, 254, 0.92)
+  );
+  --mv-surface-card: rgba(255, 255, 255, 0.86);
+  --mv-surface-card-strong: rgba(248, 251, 255, 0.96);
+  --mv-surface-soft: rgba(226, 239, 255, 0.72);
+  --mv-surface-muted: rgba(239, 246, 255, 0.74);
+  --mv-surface-accent: rgba(37, 99, 235, 0.1);
+  --mv-surface-danger: rgba(239, 68, 68, 0.12);
+  --mv-text-soft: rgba(15, 23, 42, 0.88);
+  --mv-text-faint: rgba(71, 85, 105, 0.8);
+  --mv-text-dim: rgba(71, 85, 105, 0.66);
+  --mv-status-success: #15803d;
+  --mv-status-danger: #b91c1c;
+  --mv-status-warning: #b45309;
+  --mv-shadow-card: 0 18px 40px rgba(37, 99, 235, 0.12);
+  --mv-shadow-elevated: 0 24px 56px rgba(37, 99, 235, 0.18);
+
+  --color-background: var(--mv-night);
+  --color-background-soft: var(--mv-ink);
+  --color-background-mute: var(--mv-graphite);
+  --color-border: var(--mv-border);
+  --color-border-hover: var(--mv-border-strong);
+  --color-heading: var(--mv-text);
+  --color-text: var(--mv-text);
+  --section-gap: 140px;
+}
+
+:root[data-theme='dark'] {
+  --mv-night: #07111f;
+  --mv-ink: #0b1628;
+  --mv-graphite: #132238;
+  --mv-card: #101b2d;
+  --mv-border: rgba(125, 211, 252, 0.22);
+  --mv-border-strong: rgba(125, 211, 252, 0.42);
+  --mv-gold: #7dd3fc;
+  --mv-gold-soft: rgba(125, 211, 252, 0.12);
+  --mv-text: #f8fafc;
+  --mv-text-muted: #b8c5d6;
+  --app-body-bg:
+    radial-gradient(circle at 15% 15%, rgba(14, 165, 233, 0.22), transparent 42%),
+    radial-gradient(circle at 80% 0%, rgba(37, 99, 235, 0.18), transparent 42%), #07111f;
+  --app-body-text: #f8fafc;
+  --mv-header-bg: rgba(7, 17, 31, 0.9);
+  --mv-header-border: rgba(125, 211, 252, 0.14);
+  --mv-header-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+  --mv-logo-text: #e0f2fe;
+  --mv-nav-text: rgba(248, 250, 252, 0.74);
+  --mv-nav-text-active: #f8fafc;
+  --mv-nav-text-hover: #7dd3fc;
+  --mv-search-bg: rgba(15, 23, 42, 0.86);
+  --mv-search-border: rgba(125, 211, 252, 0.28);
+  --mv-search-text: #f8fafc;
+  --mv-search-placeholder: rgba(226, 232, 240, 0.48);
+  --mv-search-icon: rgba(226, 232, 240, 0.7);
+  --mv-profile-border: rgba(226, 232, 240, 0.2);
+  --mv-profile-text: rgba(248, 250, 252, 0.86);
+  --mv-profile-hover-bg: rgba(125, 211, 252, 0.1);
+  --mv-profile-hover-border: rgba(125, 211, 252, 0.5);
+  --mv-ghost-border: rgba(226, 232, 240, 0.26);
+  --mv-ghost-text: rgba(248, 250, 252, 0.9);
+  --mv-primary-bg: #38bdf8;
+  --mv-primary-text: #082f49;
+  --mv-primary-shadow: 0 10px 20px rgba(56, 189, 248, 0.26);
+  --mv-surface-hero: linear-gradient(125deg, rgba(14, 165, 233, 0.18), rgba(15, 23, 42, 0.92));
+  --mv-surface-hero-strong: linear-gradient(
+    120deg,
+    rgba(14, 165, 233, 0.24),
+    rgba(15, 23, 42, 0.96)
+  );
+  --mv-surface-card: rgba(15, 23, 42, 0.78);
+  --mv-surface-card-strong: rgba(15, 23, 42, 0.9);
+  --mv-surface-soft: rgba(30, 41, 59, 0.62);
+  --mv-surface-muted: rgba(15, 23, 42, 0.58);
+  --mv-surface-accent: rgba(125, 211, 252, 0.14);
+  --mv-surface-danger: rgba(248, 113, 113, 0.12);
+  --mv-text-soft: rgba(248, 250, 252, 0.86);
+  --mv-text-faint: rgba(226, 232, 240, 0.72);
+  --mv-text-dim: rgba(226, 232, 240, 0.6);
+  --mv-status-success: #bbf7d0;
+  --mv-status-danger: #fecaca;
+  --mv-status-warning: #fde68a;
+  --mv-shadow-card: 0 25px 40px rgba(0, 0, 0, 0.28);
+  --mv-shadow-elevated: 0 25px 60px rgba(0, 0, 0, 0.38);
+}
+
+:root[data-school-theme='mvhs'] {
   --mv-night: #ebe1d1;
   --mv-ink: #f2e8d9;
   --mv-graphite: #e3d5bf;
@@ -10,7 +137,6 @@
   --mv-gold-soft: rgba(159, 101, 18, 0.14);
   --mv-text: #1c1917;
   --mv-text-muted: #4f463d;
-  --mv-radius: 28px;
   --app-body-bg:
     radial-gradient(circle at top left, rgba(180, 120, 32, 0.18), transparent 30%),
     linear-gradient(180deg, #f1e7d8 0%, #ebdfcd 55%, #e0d0b8 100%);
@@ -37,7 +163,11 @@
   --mv-primary-text: #fffdf7;
   --mv-primary-shadow: 0 12px 24px rgba(170, 114, 32, 0.26);
   --mv-surface-hero: linear-gradient(135deg, rgba(240, 224, 196, 0.94), rgba(221, 199, 164, 0.94));
-  --mv-surface-hero-strong: linear-gradient(135deg, rgba(233, 214, 184, 0.96), rgba(214, 190, 152, 0.96));
+  --mv-surface-hero-strong: linear-gradient(
+    135deg,
+    rgba(233, 214, 184, 0.96),
+    rgba(214, 190, 152, 0.96)
+  );
   --mv-surface-card: rgba(247, 238, 225, 0.9);
   --mv-surface-card-strong: rgba(241, 231, 216, 0.96);
   --mv-surface-soft: rgba(236, 223, 203, 0.82);
@@ -52,18 +182,9 @@
   --mv-status-warning: #9f6512;
   --mv-shadow-card: 0 18px 40px rgba(120, 90, 40, 0.16);
   --mv-shadow-elevated: 0 24px 56px rgba(120, 90, 40, 0.2);
-
-  --color-background: var(--mv-night);
-  --color-background-soft: var(--mv-ink);
-  --color-background-mute: var(--mv-graphite);
-  --color-border: var(--mv-border);
-  --color-border-hover: var(--mv-border-strong);
-  --color-heading: var(--mv-text);
-  --color-text: var(--mv-text);
-  --section-gap: 140px;
 }
 
-:root[data-theme='dark'] {
+:root[data-theme='dark'][data-school-theme='mvhs'] {
   --mv-night: #030303;
   --mv-ink: #080808;
   --mv-graphite: #111111;
@@ -76,8 +197,7 @@
   --mv-text-muted: #a3a3a3;
   --app-body-bg:
     radial-gradient(circle at 15% 15%, rgba(250, 204, 21, 0.25), transparent 50%),
-    radial-gradient(circle at 80% 0%, rgba(234, 179, 8, 0.18), transparent 45%),
-    #050505;
+    radial-gradient(circle at 80% 0%, rgba(234, 179, 8, 0.18), transparent 45%), #050505;
   --app-body-text: #fefce8;
   --mv-header-bg: rgba(5, 5, 5, 0.9);
   --mv-header-border: rgba(250, 204, 21, 0.15);

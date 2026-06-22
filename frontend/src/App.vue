@@ -58,6 +58,17 @@ watch(
   { immediate: true },
 )
 
+watch(
+  schoolSlug,
+  (slug) => {
+    if (slug.toLowerCase() === 'mvhs') {
+      document.documentElement.dataset.schoolTheme = 'mvhs'
+    } else {
+      delete document.documentElement.dataset.schoolTheme
+    }
+  },
+  { immediate: true },
+)
 
 const navHome = computed(() => (schoolSlug.value ? `/schools/${schoolSlug.value}` : '/'))
 const navCategories = computed(() =>
