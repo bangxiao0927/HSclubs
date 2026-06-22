@@ -38,6 +38,15 @@ const schoolSlug = computed(() => {
   return typeof slug === 'string' ? slug : ''
 })
 
+const isSchoolRoute = computed(() => Boolean(schoolSlug.value))
+const activeSchool = computed(() => (isSchoolRoute.value ? currentSchool.value : null))
+const logoText = computed(
+  () => activeSchool.value?.shortName || activeSchool.value?.schoolName || 'HS Clubs',
+)
+const searchPlaceholder = computed(() =>
+  isSchoolRoute.value ? 'Search your favorite clubs' : 'Search schools and club directories',
+)
+
 // Sync school context from route
 watch(
   schoolSlug,
@@ -48,6 +57,7 @@ watch(
   },
   { immediate: true },
 )
+
 
 const navHome = computed(() => (schoolSlug.value ? `/schools/${schoolSlug.value}` : '/'))
 const navCategories = computed(() =>
@@ -65,6 +75,11 @@ const navProfile = computed(() =>
 
 const handleLogout = () => {
   authStore.logout()
+}
+
+const handleMobileLogout = () => {
+  closeMobileMenu()
+  handleLogout()
 }
 
 const theme = ref<'light' | 'dark'>('light')
@@ -123,20 +138,17 @@ const submitSearch = () => {
     })
   } else {
     void router.push({
-      name: q ? 'club-search' : 'home',
+      name: q ? 'school-picker' : 'home',
       query: q ? { q } : {},
     })
   }
 }
 
-watch(
-  isAuthenticated,
-  (authenticated, previous) => {
-    if (authenticated && !previous) {
-      void authStore.refreshUser()
-    }
-  },
-)
+watch(isAuthenticated, (authenticated, previous) => {
+  if (authenticated && !previous) {
+    void authStore.refreshUser()
+  }
+})
 
 watch(theme, (value) => applyTheme(value), { immediate: true })
 
@@ -155,9 +167,9 @@ watch(
       <div class="header-inner page-shell">
         <div class="header-left">
           <div class="logo">
-            <RouterLink to="/schools" class="logo-link">
+            <RouterLink to="/" class="logo-link">
               <img class="logo-icon" src="/android-chrome-512x512.png" alt="HS Clubs logo" />
-              <span class="logo-text">{{ currentSchool?.shortName || currentSchool?.schoolName || 'HS Clubs' }}</span>
+              <span class="logo-text">{{ logoText }}</span>
             </RouterLink>
           </div>
           <nav class="nav">
@@ -165,29 +177,45 @@ watch(
               :to="navHome"
               class="nav-link"
               :class="{ active: route.name === 'home' || route.name === 'school-home' }"
-            >Home</RouterLink>
+              >Home</RouterLink
+            >
             <RouterLink
+              v-if="!isSchoolRoute"
+              to="/schools"
+              class="nav-link"
+              :class="{ active: route.name === 'school-picker' }"
+              >Schools</RouterLink
+            >
+            <RouterLink
+              v-if="isSchoolRoute"
               :to="navCategories"
               class="nav-link"
               :class="{ active: route.name === 'about' || route.name === 'school-about' }"
-            >Category</RouterLink>
+              >Category</RouterLink
+            >
             <RouterLink
+              v-if="isSchoolRoute"
               :to="navCalendar"
               class="nav-link"
               :class="{ active: route.name === 'calendar' || route.name === 'school-calendar' }"
-            >Calendar</RouterLink>
+              >Calendar</RouterLink
+            >
             <RouterLink
               :to="navAdmin"
               v-if="currentUser?.isOwner"
               class="nav-link"
-              :class="{ active: route.name === 'owner-clubs' || route.name === 'school-owner-clubs' }"
-            >Admin</RouterLink>
+              :class="{
+                active: route.name === 'owner-clubs' || route.name === 'school-owner-clubs',
+              }"
+              >Admin</RouterLink
+            >
             <RouterLink
               v-if="currentUser?.isOwner"
               to="/platform/admin"
               class="nav-link"
               :class="{ active: route.name === 'platform-admin' }"
-            >Platform</RouterLink>
+              >Platform</RouterLink
+            >
           </nav>
         </div>
 
@@ -195,11 +223,11 @@ watch(
           <input
             v-model="searchQuery"
             type="search"
-            placeholder="Search your favorite clubs"
+            :placeholder="searchPlaceholder"
             class="search-input"
           />
           <button type="submit" class="search-button" aria-label="Search clubs">
-          <span class="search-icon">🔍</span>
+            <span class="search-icon">🔍</span>
           </button>
         </form>
 
@@ -215,11 +243,9 @@ watch(
         </button>
 
         <div class="header-right">
-          <RouterLink
-            v-if="schoolSlug"
-            to="/schools"
-            class="nav-link school-switch"
-          >Change school</RouterLink>
+          <RouterLink v-if="schoolSlug" to="/schools" class="nav-link school-switch"
+            >Change school</RouterLink
+          >
           <button type="button" class="theme-toggle" @click="toggleTheme">
             <span class="theme-icon" aria-hidden="true">{{ theme === 'light' ? '🌙' : '☀️' }}</span>
             <span>{{ themeLabel }}</span>
@@ -232,12 +258,9 @@ watch(
             <RouterLink to="/auth?intent=login" class="auth-btn ghost">Log in</RouterLink>
             <RouterLink to="/auth?intent=register" class="auth-btn primary">Register</RouterLink>
           </div>
-          <button
-            v-else
-            type="button"
-            class="auth-btn ghost logout-btn"
-            @click="handleLogout"
-          >Log out</button>
+          <button v-else type="button" class="auth-btn ghost logout-btn" @click="handleLogout">
+            Log out
+          </button>
         </div>
       </div>
 
@@ -247,7 +270,7 @@ watch(
             <input
               v-model="searchQuery"
               type="search"
-              placeholder="Search your favorite clubs"
+              :placeholder="searchPlaceholder"
               class="search-input"
             />
             <button type="submit" class="search-button" aria-label="Search clubs">
@@ -255,21 +278,44 @@ watch(
             </button>
           </form>
           <nav class="mobile-nav">
-            <RouterLink :to="navHome" class="mobile-nav-link" @click="closeMobileMenu">Home</RouterLink>
-            <RouterLink :to="navCategories" class="mobile-nav-link" @click="closeMobileMenu">Category</RouterLink>
-            <RouterLink :to="navCalendar" class="mobile-nav-link" @click="closeMobileMenu">Calendar</RouterLink>
+            <RouterLink :to="navHome" class="mobile-nav-link" @click="closeMobileMenu"
+              >Home</RouterLink
+            >
+            <RouterLink
+              v-if="!isSchoolRoute"
+              to="/schools"
+              class="mobile-nav-link"
+              @click="closeMobileMenu"
+              >Schools</RouterLink
+            >
+            <RouterLink
+              v-if="isSchoolRoute"
+              :to="navCategories"
+              class="mobile-nav-link"
+              @click="closeMobileMenu"
+              >Category</RouterLink
+            >
+            <RouterLink
+              v-if="isSchoolRoute"
+              :to="navCalendar"
+              class="mobile-nav-link"
+              @click="closeMobileMenu"
+              >Calendar</RouterLink
+            >
             <RouterLink
               v-if="currentUser?.isOwner"
               :to="navAdmin"
               class="mobile-nav-link"
               @click="closeMobileMenu"
-            >Admin</RouterLink>
+              >Admin</RouterLink
+            >
             <RouterLink
               v-if="currentUser?.isOwner"
               to="/platform/admin"
               class="mobile-nav-link"
               @click="closeMobileMenu"
-            >Platform</RouterLink>
+              >Platform</RouterLink
+            >
           </nav>
           <div class="mobile-actions">
             <RouterLink
@@ -277,17 +323,29 @@ watch(
               to="/schools"
               class="mobile-nav-link"
               @click="closeMobileMenu"
-            >Change school</RouterLink>
+              >Change school</RouterLink
+            >
             <button type="button" class="mobile-nav-link" @click="toggleTheme">
               {{ themeLabel }}
             </button>
             <template v-if="isAuthenticated">
-              <RouterLink :to="navProfile" class="mobile-nav-link" @click="closeMobileMenu">Profile</RouterLink>
-              <button type="button" class="mobile-nav-link" @click="closeMobileMenu(); handleLogout()">Log out</button>
+              <RouterLink :to="navProfile" class="mobile-nav-link" @click="closeMobileMenu"
+                >Profile</RouterLink
+              >
+              <button type="button" class="mobile-nav-link" @click="handleMobileLogout">
+                Log out
+              </button>
             </template>
             <template v-else>
-              <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu">Log in</RouterLink>
-              <RouterLink to="/auth?intent=register" class="auth-btn primary" @click="closeMobileMenu">Register</RouterLink>
+              <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
+                >Log in</RouterLink
+              >
+              <RouterLink
+                to="/auth?intent=register"
+                class="auth-btn primary"
+                @click="closeMobileMenu"
+                >Register</RouterLink
+              >
             </template>
           </div>
         </div>
@@ -520,7 +578,9 @@ watch(
   height: 2px;
   border-radius: 2px;
   background: var(--mv-ghost-text);
-  transition: transform 0.25s ease, opacity 0.2s ease;
+  transition:
+    transform 0.25s ease,
+    opacity 0.2s ease;
 }
 
 .hamburger::before,
@@ -594,7 +654,9 @@ watch(
 
 .mobile-menu-enter-active,
 .mobile-menu-leave-active {
-  transition: max-height 0.3s ease, opacity 0.25s ease;
+  transition:
+    max-height 0.3s ease,
+    opacity 0.25s ease;
   max-height: 500px;
 }
 
