@@ -44,6 +44,10 @@ export const useSchoolStore = defineStore('school', () => {
     }
   }
 
+  const clearCurrentSchool = () => {
+    currentSchool.value = null
+  }
+
   return {
     schools,
     currentSchool,
@@ -53,5 +57,6 @@ export const useSchoolStore = defineStore('school', () => {
     hasLoaded,
     loadSchools,
     setCurrentSchoolBySlug,
+    clearCurrentSchool,
   }
 })

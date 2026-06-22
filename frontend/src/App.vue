@@ -53,6 +53,8 @@ watch(
   (slug) => {
     if (slug && slug !== currentSchoolSlug.value) {
       schoolStore.setCurrentSchoolBySlug(slug)
+    } else if (!slug) {
+      schoolStore.clearCurrentSchool()
     }
   },
   { immediate: true },
