@@ -36,4 +36,6 @@ build/
 *.log
 .mvn
 frontend/node_modules
+frontend/dist/
+frontend/.eslintcache
 .env
