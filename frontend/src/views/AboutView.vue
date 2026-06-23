@@ -395,4 +395,57 @@ const activeCategory = computed(
     justify-content: space-between;
   }
 }
+
+@media (max-width: 720px) {
+  .overview-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .overview-card {
+    padding: 0.85rem 0.9rem;
+    border-radius: 18px;
+  }
+
+  .overview-card strong {
+    font-size: 1.3rem;
+  }
+
+  .top-grid {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+
+  .top-card {
+    padding: 1.1rem;
+    border-radius: 18px;
+  }
+
+  .panel-hero {
+    padding: 1.35rem;
+  }
+
+  .category-panel {
+    border-radius: 20px;
+  }
+
+  .clubs-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .overview-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .panel-hero {
+    padding: 1.1rem;
+  }
+
+  .panel-icon {
+    font-size: 1.6rem;
+  }
+}
 </style>

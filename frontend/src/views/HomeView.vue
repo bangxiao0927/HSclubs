@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 
+import SkeletonLoader from '../components/SkeletonLoader.vue'
 import { fetchClubs } from '../services/clubService'
+import { useSchoolStore } from '../stores/school'
 import type { Club } from '../types/club'
 import { clubImage } from '../utils/clubImages'
 
@@ -11,10 +14,14 @@ const loading = ref(true)
 const error = ref('')
 
 const route = useRoute()
+const schoolStore = useSchoolStore()
+const { currentSchool } = storeToRefs(schoolStore)
 const schoolSlug = computed(() => {
   const slug = route.params.schoolSlug
   return typeof slug === 'string' ? slug : undefined
 })
+const schoolDisplayName = computed(() => currentSchool.value?.schoolName || 'Your school')
+const schoolShortName = computed(() => currentSchool.value?.shortName || schoolDisplayName.value)
 const currentHeroImageIndex = ref(0)
 let heroInterval: number | undefined
 
@@ -42,7 +49,11 @@ const loadMore = async () => {
   loadingMore.value = true
   page.value++
   try {
-    const moreClubs = await fetchClubs({ schoolSlug: schoolSlug.value, page: page.value, size: pageSize })
+    const moreClubs = await fetchClubs({
+      schoolSlug: schoolSlug.value,
+      page: page.value,
+      size: pageSize,
+    })
     clubs.value = [...clubs.value, ...moreClubs]
     hasMore.value = moreClubs.length >= pageSize
   } catch {
@@ -52,7 +63,14 @@ const loadMore = async () => {
   }
 }
 
-onMounted(loadClubs)
+watch(
+  schoolSlug,
+  () => {
+    page.value = 0
+    void loadClubs()
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   startHeroInterval()
@@ -66,11 +84,7 @@ const topClubs = computed(() =>
   [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4),
 )
 
-const heroImages = [
-  '/hsclubs1.jpg',
-  '/hsclubs2.png',
-  '/hsclubs3.png',
-]
+const heroImages = ['/hsclubs1.jpg', '/hsclubs2.png', '/hsclubs3.png']
 
 const stopHeroInterval = () => {
   if (heroInterval !== undefined) {
@@ -90,17 +104,17 @@ const showHeroImage = (index: number) => {
   currentHeroImageIndex.value = index
   startHeroInterval()
 }
-
 </script>
 
 <template>
   <div class="home">
     <section class="home-hero page-shell">
       <div class="hero-copy">
-        <p class="section-label">Mountain View · Clubs</p>
-        <h1>Club directory</h1>
+        <p class="section-label">{{ schoolShortName }} · Clubs</p>
+        <h1>{{ schoolDisplayName }} club directory</h1>
         <p>
-          Browse all active clubs, jump into details, and use the search bar above when you already know the name or topic you want.
+          Browse all active clubs, jump into details, and use the search bar above when you already
+          know the name or topic you want.
         </p>
         <div class="stat-card">
           <span class="stat-label">Active clubs</span>
@@ -144,7 +158,13 @@ const showHeroImage = (index: number) => {
         <p class="section-subtitle">Sorted automatically from roster submissions.</p>
       </div>
       <div v-if="topClubs.length" class="top-grid">
-        <RouterLink v-for="club in topClubs" :key="club.id" :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`" custom v-slot="{ navigate }">
+        <RouterLink
+          v-for="club in topClubs"
+          :key="club.id"
+          :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`"
+          custom
+          v-slot="{ navigate }"
+        >
           <article
             class="top-card"
             role="link"
@@ -174,10 +194,19 @@ const showHeroImage = (index: number) => {
       <div class="section-heading">
         <p class="section-label">Directory</p>
         <h2>All clubs</h2>
-        <p class="section-subtitle">Use the header search to open a separate results page for club names, advisors, or keywords.</p>
+        <p class="section-subtitle">
+          Use the header search to open a separate results page for club names, advisors, or
+          keywords.
+        </p>
       </div>
       <div v-if="clubs.length" class="club-directory">
-        <RouterLink v-for="club in clubs" :key="club.id" :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`" custom v-slot="{ navigate }">
+        <RouterLink
+          v-for="club in clubs"
+          :key="club.id"
+          :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`"
+          custom
+          v-slot="{ navigate }"
+        >
           <div
             class="club-row"
             role="link"
@@ -281,7 +310,9 @@ const showHeroImage = (index: number) => {
 .hero-image-frame :deep(.hero-slide-leave-active) {
   position: absolute;
   inset: 1rem;
-  transition: opacity 0.45s ease, transform 0.45s ease;
+  transition:
+    opacity 0.45s ease,
+    transform 0.45s ease;
 }
 
 .hero-image {
@@ -319,7 +350,9 @@ const showHeroImage = (index: number) => {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.45);
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
 }
 
 .hero-dot.active {
@@ -396,7 +429,9 @@ const showHeroImage = (index: number) => {
   color: inherit;
   text-decoration: none;
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
   content-visibility: auto;
   contain-intrinsic-size: 260px;
 }
@@ -438,7 +473,6 @@ const showHeroImage = (index: number) => {
   border-color: var(--mv-border-strong);
   transform: translateY(-2px);
 }
-
 
 .member-count {
   color: var(--mv-gold);
@@ -514,7 +548,6 @@ const showHeroImage = (index: number) => {
   color: var(--mv-text-faint);
 }
 
-
 .badge {
   padding: 0.2rem 0.75rem;
   border-radius: 999px;
@@ -557,6 +590,80 @@ const showHeroImage = (index: number) => {
     bottom: 1.45rem;
   }
 }
+
+@media (max-width: 720px) {
+  .home-hero {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .hero-copy {
+    max-width: 100%;
+  }
+
+  .home-hero {
+    padding: 1.5rem;
+    border-radius: 24px;
+  }
+
+  .club-directory {
+    border-radius: 20px;
+  }
+
+  .club-row {
+    padding: 1rem 1.25rem;
+  }
+
+  .club-main {
+    gap: 0.75rem;
+  }
+
+  .club-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+  }
+
+  .top-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.85rem;
+  }
+
+  .top-card {
+    padding: 1.1rem;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .home-hero {
+    padding: 1.25rem;
+    border-radius: 20px;
+  }
+
+  .hero-copy h1 {
+    font-size: 1.6rem;
+  }
+
+  .top-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .club-details {
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .club-avatar.large {
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+  }
+
+  .stat-card {
+    min-width: 140px;
+  }
+}
 .load-more {
   display: flex;
   justify-content: center;
@@ -571,6 +678,11 @@ const showHeroImage = (index: number) => {
   background: transparent;
   color: var(--mv-ghost-text);
 }
-.load-more .btn:hover { background: var(--mv-surface-accent); }
-.load-more .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.load-more .btn:hover {
+  background: var(--mv-surface-accent);
+}
+.load-more .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 </style>

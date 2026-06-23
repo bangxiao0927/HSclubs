@@ -632,4 +632,48 @@ function formatWeekDate(day: string) {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 720px) {
+  .calendar-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-card {
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .summary-card p {
+    font-size: 0.8rem;
+  }
+
+  .summary-card strong {
+    font-size: 1.3rem;
+  }
+
+  .calendar-subtitle {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-title {
+    font-size: 1.6rem;
+  }
+
+  .event-card {
+    padding: 0.75rem;
+  }
+
+  .event-title-row h3 {
+    font-size: 0.9rem;
+  }
+
+  .event-detail {
+    font-size: 0.85rem;
+  }
+}
 </style>

@@ -784,4 +784,80 @@ textarea {
 }
 .upload-btn:hover { background: var(--mv-surface-accent); }
 .upload-error { color: var(--mv-status-danger); font-size: 0.85rem; margin: 0.25rem 0 0; }
+
+@media (max-width: 720px) {
+  .admin-hero {
+    flex-direction: column;
+    padding: 1.5rem;
+    border-radius: 22px;
+  }
+
+  .admin-hero .hero-side {
+    align-items: flex-start;
+  }
+
+  .admin-form {
+    padding: 1.25rem;
+    border-radius: 22px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .toolbar-actions {
+    width: 100%;
+  }
+
+  .toolbar-actions .ghost-btn,
+  .toolbar-actions .primary-btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .insights-panel,
+  .roster-panel {
+    padding: 1.25rem;
+    border-radius: 20px;
+  }
+
+  .member-entry {
+    grid-template-columns: auto 1fr;
+  }
+
+  .member-email {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-hero {
+    padding: 1.15rem;
+    border-radius: 18px;
+  }
+
+  .admin-hero h1 {
+    font-size: 1.5rem;
+  }
+
+  .club-avatar.xlarge {
+    width: 80px;
+    height: 80px;
+    border-radius: 20px;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+}
 </style>

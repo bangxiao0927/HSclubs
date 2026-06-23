@@ -45,8 +45,8 @@ a {
   font-size: 0.8rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  border: 1px solid rgba(250, 204, 21, 0.45);
-  background: rgba(250, 204, 21, 0.08);
+  border: 1px solid var(--mv-border-strong);
+  background: var(--mv-surface-accent);
   color: var(--mv-gold);
 }
 
@@ -60,4 +60,25 @@ a {
   margin-top: 0.75rem;
   color: var(--mv-text-muted);
   max-width: 720px;
+}
+
+/* ---- Global mobile responsive adjustments ---- */
+@media (max-width: 720px) {
+  :root {
+    --page-padding-inline: 1rem;
+  }
+
+  .section-title {
+    font-size: clamp(1.5rem, 5vw, 2rem);
+  }
+
+  .section-subtitle {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --page-padding-inline: 0.85rem;
+  }
 }

@@ -444,4 +444,48 @@ const handleGraduationYearSave = async () => {
 .gate-card h1 { margin: 0.5rem 0; }
 .gate-actions { justify-content: center; }
 .gate-benefits { display: flex; flex-direction: column; gap: 0.5rem; color: var(--mv-text-muted); }
+
+@media (max-width: 720px) {
+  .profile-hero {
+    flex-direction: column;
+    padding: 1.5rem;
+    border-radius: 24px;
+  }
+
+  .hero-copy {
+    max-width: 100%;
+  }
+
+  .user-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    padding: 1.25rem;
+    border-radius: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-copy h1 {
+    font-size: 1.5rem;
+  }
+
+  .cta-group {
+    flex-direction: column;
+  }
+
+  .cta-group .btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .gate-actions {
+    flex-direction: column;
+  }
+
+  .gate-actions .btn {
+    width: 100%;
+  }
+}
 </style>

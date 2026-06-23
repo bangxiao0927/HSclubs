@@ -586,4 +586,80 @@ watch(
     text-align: center;
   }
 }
+
+@media (max-width: 720px) {
+  .club-hero {
+    padding: 1.5rem;
+    border-radius: 24px;
+  }
+
+  .hero-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .hero-side {
+    align-items: flex-start;
+  }
+
+  .club-avatar.xlarge {
+    width: 88px;
+    height: 88px;
+    border-radius: 22px;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .stat-card {
+    padding: 1rem;
+    border-radius: 18px;
+  }
+
+  .stat-value {
+    font-size: 1rem;
+  }
+
+  .spotlight {
+    padding: 1.25rem;
+    border-radius: 22px;
+  }
+
+  .related {
+    padding: 1.25rem;
+    border-radius: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .club-hero {
+    padding: 1.15rem;
+    border-radius: 20px;
+  }
+
+  .club-hero h1 {
+    font-size: 1.6rem;
+  }
+
+  .hero-meta {
+    font-size: 0.85rem;
+  }
+
+  .hero-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .apply-btn,
+  .cancel-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .back-link {
+    font-size: 0.9rem;
+  }
+}
 </style>

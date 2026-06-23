@@ -279,4 +279,38 @@ const filteredClubs = computed(() =>
     border-radius: 18px;
   }
 }
+
+@media (max-width: 480px) {
+  .results-hero {
+    padding: 1.25rem;
+    border-radius: 24px;
+  }
+
+  .results-copy h1 {
+    font-size: 1.5rem;
+  }
+
+  .result-card {
+    padding: 1rem;
+  }
+
+  .club-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+  }
+
+  .result-copy h2 {
+    font-size: 1.05rem;
+  }
+
+  .result-copy p {
+    -webkit-line-clamp: 2;
+    font-size: 0.9rem;
+  }
+
+  .badge {
+    font-size: 0.8rem;
+  }
+}
 </style>
