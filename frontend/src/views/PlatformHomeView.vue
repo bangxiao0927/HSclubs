@@ -329,7 +329,7 @@ onMounted(() => {
   justify-content: center;
   flex-shrink: 0;
   background: var(--school-accent);
-  color: var(--school-accent);
+  color: #fff;
   border: 1px solid color-mix(in srgb, var(--school-accent) 38%, transparent);
   font-size: 1.5rem;
   font-weight: 800;
