@@ -335,11 +335,11 @@ onMounted(() => {
   font-weight: 800;
 }
 
-
 @supports (background: color-mix(in srgb, #fff 50%, #000)) {
   .school-avatar {
     background: color-mix(in srgb, var(--school-accent) 16%, transparent);
     color: var(--school-accent);
+    border: 1px solid color-mix(in srgb, var(--school-accent) 38%, transparent);
   }
 }
 
