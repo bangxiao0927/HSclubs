@@ -39,3 +39,5 @@ frontend/node_modules
 frontend/dist/
 frontend/.eslintcache
 .env
+
+CODET.md
