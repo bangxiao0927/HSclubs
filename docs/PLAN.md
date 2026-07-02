@@ -1,4 +1,7 @@
-# HSclubs — Multi‑School Platform Plan
+# HSclubs - Long-Term Multi-School Platform Plan
+
+> Status: reference material. For current active work, start with README.md, docs/REPO_STRATEGY.md, docs/FIRST_REPO_ROADMAP.md, and docs/DEVELOPMENT_SEQUENCE.md. This file preserves the broader platform plan, but it is not the current execution order for the 1st repo.
+
 
 ## 1. Vision
 
