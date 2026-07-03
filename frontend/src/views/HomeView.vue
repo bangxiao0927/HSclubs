@@ -8,6 +8,7 @@ import { fetchClubs } from '../services/clubService'
 import { useSchoolStore } from '../stores/school'
 import type { Club } from '../types/club'
 import { clubImage } from '../utils/clubImages'
+import { sampleClubs, schoolTemplate } from '../config/schoolTemplate'
 
 const clubs = ref<Club[]>([])
 const loading = ref(true)
@@ -20,8 +21,9 @@ const schoolSlug = computed(() => {
   const slug = route.params.schoolSlug
   return typeof slug === 'string' ? slug : undefined
 })
-const schoolDisplayName = computed(() => currentSchool.value?.schoolName || 'Your school')
-const schoolShortName = computed(() => currentSchool.value?.shortName || schoolDisplayName.value)
+const schoolDisplayName = computed(() => currentSchool.value?.schoolName || schoolTemplate.schoolName)
+const schoolShortName = computed(() => currentSchool.value?.shortName || schoolTemplate.shortName)
+const usingPreviewData = ref(false)
 const currentHeroImageIndex = ref(0)
 let heroInterval: number | undefined
 
@@ -37,8 +39,11 @@ const loadClubs = async () => {
     const newClubs = await fetchClubs({ schoolSlug: schoolSlug.value, page: 0, size: pageSize })
     clubs.value = newClubs
     hasMore.value = newClubs.length >= pageSize
+    usingPreviewData.value = false
   } catch {
-    error.value = 'Failed to load clubs'
+    clubs.value = sampleClubs
+    hasMore.value = false
+    usingPreviewData.value = true
   } finally {
     loading.value = false
   }
@@ -111,14 +116,17 @@ const showHeroImage = (index: number) => {
     <section class="home-hero page-shell">
       <div class="hero-copy">
         <p class="section-label">{{ schoolShortName }} · Clubs</p>
-        <h1>{{ schoolDisplayName }} club directory</h1>
-        <p>
-          Browse all active clubs, jump into details, and use the search bar above when you already
-          know the name or topic you want.
-        </p>
-        <div class="stat-card">
-          <span class="stat-label">Active clubs</span>
-          <p class="stat-value">{{ clubs.length }}</p>
+        <h1>{{ schoolDisplayName }} club directory template</h1>
+        <p>{{ schoolTemplate.intro }}</p>
+        <div class="hero-stats-inline">
+          <div class="stat-card">
+            <span class="stat-label">Active clubs</span>
+            <p class="stat-value">{{ clubs.length }}</p>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Template status</span>
+            <p class="stat-value">{{ usingPreviewData ? 'Preview' : 'Live' }}</p>
+          </div>
         </div>
       </div>
       <div class="hero-visual">
@@ -150,12 +158,15 @@ const showHeroImage = (index: number) => {
 
     <section v-if="loading" class="page-shell"><SkeletonLoader :count="4" /></section>
     <section v-else-if="error" class="status-banner error">{{ error }}</section>
+    <section v-else-if="usingPreviewData" class="status-banner">
+      Showing template sample clubs until the school API is connected.
+    </section>
 
     <section class="top-clubs-section page-shell">
       <div class="section-heading">
         <p class="section-label">Top enrollment</p>
         <h2>Highest membership clubs</h2>
-        <p class="section-subtitle">Sorted automatically from roster submissions.</p>
+        <p class="section-subtitle">Use this area to highlight the most active clubs at your school.</p>
       </div>
       <div v-if="topClubs.length" class="top-grid">
         <RouterLink
@@ -195,8 +206,8 @@ const showHeroImage = (index: number) => {
         <p class="section-label">Directory</p>
         <h2>All clubs</h2>
         <p class="section-subtitle">
-          Use the header search to open a separate results page for club names, advisors, or
-          keywords.
+          Replace the sample clubs with your school data, then students can browse by name,
+          advisor, meeting time, or keyword.
         </p>
       </div>
       <div v-if="clubs.length" class="club-directory">
@@ -286,6 +297,12 @@ const showHeroImage = (index: number) => {
   border: 1px solid var(--mv-border);
   background: var(--mv-surface-soft);
   padding: 1.25rem;
+}
+
+.hero-stats-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
 }
 
 .hero-visual {
