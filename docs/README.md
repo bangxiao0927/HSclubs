@@ -16,6 +16,10 @@ Use these docs in this order when planning work for the 1st repo.
    - Gives the recommended build order.
    - Defines exit checks before moving to later phases or later repos.
 
+4. [Execution Criteria](EXECUTION_CRITERIA.md)
+   - Defines acceptance criteria, issue breakdown, and verification checklists.
+   - Use this when turning roadmap items into development tasks.
+
 ## Reference Docs
 
 - [API Reference](API.md) - current backend API shape.
