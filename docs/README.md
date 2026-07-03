@@ -22,7 +22,7 @@ Use these docs in this order when planning work for the 1st repo.
 
 ## Reference Docs
 
-- [API Reference](API.md) - current backend API shape.
+- [API Reference](API.md) - current backend API shape. The **API Plan (P0.3)** section defines school-scoped routes as the primary path and lists compatibility-only legacy routes.
 - [Deployment Notes](DEPLOYMENT.md) - environment and deployment setup.
 - [Schema Migration](schema-migration.sql) - database migration reference.
 - [Original Multi-School Plan](PLAN.md) - long-term platform background, not the current execution order.
