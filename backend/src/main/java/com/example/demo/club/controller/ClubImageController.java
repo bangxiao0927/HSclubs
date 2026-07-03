@@ -1,10 +1,15 @@
 package com.example.demo.club.controller;
 
+import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.service.ClubService;
 import com.example.demo.school.model.School;
+import com.example.demo.school.service.SchoolUserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,12 +29,20 @@ import java.util.UUID;
 @RequestMapping("/api/schools/{schoolSlug}/clubs")
 public class ClubImageController {
 
+    private static final long MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
     private final ClubService clubService;
+    private final SchoolUserService schoolUserService;
+    private final SecurityProperties securityProperties;
     private final Path uploadDir;
 
     public ClubImageController(ClubService clubService,
+                               SchoolUserService schoolUserService,
+                               SecurityProperties securityProperties,
                                @Value("${app.upload.dir:uploads}") String uploadDirPath) {
         this.clubService = clubService;
+        this.schoolUserService = schoolUserService;
+        this.securityProperties = securityProperties;
         this.uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.uploadDir);
@@ -41,23 +54,25 @@ public class ClubImageController {
     @PostMapping("/{clubSlugOrId}/image")
     public Map<String, String> uploadImage(@PathVariable String schoolSlug,
                                            @PathVariable String clubSlugOrId,
-                                           @RequestParam("file") MultipartFile file) {
-        School school = clubService.resolveSchool(schoolSlug);
-        Club club = resolveClub(school.getId(), clubSlugOrId);
+                                           @RequestParam("file") MultipartFile file,
+                                           Authentication authentication) {
+        School school = resolveSchoolSafe(schoolSlug);
+        Club club = requireManageAccess(school, clubSlugOrId, authentication);
 
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is empty");
         }
-
-        String originalName = file.getOriginalFilename();
-        String ext = "";
-        if (originalName != null && originalName.contains(".")) {
-            ext = originalName.substring(originalName.lastIndexOf('.'));
+        if (file.getSize() > MAX_IMAGE_BYTES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Image must be 5MB or smaller");
         }
-        String filename = UUID.randomUUID() + ext;
+
+        String filename = UUID.randomUUID() + resolveImageExtension(file.getContentType());
 
         try {
-            Path target = uploadDir.resolve(filename);
+            Path target = uploadDir.resolve(filename).normalize();
+            if (!target.startsWith(uploadDir)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid file name");
+            }
             file.transferTo(target);
 
             String imageUrl = "/uploads/" + filename;
@@ -70,16 +85,83 @@ public class ClubImageController {
         }
     }
 
-    private Club resolveClub(Long schoolId, String clubSlugOrId) {
+    private String resolveImageExtension(String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Image content type is required");
+        }
+        return switch (contentType.toLowerCase()) {
+            case "image/jpeg", "image/jpg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/webp" -> ".webp";
+            case "image/gif" -> ".gif";
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported image type");
+        };
+    }
+
+    private Club requireManageAccess(School school,
+                                     String clubSlugOrId,
+                                     Authentication authentication) {
+        String viewerEmail = resolveViewerEmail(authentication);
+        if (viewerEmail == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        Club club = resolveClub(school.getId(), clubSlugOrId, viewerEmail);
+        boolean canManage = Boolean.TRUE.equals(club.getCanManage())
+            || isPlatformOwner(authentication)
+            || isSchoolAdmin(school.getId(), viewerEmail);
+        if (!canManage) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to update this club image");
+        }
+        return club;
+    }
+
+    private School resolveSchoolSafe(String schoolSlug) {
+        try {
+            return clubService.resolveSchool(schoolSlug);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
+    private String resolveViewerEmail(Authentication authentication) {
+        if (!(authentication instanceof OAuth2AuthenticationToken token)) {
+            return null;
+        }
+        OAuth2User principal = token.getPrincipal();
+        if (principal == null) {
+            return null;
+        }
+        Object email = principal.getAttributes().get("email");
+        return (email instanceof String str && !str.isBlank()) ? str : null;
+    }
+
+    private boolean isPlatformOwner(Authentication authentication) {
+        String email = resolveViewerEmail(authentication);
+        if (email == null || securityProperties.getOwnerEmails() == null) {
+            return false;
+        }
+        return securityProperties.getOwnerEmails().stream()
+            .filter(item -> item != null && !item.isBlank())
+            .anyMatch(item -> email.equalsIgnoreCase(item.trim()));
+    }
+
+    private boolean isSchoolAdmin(Long schoolId, String email) {
+        Long oauthUserId = clubService.resolveOauthUserId(email);
+        return oauthUserId != null && schoolUserService.isSchoolAdmin(schoolId, oauthUserId);
+    }
+
+    private Club resolveClub(Long schoolId, String clubSlugOrId, String viewerEmail) {
         try {
             Long numericId = Long.valueOf(clubSlugOrId);
-            Club club = clubService.findBySchoolAndClubId(schoolId, numericId, null);
+            Club club = clubService.findBySchoolAndClubId(schoolId, numericId, viewerEmail);
             if (club == null) throw new IllegalArgumentException("Club not found");
             return club;
         } catch (NumberFormatException e) {
-            Club club = clubService.findBySchoolAndClubSlug(schoolId, clubSlugOrId, null);
+            Club club = clubService.findBySchoolAndClubSlug(schoolId, clubSlugOrId, viewerEmail);
             if (club == null) throw new IllegalArgumentException("Club not found");
             return club;
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
         }
     }
 }

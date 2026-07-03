@@ -59,7 +59,8 @@ public class ClubController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Club create(@RequestBody Club club) {
+    public Club create(@RequestBody Club club, Authentication authentication) {
+        requirePlatformOwner(authentication);
         try {
             return clubService.create(club);
         } catch (IllegalArgumentException ex) {
@@ -79,7 +80,8 @@ public class ClubController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
+    public void delete(@PathVariable Long id, Authentication authentication) {
+        requirePlatformOwner(authentication);
         if (clubService.findById(id) == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
@@ -182,6 +184,16 @@ public class ClubController {
         return securityProperties.getOwnerEmails().stream()
             .filter(item -> item != null && !item.isBlank())
             .anyMatch(item -> email.equalsIgnoreCase(item.trim()));
+    }
+
+    private void requirePlatformOwner(Authentication authentication) {
+        String email = resolveViewerEmail(authentication);
+        if (email == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        if (!isOwner(authentication)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Platform owner access required");
+        }
     }
 
     private Club requireManageAccess(Long clubId, Authentication authentication) {
