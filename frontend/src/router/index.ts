@@ -1,15 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
-import PlatformHomeView from '../views/PlatformHomeView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    // ---- Legacy routes (backward compat, redirect to MVHS eventually) ----
+    // ---- Single-school template routes ----
     {
       path: '/',
       name: 'home',
-      component: PlatformHomeView,
+      component: HomeView,
     },
     {
       path: '/about',
@@ -52,11 +51,11 @@ const router = createRouter({
       component: () => import('../views/ProfileView.vue'),
     },
 
-    // ---- School-scoped routes ----
+    // ---- Compatibility routes for future multi-school work ----
     {
       path: '/schools',
       name: 'school-picker',
-      component: () => import('../views/SchoolPickerView.vue'),
+      redirect: '/',
     },
     {
       path: '/schools/:schoolSlug',
