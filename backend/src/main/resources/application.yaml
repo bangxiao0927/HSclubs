@@ -10,6 +10,8 @@ app:
     post-login-redirect-uri: "${app.security.frontend-origin}/auth/callback"
     owner-emails: ${APP_OWNER_EMAILS}
     authorization-request-base-uri: ${APP_AUTHORIZATION_REQUEST_BASE_URI:/api/auth/authorize}
+  upload:
+    dir: ${APP_UPLOAD_DIR:uploads}
 
 spring:
   config:
@@ -17,7 +19,9 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/mydb?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}
     username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:xiaobangnb666}
+    # DB_PASSWORD is required. Provide it via backend/.env (see backend/.env.example).
+    # Fail fast at startup if it is missing instead of silently using a committed default.
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   sql:
     init:
@@ -41,11 +45,3 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-
-app:
-  upload:
-    dir: uploads
-
-app:
-  upload:
-    dir: uploads

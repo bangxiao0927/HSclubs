@@ -57,6 +57,7 @@ Backend:
 
 ```bash
 cd backend
+cp .env.example .env   # fill in DB_PASSWORD and Google OAuth credentials
 ./mvnw spring-boot:run
 ```
 
