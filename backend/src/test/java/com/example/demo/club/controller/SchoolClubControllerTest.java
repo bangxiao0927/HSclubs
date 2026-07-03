@@ -69,7 +69,7 @@ class SchoolClubControllerTest {
         club.setName("Robotics");
         when(clubService.findAllBySchoolIdPaginated(eq(SCHOOL_ID), eq(0), eq(50))).thenReturn(List.of(club));
 
-        List<Club> result = controller.list(SCHOOL_SLUG, 0, 50);
+        List<Club> result = controller.list(SCHOOL_SLUG, 0, 50, null, null, null, null, null);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getName()).isEqualTo("Robotics");
@@ -79,7 +79,7 @@ class SchoolClubControllerTest {
     void listShouldReturnEmptyForSchoolWithNoClubs() {
         when(clubService.findAllBySchoolIdPaginated(eq(SCHOOL_ID), eq(0), eq(50))).thenReturn(Collections.emptyList());
 
-        List<Club> result = controller.list(SCHOOL_SLUG, 0, 50);
+        List<Club> result = controller.list(SCHOOL_SLUG, 0, 50, null, null, null, null, null);
 
         assertThat(result).isEmpty();
     }
@@ -166,11 +166,63 @@ class SchoolClubControllerTest {
             .thenThrow(new IllegalArgumentException("School not found: nonexistent"));
 
         try {
-            controller.list("nonexistent", 0, 50);
+            controller.list("nonexistent", 0, 50, null, null, null, null, null);
             assertThat(true).as("Expected 404").isFalse();
         } catch (org.springframework.web.server.ResponseStatusException ex) {
             assertThat(ex.getStatusCode().value()).isEqualTo(404);
         }
+    }
+
+    @Test
+    void listShouldSearchByNameCategoryAliasAndAdvisorWithinSchool() {
+        Club club = new Club();
+        club.setId(3L);
+        club.setName("Math Team");
+        when(clubService.searchBySchoolId(
+            eq(SCHOOL_ID),
+            eq("Math"),
+            eq("STEM & Innovation"),
+            eq("Competition Math"),
+            eq("Ms. Rivera"),
+            eq(null),
+            eq(0),
+            eq(50)
+        )).thenReturn(List.of(club));
+
+        List<Club> result = controller.list(
+            SCHOOL_SLUG,
+            0,
+            50,
+            "Math",
+            "STEM & Innovation",
+            "Competition Math",
+            "Ms. Rivera",
+            null
+        );
+
+        assertThat(result).containsExactly(club);
+        verify(clubService, never()).findAllBySchoolIdPaginated(anyLong(), any(Integer.class), any(Integer.class));
+    }
+
+    @Test
+    void listShouldSearchGeneralKeywordWithinSchool() {
+        Club club = new Club();
+        club.setId(4L);
+        club.setName("Robotics");
+        when(clubService.searchBySchoolId(
+            eq(SCHOOL_ID),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq("robot"),
+            eq(1),
+            eq(25)
+        )).thenReturn(List.of(club));
+
+        List<Club> result = controller.list(SCHOOL_SLUG, 1, 25, null, null, null, null, "robot");
+
+        assertThat(result).containsExactly(club);
     }
 
     private Authentication createAuth(String email) {

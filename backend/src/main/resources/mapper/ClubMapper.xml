@@ -93,6 +93,37 @@
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
+    <select id="searchBySchoolId" resultMap="ClubResultMap">
+        SELECT <include refid="BaseColumnList" />
+        FROM clubs
+        WHERE school_id = #{schoolId}
+          AND <include refid="ActiveClause" />
+        <if test="name != null and name != ''">
+          AND LOWER(name) LIKE CONCAT('%', LOWER(#{name}), '%')
+        </if>
+        <if test="category != null and category != ''">
+          AND LOWER(category) LIKE CONCAT('%', LOWER(#{category}), '%')
+        </if>
+        <if test="alias != null and alias != ''">
+          AND LOWER(alias_name) LIKE CONCAT('%', LOWER(#{alias}), '%')
+        </if>
+        <if test="advisor != null and advisor != ''">
+          AND LOWER(advisor) LIKE CONCAT('%', LOWER(#{advisor}), '%')
+        </if>
+        <if test="query != null and query != ''">
+          AND (
+            LOWER(name) LIKE CONCAT('%', LOWER(#{query}), '%')
+            OR LOWER(alias_name) LIKE CONCAT('%', LOWER(#{query}), '%')
+            OR LOWER(category) LIKE CONCAT('%', LOWER(#{query}), '%')
+            OR LOWER(advisor) LIKE CONCAT('%', LOWER(#{query}), '%')
+            OR LOWER(description) LIKE CONCAT('%', LOWER(#{query}), '%')
+            OR LOWER(contact_email) LIKE CONCAT('%', LOWER(#{query}), '%')
+          )
+        </if>
+        ORDER BY name ASC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
     <select id="countBySchoolId" resultType="int" parameterType="long">
         SELECT COUNT(*)
         FROM clubs

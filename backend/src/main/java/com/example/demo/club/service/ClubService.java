@@ -94,6 +94,28 @@ public class ClubService {
         return clubMapper.findAllBySchoolIdPaginated(schoolId, offset, limit);
     }
 
+    public List<Club> searchBySchoolId(Long schoolId,
+                                       String name,
+                                       String category,
+                                       String alias,
+                                       String advisor,
+                                       String query,
+                                       int page,
+                                       int size) {
+        int limit = Math.max(1, Math.min(size, 100));
+        int offset = Math.max(0, page) * limit;
+        return clubMapper.searchBySchoolId(
+            schoolId,
+            cleanSearchTerm(name),
+            cleanSearchTerm(category),
+            cleanSearchTerm(alias),
+            cleanSearchTerm(advisor),
+            cleanSearchTerm(query),
+            offset,
+            limit
+        );
+    }
+
     public int countBySchoolId(Long schoolId) {
         return clubMapper.countBySchoolId(schoolId);
     }
@@ -253,6 +275,10 @@ public class ClubService {
 
     private String coalesceVisibility(String visibility) {
         return StringUtils.hasText(visibility) ? visibility : "public";
+    }
+
+    private String cleanSearchTerm(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private void applyViewerPermissions(Club club, String viewerEmail) {

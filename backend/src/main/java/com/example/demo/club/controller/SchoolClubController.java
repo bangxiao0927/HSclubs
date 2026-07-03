@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,8 +50,16 @@ public class SchoolClubController {
     @GetMapping
     public List<Club> list(@PathVariable String schoolSlug,
                            @RequestParam(defaultValue = "0") int page,
-                           @RequestParam(defaultValue = "50") int size) {
+                           @RequestParam(defaultValue = "50") int size,
+                           @RequestParam(required = false) String name,
+                           @RequestParam(required = false) String category,
+                           @RequestParam(required = false) String alias,
+                           @RequestParam(required = false) String advisor,
+                           @RequestParam(name = "q", required = false) String query) {
         School school = resolveSchoolSafe(schoolSlug);
+        if (hasSearchTerm(name, category, alias, advisor, query)) {
+            return clubService.searchBySchoolId(school.getId(), name, category, alias, advisor, query, page, size);
+        }
         return clubService.findAllBySchoolIdPaginated(school.getId(), page, size);
     }
 
@@ -326,5 +335,14 @@ public class SchoolClubController {
         }
         // Use ClubService's oAuthUserMapper — we'll add a helper
         return clubService.resolveOauthUserId(email);
+    }
+
+    private boolean hasSearchTerm(String... values) {
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
