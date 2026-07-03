@@ -1,0 +1,75 @@
+import type { Club } from '../types/club'
+
+export const schoolTemplate = {
+  schoolName: import.meta.env.VITE_SCHOOL_NAME || 'Sample High School',
+  shortName: import.meta.env.VITE_SCHOOL_SHORT_NAME || 'School Clubs',
+  tagline:
+    import.meta.env.VITE_SCHOOL_TAGLINE ||
+    'A reusable club directory template for one school community.',
+  intro:
+    import.meta.env.VITE_SCHOOL_INTRO ||
+    'Browse active clubs, discover meeting times, and start membership workflows from a simple school-owned directory.',
+}
+
+export const sampleClubs: Club[] = [
+  {
+    id: 9001,
+    name: 'Robotics Club',
+    slug: 'robotics',
+    aliasName: 'Bot Builders',
+    description: 'Design, build, and compete with student-led engineering teams.',
+    category: 'STEM & Innovation',
+    meetingSchedule: 'Tuesdays after school',
+    scheduleNote: 'Add your school-specific announcement here.',
+    location: 'Engineering lab',
+    contactEmail: 'robotics@example.edu',
+    advisor: 'Advisor name',
+    imageUrl: null,
+    instagramUrl: null,
+    memberCount: 42,
+    achievements: ['Regional finalist', 'New member workshop launched'],
+    schoolId: 1,
+    status: 'active',
+    visibility: 'public',
+  },
+  {
+    id: 9002,
+    name: 'Art Collective',
+    slug: 'art-collective',
+    aliasName: 'Studio Club',
+    description: 'Plan exhibits, make portfolio work, and support campus art events.',
+    category: 'Creative Arts & Media',
+    meetingSchedule: 'Thursdays at lunch',
+    scheduleNote: null,
+    location: 'Art room',
+    contactEmail: 'arts@example.edu',
+    advisor: 'Advisor name',
+    imageUrl: null,
+    instagramUrl: null,
+    memberCount: 28,
+    achievements: ['Campus mural project', 'Student gallery night'],
+    schoolId: 1,
+    status: 'active',
+    visibility: 'public',
+  },
+  {
+    id: 9003,
+    name: 'Service Council',
+    slug: 'service-council',
+    aliasName: 'Volunteer Club',
+    description: 'Coordinate volunteer drives, fundraisers, and local service projects.',
+    category: 'Service & Leadership',
+    meetingSchedule: 'Mondays before school',
+    scheduleNote: null,
+    location: 'Student center',
+    contactEmail: 'service@example.edu',
+    advisor: 'Advisor name',
+    imageUrl: null,
+    instagramUrl: null,
+    memberCount: 35,
+    achievements: ['Food drive completed', 'Peer tutoring signup opened'],
+    schoolId: 1,
+    status: 'active',
+    visibility: 'public',
+  },
+]
