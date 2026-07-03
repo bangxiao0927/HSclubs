@@ -75,7 +75,7 @@ public class ClubControllerTest {
         Club club = new Club();
         club.setId(3L);
         club.setName("Art Club");
-        club.setAlias("Visual Arts");
+        club.setAliasName("Visual Arts");
 
         when(clubService.searchClubs(null, null, "Visual Arts", null)).thenReturn(List.of(club));
 
