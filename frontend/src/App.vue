@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import { useSchoolStore } from './stores/school'
 import ErrorDisplay from './components/ErrorDisplay.vue'
+import { schoolTemplate } from './config/schoolTemplate'
 
 const searchQuery = ref('')
 const route = useRoute()
@@ -38,14 +39,10 @@ const schoolSlug = computed(() => {
   return typeof slug === 'string' ? slug : ''
 })
 
-const isSchoolRoute = computed(() => Boolean(schoolSlug.value))
-const activeSchool = computed(() => (isSchoolRoute.value ? currentSchool.value : null))
 const logoText = computed(
-  () => activeSchool.value?.shortName || activeSchool.value?.schoolName || 'HS Clubs',
+  () => currentSchool.value?.shortName || currentSchool.value?.schoolName || schoolTemplate.shortName,
 )
-const searchPlaceholder = computed(() =>
-  isSchoolRoute.value ? 'Search your favorite clubs' : 'Search schools and club directories',
-)
+const searchPlaceholder = 'Search clubs, advisors, categories, or keywords'
 
 // Sync school context from route
 watch(
@@ -149,12 +146,12 @@ const submitSearch = () => {
       params: { schoolSlug: schoolSlug.value },
       query: q ? { q } : {},
     })
-  } else {
-    void router.push({
-      name: q ? 'school-picker' : 'home',
-      query: q ? { q } : {},
-    })
+    return
   }
+  void router.push({
+    name: q ? 'club-search' : 'home',
+    query: q ? { q } : {},
+  })
 }
 
 watch(isAuthenticated, (authenticated, previous) => {
@@ -193,21 +190,12 @@ watch(
               >Home</RouterLink
             >
             <RouterLink
-              v-if="!isSchoolRoute"
-              to="/schools"
-              class="nav-link"
-              :class="{ active: route.name === 'school-picker' }"
-              >Schools</RouterLink
-            >
-            <RouterLink
-              v-if="isSchoolRoute"
               :to="navCategories"
               class="nav-link"
               :class="{ active: route.name === 'about' || route.name === 'school-about' }"
               >Category</RouterLink
             >
             <RouterLink
-              v-if="isSchoolRoute"
               :to="navCalendar"
               class="nav-link"
               :class="{ active: route.name === 'calendar' || route.name === 'school-calendar' }"
@@ -256,9 +244,6 @@ watch(
         </button>
 
         <div class="header-right">
-          <RouterLink v-if="schoolSlug" to="/schools" class="nav-link school-switch"
-            >Change school</RouterLink
-          >
           <button type="button" class="theme-toggle" @click="toggleTheme">
             <span class="theme-icon" aria-hidden="true">{{ theme === 'light' ? '🌙' : '☀️' }}</span>
             <span>{{ themeLabel }}</span>
@@ -295,21 +280,12 @@ watch(
               >Home</RouterLink
             >
             <RouterLink
-              v-if="!isSchoolRoute"
-              to="/schools"
-              class="mobile-nav-link"
-              @click="closeMobileMenu"
-              >Schools</RouterLink
-            >
-            <RouterLink
-              v-if="isSchoolRoute"
               :to="navCategories"
               class="mobile-nav-link"
               @click="closeMobileMenu"
               >Category</RouterLink
             >
             <RouterLink
-              v-if="isSchoolRoute"
               :to="navCalendar"
               class="mobile-nav-link"
               @click="closeMobileMenu"
@@ -331,13 +307,6 @@ watch(
             >
           </nav>
           <div class="mobile-actions">
-            <RouterLink
-              v-if="schoolSlug"
-              to="/schools"
-              class="mobile-nav-link"
-              @click="closeMobileMenu"
-              >Change school</RouterLink
-            >
             <button type="button" class="mobile-nav-link" @click="toggleTheme">
               {{ themeLabel }}
             </button>
@@ -456,11 +425,6 @@ watch(
 
 .nav-link:hover {
   color: var(--mv-nav-text-hover);
-}
-
-.school-switch {
-  font-size: 0.85rem;
-  opacity: 0.75;
 }
 
 .search-bar {
