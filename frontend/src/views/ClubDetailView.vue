@@ -226,8 +226,8 @@ watch(
       <div class="spotlight">
         <h2>What we run</h2>
         <p>
-          {{ club.description }} Use this guide to align with Mountain View's activities office, track recruiting, and prep
-          for showcases.
+          {{ club.description }} Use this section to share expectations, recruiting notes,
+          showcase plans, and advisor guidance for this club.
         </p>
         <h3>Recent achievements</h3>
         <div v-if="club.scheduleNote" class="schedule-note">
