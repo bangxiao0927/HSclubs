@@ -22,6 +22,15 @@ public interface ClubMapper {
                                           @Param("offset") int offset,
                                           @Param("limit") int limit);
 
+    List<Club> searchBySchoolId(@Param("schoolId") Long schoolId,
+                                @Param("name") String name,
+                                @Param("category") String category,
+                                @Param("alias") String alias,
+                                @Param("advisor") String advisor,
+                                @Param("query") String query,
+                                @Param("offset") int offset,
+                                @Param("limit") int limit);
+
     int countBySchoolId(@Param("schoolId") Long schoolId);
 
     Club findBySchoolIdAndSlug(@Param("schoolId") Long schoolId,
