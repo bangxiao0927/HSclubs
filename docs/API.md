@@ -4,19 +4,30 @@ Base URL: `http://localhost:8080`
 
 ## API Plan (P0.3)
 
-This API is organized around **schools**. Every club, membership, and request lives under a specific school, so the **school-scoped routes under `/api/schools/{slug}/...` are the primary path** for all new client and server work.
+This API serves a single-school club directory. All club endpoints live under `/api/clubs`.
 
-The remaining non-scoped routes (`/api/clubs/...`, and the global `/api/users/me/...` profile helpers) are **compatibility-only**: they exist so older MVHS-only deployments keep working while schools are rolled out. They are not the recommended path for new code.
 
-Rules for new work:
+## Summary API (Aggregator)
 
-- **Use school-scoped routes** (`/api/schools/{slug}/clubs/...`) for any new client code, integration, or backend controller.
-- **Do not introduce a duplicate endpoint shape** for a workflow that already has a school-scoped equivalent. Extend the school-scoped route or a platform route instead.
-- **Compatibility routes may be removed** once the 1st repo roadmap is complete and no client still depends on them. Until then, they are kept in sync but receive only critical fixes.
-- **Profile/account endpoints** (`/api/users/me/...`, `/api/auth/me`) are global because they describe the signed-in user, not a school. New user endpoints should follow the same global pattern.
-- **Platform admin endpoints** (`/api/platform/...`) are reserved for platform owners only and are never compatibility routes.
+### GET /api/summary
+Public endpoint consumed by the 2nd-repo aggregator. Returns club directory stats.
 
-The "Compatibility-Only (Deprecated) Endpoints" section at the bottom lists every route that is not the primary path and the school-scoped (or platform) replacement.
+Response:
+```json
+{
+  "schoolName": "HS Clubs",
+  "shortName": "HS Clubs",
+  "slug": "hsclubs",
+  "status": "active",
+  "clubCount": 42,
+  "categories": { "STEM & Innovation": 15, "Creative Arts & Media": 8 },
+  "memberCount": 350,
+  "lastUpdatedAt": "2025-07-01T12:00:00",
+  "dataHash": "abc123..."
+}
+```
+
+The `dataHash` is a SHA-256 digest of (clubId|name|category|memberCount) for all clubs. The aggregator compares this hash to detect changes without re-fetching.
 
 ## Authentication
 

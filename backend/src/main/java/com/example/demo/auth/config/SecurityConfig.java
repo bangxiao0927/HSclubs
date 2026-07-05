@@ -43,10 +43,18 @@ public class SecurityConfig {
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
             .authorizeHttpRequests(authorize -> authorize
+                // CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/auth/me").authenticated()
+                // OAuth2 login flow (must be unauthenticated)
                 .requestMatchers("/api/auth/**", "/oauth2/**", "/login/**", "/error").permitAll()
-                .requestMatchers("/api/**").permitAll()
+                // Public club data
+                .requestMatchers(HttpMethod.GET, "/api/clubs").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/clubs/calendar").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/clubs/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/summary").permitAll()
+                // Everything else under /api requires authentication
+                .requestMatchers("/api/**").authenticated()
+                // Static resources, frontend routes
                 .anyRequest().permitAll())
             .oauth2Login(oauth2 -> oauth2
                 .authorizationEndpoint(authorization -> authorization
@@ -100,3 +108,21 @@ public class SecurityConfig {
         return OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI;
     }
 }
+/**
+ * Security configuration for the single-school HSclubs platform.
+ *
+ * Authorization model (defense-in-depth):
+ *   1. Spring Security filter-level rules (this file) — safety net for all /api/** routes.
+ *   2. Controller-level permission checks (@{code requireManageAccess}, @{code requirePlatformOwner})
+ *      — enforce role-specific access (platform owner, club president).
+ *
+ * Public endpoints (no authentication required):
+ *   GET  /api/auth/providers        — OAuth provider list
+ *   GET  /api/clubs                 — club listing
+ *   GET  /api/clubs/calendar        — weekly schedule
+ *   GET  /api/clubs/{id}            — club detail (permissions applied optionally)
+ *   GET  /api/summary               — aggregated stats for aggregator
+ *
+ * All other /api/** endpoints require authentication.
+ * Controller methods enforce further role checks where needed.
+ */
