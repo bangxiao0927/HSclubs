@@ -4,17 +4,13 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from './stores/auth'
-import { useSchoolStore } from './stores/school'
 import ErrorDisplay from './components/ErrorDisplay.vue'
-import { schoolTemplate } from './config/schoolTemplate'
 
 const searchQuery = ref('')
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-const schoolStore = useSchoolStore()
 const { isAuthenticated, currentUser } = storeToRefs(authStore)
-const { currentSchool, currentSchoolSlug } = storeToRefs(schoolStore)
 
 const mobileMenuOpen = ref(false)
 
@@ -34,54 +30,8 @@ watch(
   },
 )
 
-const schoolSlug = computed(() => {
-  const slug = route.params.schoolSlug
-  return typeof slug === 'string' ? slug : ''
-})
-
-const logoText = computed(
-  () => currentSchool.value?.shortName || currentSchool.value?.schoolName || schoolTemplate.shortName,
-)
+const logoText = 'HS Clubs'
 const searchPlaceholder = 'Search clubs, advisors, categories, or keywords'
-
-// Sync school context from route
-watch(
-  schoolSlug,
-  (slug) => {
-    if (slug && slug !== currentSchoolSlug.value) {
-      schoolStore.setCurrentSchoolBySlug(slug)
-    } else if (!slug) {
-      schoolStore.clearCurrentSchool()
-    }
-  },
-  { immediate: true },
-)
-
-watch(
-  schoolSlug,
-  (slug) => {
-    if (slug.toLowerCase() === 'mvhs') {
-      document.documentElement.dataset.schoolTheme = 'mvhs'
-    } else {
-      delete document.documentElement.dataset.schoolTheme
-    }
-  },
-  { immediate: true },
-)
-
-const navHome = computed(() => (schoolSlug.value ? `/schools/${schoolSlug.value}` : '/'))
-const navCategories = computed(() =>
-  schoolSlug.value ? `/schools/${schoolSlug.value}/categories` : '/about',
-)
-const navCalendar = computed(() =>
-  schoolSlug.value ? `/schools/${schoolSlug.value}/calendar` : '/calendar',
-)
-const navAdmin = computed(() =>
-  schoolSlug.value ? `/schools/${schoolSlug.value}/admin` : '/admin',
-)
-const navProfile = computed(() =>
-  schoolSlug.value ? `/schools/${schoolSlug.value}/profile` : '/profile',
-)
 
 const handleLogout = () => {
   authStore.logout()
@@ -140,14 +90,6 @@ onErrorCaptured((err) => {
 const submitSearch = () => {
   const q = searchQuery.value.trim()
   closeMobileMenu()
-  if (schoolSlug.value) {
-    void router.push({
-      name: q ? 'school-club-search' : 'school-home',
-      params: { schoolSlug: schoolSlug.value },
-      query: q ? { q } : {},
-    })
-    return
-  }
   void router.push({
     name: q ? 'club-search' : 'home',
     query: q ? { q } : {},
@@ -184,38 +126,29 @@ watch(
           </div>
           <nav class="nav">
             <RouterLink
-              :to="navHome"
+              to="/"
               class="nav-link"
-              :class="{ active: route.name === 'home' || route.name === 'school-home' }"
+              :class="{ active: route.name === 'home' }"
               >Home</RouterLink
             >
             <RouterLink
-              :to="navCategories"
+              to="/about"
               class="nav-link"
-              :class="{ active: route.name === 'about' || route.name === 'school-about' }"
+              :class="{ active: route.name === 'about' }"
               >Category</RouterLink
             >
             <RouterLink
-              :to="navCalendar"
+              to="/calendar"
               class="nav-link"
-              :class="{ active: route.name === 'calendar' || route.name === 'school-calendar' }"
+              :class="{ active: route.name === 'calendar' }"
               >Calendar</RouterLink
             >
             <RouterLink
-              :to="navAdmin"
+              to="/admin"
               v-if="currentUser?.isOwner"
               class="nav-link"
-              :class="{
-                active: route.name === 'owner-clubs' || route.name === 'school-owner-clubs',
-              }"
+              :class="{ active: route.name === 'owner-clubs' }"
               >Admin</RouterLink
-            >
-            <RouterLink
-              v-if="currentUser?.isOwner"
-              to="/platform/admin"
-              class="nav-link"
-              :class="{ active: route.name === 'platform-admin' }"
-              >Platform</RouterLink
             >
           </nav>
         </div>
@@ -248,7 +181,7 @@ watch(
             <span class="theme-icon" aria-hidden="true">{{ theme === 'light' ? '🌙' : '☀️' }}</span>
             <span>{{ themeLabel }}</span>
           </button>
-          <RouterLink v-if="isAuthenticated" :to="navProfile" class="profile-link">
+          <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link">
             <span class="profile-icon">👤</span>
             <span>Profile</span>
           </RouterLink>
@@ -276,47 +209,15 @@ watch(
             </button>
           </form>
           <nav class="mobile-nav">
-            <RouterLink :to="navHome" class="mobile-nav-link" @click="closeMobileMenu"
-              >Home</RouterLink
-            >
-            <RouterLink
-              :to="navCategories"
-              class="mobile-nav-link"
-              @click="closeMobileMenu"
-              >Category</RouterLink
-            >
-            <RouterLink
-              :to="navCalendar"
-              class="mobile-nav-link"
-              @click="closeMobileMenu"
-              >Calendar</RouterLink
-            >
-            <RouterLink
-              v-if="currentUser?.isOwner"
-              :to="navAdmin"
-              class="mobile-nav-link"
-              @click="closeMobileMenu"
-              >Admin</RouterLink
-            >
-            <RouterLink
-              v-if="currentUser?.isOwner"
-              to="/platform/admin"
-              class="mobile-nav-link"
-              @click="closeMobileMenu"
-              >Platform</RouterLink
-            >
+            <RouterLink to="/" class="mobile-nav-link" @click="closeMobileMenu">Home</RouterLink>
+            <RouterLink to="/about" class="mobile-nav-link" @click="closeMobileMenu">Category</RouterLink>
+            <RouterLink to="/calendar" class="mobile-nav-link" @click="closeMobileMenu">Calendar</RouterLink>
+            <RouterLink v-if="currentUser?.isOwner" to="/admin" class="mobile-nav-link" @click="closeMobileMenu">Admin</RouterLink>
           </nav>
           <div class="mobile-actions">
-            <button type="button" class="mobile-nav-link" @click="toggleTheme">
-              {{ themeLabel }}
-            </button>
             <template v-if="isAuthenticated">
-              <RouterLink :to="navProfile" class="mobile-nav-link" @click="closeMobileMenu"
-                >Profile</RouterLink
-              >
-              <button type="button" class="mobile-nav-link" @click="handleMobileLogout">
-                Log out
-              </button>
+              <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu">Profile</RouterLink>
+              <button type="button" class="auth-btn ghost" @click="handleMobileLogout">Log out</button>
             </template>
             <template v-else>
               <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
@@ -455,49 +356,53 @@ watch(
 }
 
 .search-button {
-  border: none;
   background: none;
+  border: none;
   cursor: pointer;
-  padding: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.search-icon {
-  font-size: 1.1rem;
+  font-size: 1rem;
+  color: var(--mv-search-icon);
+  padding: 0.2rem;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 1rem;
-}
-
-.theme-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid var(--mv-ghost-border);
-  border-radius: 999px;
-  padding: 0.4rem 0.8rem;
-  background: var(--mv-surface-muted);
-  color: var(--mv-ghost-text);
-  cursor: pointer;
-  font-size: 0.85rem;
+  gap: 0.75rem;
 }
 
 .profile-link {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--mv-profile-border);
+  color: var(--mv-profile-text);
   text-decoration: none;
-  color: var(--mv-nav-text);
   font-size: 0.9rem;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.profile-link:hover {
+  background: var(--mv-profile-hover-bg);
+  border-color: var(--mv-profile-hover-border);
 }
 
 .profile-icon {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--mv-ghost-border);
+  background: transparent;
+  color: var(--mv-ghost-text);
+  cursor: pointer;
+  font-size: 0.9rem;
 }
 
 .auth-actions {
@@ -506,87 +411,78 @@ watch(
 }
 
 .auth-btn {
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 1rem;
   border-radius: 999px;
-  font-weight: 600;
-  font-size: 0.85rem;
-  text-decoration: none;
+  font-size: 0.9rem;
   cursor: pointer;
-}
-
-.auth-btn.ghost {
   border: 1px solid var(--mv-ghost-border);
   background: transparent;
   color: var(--mv-ghost-text);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.auth-btn:hover {
+  background: var(--mv-surface-accent);
 }
 
 .auth-btn.primary {
   background: var(--mv-primary-bg);
   color: var(--mv-primary-text);
+  border-color: transparent;
+  box-shadow: var(--mv-primary-shadow);
 }
 
 .logout-btn {
-  background: transparent;
   border: 1px solid var(--mv-ghost-border);
+  background: transparent;
   color: var(--mv-ghost-text);
 }
 
-/* ---- Mobile menu toggle (hamburger) ---- */
-.mobile-menu-toggle {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--mv-ghost-border);
-  border-radius: 12px;
-  background: var(--mv-surface-muted);
-  cursor: pointer;
-  flex-shrink: 0;
-  gap: 4px;
+.view-container {
+  flex: 1;
+  padding-block: clamp(1.5rem, 3vw, 3rem);
 }
 
-.hamburger,
-.hamburger::before,
-.hamburger::after {
+/* Mobile */
+.mobile-menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+}
+
+.hamburger {
   display: block;
-  width: 20px;
+  width: 24px;
   height: 2px;
-  border-radius: 2px;
-  background: var(--mv-ghost-text);
-  transition:
-    transform 0.25s ease,
-    opacity 0.2s ease;
+  background: var(--mv-text);
+  position: relative;
+  transition: background 0.2s;
 }
 
 .hamburger::before,
 .hamburger::after {
   content: '';
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: var(--mv-text);
+  position: absolute;
+  left: 0;
+  transition: transform 0.25s;
 }
 
-.mobile-menu-toggle.open .hamburger {
-  background: transparent;
-}
+.hamburger::before { top: -7px; }
+.hamburger::after { top: 7px; }
 
-.mobile-menu-toggle.open .hamburger::before {
-  transform: translateY(6px) rotate(45deg);
-}
-
-.mobile-menu-toggle.open .hamburger::after {
-  transform: translateY(-6px) rotate(-45deg);
-}
-
-/* ---- Mobile dropdown menu ---- */
 .mobile-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem var(--page-padding-inline) 1.25rem;
-  border-top: 1px solid var(--mv-header-border);
+  padding: 1rem var(--page-padding-inline) 1.5rem;
+  border-bottom: 1px solid var(--mv-header-border);
   background: var(--mv-header-bg);
-  backdrop-filter: blur(12px);
-  overflow: hidden;
 }
 
 .mobile-nav {
@@ -643,7 +539,6 @@ watch(
   opacity: 0;
 }
 
-/* ---- Responsive header breakpoints ---- */
 @media (max-width: 1024px) {
   .header-inner {
     gap: 0.85rem;
