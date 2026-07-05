@@ -16,28 +16,20 @@ public interface ClubMapper {
 
     Club findById(@Param("id") Long id);
 
-    List<Club> findAllBySchoolId(@Param("schoolId") Long schoolId);
-
-    List<Club> findAllBySchoolIdPaginated(@Param("schoolId") Long schoolId,
-                                          @Param("offset") int offset,
-                                          @Param("limit") int limit);
-
-    List<Club> searchBySchoolId(@Param("schoolId") Long schoolId,
-                                @Param("name") String name,
-                                @Param("category") String category,
-                                @Param("alias") String alias,
-                                @Param("advisor") String advisor,
-                                @Param("query") String query,
-                                @Param("offset") int offset,
+    List<Club> findAllPaginated(@Param("offset") int offset,
                                 @Param("limit") int limit);
 
-    int countBySchoolId(@Param("schoolId") Long schoolId);
+    List<Club> search(@Param("name") String name,
+                      @Param("category") String category,
+                      @Param("alias") String alias,
+                      @Param("advisor") String advisor,
+                      @Param("query") String query,
+                      @Param("offset") int offset,
+                      @Param("limit") int limit);
 
-    Club findBySchoolIdAndSlug(@Param("schoolId") Long schoolId,
-                               @Param("slug") String slug);
+    Club findBySlug(@Param("slug") String slug);
 
-    Club findBySchoolIdAndId(@Param("schoolId") Long schoolId,
-                             @Param("id") Long id);
+    int countAll();
 
     int insert(Club club);
 
