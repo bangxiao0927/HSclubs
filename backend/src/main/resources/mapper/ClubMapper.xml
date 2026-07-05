@@ -21,7 +21,6 @@
         <result column="member_count" property="memberCount" />
         <result column="achievements" property="achievements"
                 typeHandler="com.example.demo.club.mapper.AchievementsTypeHandler" />
-        <result column="school_id" property="schoolId" />
         <result column="status" property="status" />
         <result column="visibility" property="visibility" />
         <result column="approved_at" property="approvedAt" />
@@ -38,7 +37,7 @@
          WHERE club_id = clubs.id
            AND social_type = 'instagram'
          LIMIT 1) AS instagram_url,
-        member_count, achievements, school_id, status, visibility,
+        member_count, achievements, status, visibility,
         approved_at, approved_by_oauth_user_id, created_at, updated_at
     </sql>
 
@@ -59,45 +58,25 @@
         WHERE id = #{id}
     </select>
 
-    <select id="findAllBySchoolId" resultMap="ClubResultMap" parameterType="long">
+    <select id="findBySlug" resultMap="ClubResultMap">
         SELECT <include refid="BaseColumnList" />
         FROM clubs
-        WHERE school_id = #{schoolId}
-          AND <include refid="ActiveClause" />
-        ORDER BY name ASC
-    </select>
-
-    <select id="findBySchoolIdAndSlug" resultMap="ClubResultMap">
-        SELECT <include refid="BaseColumnList" />
-        FROM clubs
-        WHERE school_id = #{schoolId}
-          AND slug = #{slug}
+        WHERE slug = #{slug}
         LIMIT 1
     </select>
 
-    <select id="findBySchoolIdAndId" resultMap="ClubResultMap">
+    <select id="findAllPaginated" resultMap="ClubResultMap">
         SELECT <include refid="BaseColumnList" />
         FROM clubs
-        WHERE school_id = #{schoolId}
-          AND id = #{id}
-        LIMIT 1
-    </select>
-
-
-    <select id="findAllBySchoolIdPaginated" resultMap="ClubResultMap">
-        SELECT <include refid="BaseColumnList" />
-        FROM clubs
-        WHERE school_id = #{schoolId}
-          AND <include refid="ActiveClause" />
+        WHERE <include refid="ActiveClause" />
         ORDER BY name ASC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
-    <select id="searchBySchoolId" resultMap="ClubResultMap">
+    <select id="search" resultMap="ClubResultMap">
         SELECT <include refid="BaseColumnList" />
         FROM clubs
-        WHERE school_id = #{schoolId}
-          AND <include refid="ActiveClause" />
+        WHERE <include refid="ActiveClause" />
         <if test="name != null and name != ''">
           AND LOWER(name) LIKE CONCAT('%', LOWER(#{name}), '%')
         </if>
@@ -111,36 +90,36 @@
           AND LOWER(advisor) LIKE CONCAT('%', LOWER(#{advisor}), '%')
         </if>
         <if test="query != null and query != ''">
-          AND (
-            LOWER(name) LIKE CONCAT('%', LOWER(#{query}), '%')
-            OR LOWER(alias_name) LIKE CONCAT('%', LOWER(#{query}), '%')
-            OR LOWER(category) LIKE CONCAT('%', LOWER(#{query}), '%')
-            OR LOWER(advisor) LIKE CONCAT('%', LOWER(#{query}), '%')
-            OR LOWER(description) LIKE CONCAT('%', LOWER(#{query}), '%')
-            OR LOWER(contact_email) LIKE CONCAT('%', LOWER(#{query}), '%')
-          )
+          AND (LOWER(name) LIKE CONCAT('%', LOWER(#{query}), '%')
+               OR LOWER(alias_name) LIKE CONCAT('%', LOWER(#{query}), '%')
+               OR LOWER(category) LIKE CONCAT('%', LOWER(#{query}), '%')
+               OR LOWER(advisor) LIKE CONCAT('%', LOWER(#{query}), '%')
+               OR LOWER(description) LIKE CONCAT('%', LOWER(#{query}), '%')
+               OR LOWER(location) LIKE CONCAT('%', LOWER(#{query}), '%'))
         </if>
         ORDER BY name ASC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
-    <select id="countBySchoolId" resultType="int" parameterType="long">
+    <select id="countAll" resultType="int">
         SELECT COUNT(*)
         FROM clubs
-        WHERE school_id = #{schoolId}
-          AND <include refid="ActiveClause" />
+        WHERE <include refid="ActiveClause" />
     </select>
 
     <insert id="insert" parameterType="com.example.demo.club.model.Club"
-            useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO clubs (name, slug, alias_name, description, category, meeting_schedule,
-                           schedule_note, location, contact_email, advisor, image_url,
-                           member_count, achievements, school_id, status, visibility)
-        VALUES (#{name}, #{slug}, #{aliasName}, #{description}, #{category}, #{meetingSchedule},
-                #{scheduleNote}, #{location}, #{contactEmail}, #{advisor}, #{imageUrl},
-                #{memberCount},
+            useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO clubs (name, slug, alias_name, description, category,
+                           meeting_schedule, schedule_note, location,
+                           contact_email, advisor, image_url, member_count,
+                           achievements, status, visibility,
+                           approved_at, approved_by_oauth_user_id)
+        VALUES (#{name}, #{slug}, #{aliasName}, #{description}, #{category},
+                #{meetingSchedule}, #{scheduleNote}, #{location},
+                #{contactEmail}, #{advisor}, #{imageUrl}, #{memberCount},
                 #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
-                #{schoolId}, #{status}, #{visibility})
+                #{status}, #{visibility},
+                #{approvedAt}, #{approvedByOauthUserId})
     </insert>
 
     <update id="update" parameterType="com.example.demo.club.model.Club">
@@ -158,29 +137,59 @@
             image_url = #{imageUrl},
             member_count = #{memberCount},
             achievements = #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
-            school_id = #{schoolId},
             status = #{status},
-            visibility = #{visibility}
+            visibility = #{visibility},
+            approved_at = #{approvedAt},
+            approved_by_oauth_user_id = #{approvedByOauthUserId},
+            updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id}
     </update>
 
     <delete id="delete" parameterType="long">
-        DELETE FROM clubs WHERE id = #{id}
+        DELETE FROM clubs
+        WHERE id = #{id}
     </delete>
 
+    <!-- Membership status -->
+    <select id="findMembershipStatus" resultType="com.example.demo.club.model.ViewerMembershipStatus">
+        SELECT cm.role_name,
+               ou.email,
+               TRUE AS member
+        FROM club_member cm
+            JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
+        WHERE cm.club_id = #{clubId}
+          AND LOWER(ou.email) = LOWER(#{email})
+        LIMIT 1
+    </select>
+
+    <!-- Members -->
     <resultMap id="ClubMemberViewMap" type="com.example.demo.club.model.ClubMemberView">
-        <id column="oauth_user_id" property="oauthUserId" />
         <result column="display_name" property="displayName" />
         <result column="email" property="email" />
         <result column="avatar_url" property="avatarUrl" />
         <result column="role_name" property="roleName" />
+        <result column="joined_at" property="joinedAt" />
     </resultMap>
 
-    <resultMap id="ViewerMembershipStatusMap" type="com.example.demo.club.model.ViewerMembershipStatus">
-        <result column="is_member" property="member" />
-        <result column="role_name" property="roleName" />
-    </resultMap>
+    <select id="findMembersByClubId" resultMap="ClubMemberViewMap" parameterType="long">
+        SELECT ou.display_name,
+               ou.email,
+               ou.avatar_url,
+               cm.role_name,
+               cm.joined_at
+        FROM club_member cm
+            JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
+        WHERE cm.club_id = #{clubId}
+        ORDER BY cm.joined_at ASC
+    </select>
 
+    <insert id="insertMember">
+        INSERT INTO club_member (club_id, oauth_user_id, role_name)
+        VALUES (#{clubId}, #{oauthUserId}, #{roleName})
+        ON DUPLICATE KEY UPDATE role_name = VALUES(role_name)
+    </insert>
+
+    <!-- Membership requests -->
     <resultMap id="MembershipRequestViewMap" type="com.example.demo.club.model.ClubMembershipRequest">
         <id column="id" property="id" />
         <result column="club_id" property="clubId" />
@@ -194,34 +203,6 @@
         <result column="reviewed_by_oauth_user_id" property="reviewedByOauthUserId" />
         <result column="note" property="note" />
     </resultMap>
-
-    <select id="findMembersByClubId" resultMap="ClubMemberViewMap" parameterType="long">
-        SELECT cm.oauth_user_id,
-               ou.display_name,
-               ou.email,
-               ou.avatar_url,
-               cm.role_name
-        FROM club_member cm
-            JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
-        WHERE cm.club_id = #{clubId}
-        ORDER BY COALESCE(cm.role_name, 'member') DESC, ou.display_name
-    </select>
-
-    <select id="findMembershipStatus" resultMap="ViewerMembershipStatusMap">
-        SELECT TRUE AS is_member,
-               cm.role_name
-        FROM club_member cm
-            JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
-        WHERE cm.club_id = #{clubId}
-          AND LOWER(ou.email) = LOWER(#{email})
-        LIMIT 1
-    </select>
-
-    <insert id="insertMember">
-        INSERT INTO club_member (club_id, oauth_user_id, role_name)
-        VALUES (#{clubId}, #{oauthUserId}, #{roleName})
-        ON DUPLICATE KEY UPDATE role_name = VALUES(role_name)
-    </insert>
 
     <select id="findPendingRequestsByClubId" resultMap="MembershipRequestViewMap" parameterType="long">
         SELECT cmr.id,
@@ -298,14 +279,14 @@
         WHERE id = #{id}
     </update>
 
-
+    <!-- User-specific queries -->
     <select id="findClubsByOauthUserId" resultMap="ClubResultMap" parameterType="long">
         SELECT c.id, c.name, c.slug, c.alias_name, c.description, c.category,
                c.meeting_schedule, c.schedule_note, c.location, c.contact_email,
                c.advisor, c.image_url,
                (SELECT link_url FROM club_social_medias
                 WHERE club_id = c.id AND social_type = 'instagram' LIMIT 1) AS instagram_url,
-               c.member_count, c.achievements, c.school_id,
+               c.member_count, c.achievements,
                c.status, c.visibility, c.approved_at, c.approved_by_oauth_user_id,
                c.created_at, c.updated_at
         FROM clubs c
