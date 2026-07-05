@@ -3,8 +3,6 @@ package com.example.demo.club.controller;
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.service.ClubService;
-import com.example.demo.school.model.School;
-import com.example.demo.school.service.SchoolUserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -26,22 +24,19 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/schools/{schoolSlug}/clubs")
+@RequestMapping("/api/clubs")
 public class ClubImageController {
 
     private static final long MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
     private final ClubService clubService;
-    private final SchoolUserService schoolUserService;
     private final SecurityProperties securityProperties;
     private final Path uploadDir;
 
     public ClubImageController(ClubService clubService,
-                               SchoolUserService schoolUserService,
-                               SecurityProperties securityProperties,
-                               @Value("${app.upload.dir:uploads}") String uploadDirPath) {
+                                SecurityProperties securityProperties,
+                                @Value("${app.upload.dir:uploads}") String uploadDirPath) {
         this.clubService = clubService;
-        this.schoolUserService = schoolUserService;
         this.securityProperties = securityProperties;
         this.uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
         try {
@@ -52,12 +47,10 @@ public class ClubImageController {
     }
 
     @PostMapping("/{clubSlugOrId}/image")
-    public Map<String, String> uploadImage(@PathVariable String schoolSlug,
-                                           @PathVariable String clubSlugOrId,
+    public Map<String, String> uploadImage(@PathVariable String clubSlugOrId,
                                            @RequestParam("file") MultipartFile file,
                                            Authentication authentication) {
-        School school = resolveSchoolSafe(schoolSlug);
-        Club club = requireManageAccess(school, clubSlugOrId, authentication);
+        Club club = requireManageAccess(clubSlugOrId, authentication);
 
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is empty");
@@ -77,7 +70,7 @@ public class ClubImageController {
 
             String imageUrl = "/uploads/" + filename;
             club.setImageUrl(imageUrl);
-            clubService.updateInSchool(school.getId(), club.getId(), club);
+            clubService.update(club.getId(), club);
 
             return Map.of("imageUrl", imageUrl);
         } catch (IOException e) {
@@ -98,29 +91,33 @@ public class ClubImageController {
         };
     }
 
-    private Club requireManageAccess(School school,
-                                     String clubSlugOrId,
-                                     Authentication authentication) {
+    private Club resolveClub(String clubSlugOrId, String viewerEmail) {
+        try {
+            Long numericId = Long.valueOf(clubSlugOrId);
+            Club club = clubService.findById(numericId, viewerEmail);
+            if (club == null) throw new IllegalArgumentException("Club not found");
+            return club;
+        } catch (NumberFormatException e) {
+            Club club = clubService.findBySlug(clubSlugOrId, viewerEmail);
+            if (club == null) throw new IllegalArgumentException("Club not found");
+            return club;
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
+    private Club requireManageAccess(String clubSlugOrId, Authentication authentication) {
         String viewerEmail = resolveViewerEmail(authentication);
         if (viewerEmail == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        Club club = resolveClub(school.getId(), clubSlugOrId, viewerEmail);
+        Club club = resolveClub(clubSlugOrId, viewerEmail);
         boolean canManage = Boolean.TRUE.equals(club.getCanManage())
-            || isPlatformOwner(authentication)
-            || isSchoolAdmin(school.getId(), viewerEmail);
+            || isPlatformOwner(authentication);
         if (!canManage) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to update this club image");
         }
         return club;
-    }
-
-    private School resolveSchoolSafe(String schoolSlug) {
-        try {
-            return clubService.resolveSchool(schoolSlug);
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
-        }
     }
 
     private String resolveViewerEmail(Authentication authentication) {
@@ -143,25 +140,5 @@ public class ClubImageController {
         return securityProperties.getOwnerEmails().stream()
             .filter(item -> item != null && !item.isBlank())
             .anyMatch(item -> email.equalsIgnoreCase(item.trim()));
-    }
-
-    private boolean isSchoolAdmin(Long schoolId, String email) {
-        Long oauthUserId = clubService.resolveOauthUserId(email);
-        return oauthUserId != null && schoolUserService.isSchoolAdmin(schoolId, oauthUserId);
-    }
-
-    private Club resolveClub(Long schoolId, String clubSlugOrId, String viewerEmail) {
-        try {
-            Long numericId = Long.valueOf(clubSlugOrId);
-            Club club = clubService.findBySchoolAndClubId(schoolId, numericId, viewerEmail);
-            if (club == null) throw new IllegalArgumentException("Club not found");
-            return club;
-        } catch (NumberFormatException e) {
-            Club club = clubService.findBySchoolAndClubSlug(schoolId, clubSlugOrId, viewerEmail);
-            if (club == null) throw new IllegalArgumentException("Club not found");
-            return club;
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
-        }
     }
 }
