@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { storeToRefs } from 'pinia'
-
 import SkeletonLoader from '../components/SkeletonLoader.vue'
 import { fetchClubs } from '../services/clubService'
-import { useSchoolStore } from '../stores/school'
 import type { Club } from '../types/club'
 import { clubImage } from '../utils/clubImages'
 import { sampleClubs, schoolTemplate } from '../config/schoolTemplate'
@@ -15,14 +12,8 @@ const loading = ref(true)
 const error = ref('')
 
 const route = useRoute()
-const schoolStore = useSchoolStore()
-const { currentSchool } = storeToRefs(schoolStore)
-const schoolSlug = computed(() => {
-  const slug = route.params.schoolSlug
-  return typeof slug === 'string' ? slug : undefined
-})
-const schoolDisplayName = computed(() => currentSchool.value?.schoolName || schoolTemplate.schoolName)
-const schoolShortName = computed(() => currentSchool.value?.shortName || schoolTemplate.shortName)
+const schoolDisplayName = computed(() => schoolTemplate.schoolName)
+const schoolShortName = computed(() => schoolTemplate.shortName)
 const usingPreviewData = ref(false)
 const currentHeroImageIndex = ref(0)
 let heroInterval: number | undefined
@@ -36,7 +27,7 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    const newClubs = await fetchClubs({ schoolSlug: schoolSlug.value, page: 0, size: pageSize })
+    const newClubs = await fetchClubs({ page: 0, size: pageSize })
     clubs.value = newClubs
     hasMore.value = newClubs.length >= pageSize
     usingPreviewData.value = false
@@ -54,11 +45,8 @@ const loadMore = async () => {
   loadingMore.value = true
   page.value++
   try {
-    const moreClubs = await fetchClubs({
-      schoolSlug: schoolSlug.value,
-      page: page.value,
-      size: pageSize,
-    })
+    const moreClubs = await fetchClubs({page: page.value,
+      size: pageSize})
     clubs.value = [...clubs.value, ...moreClubs]
     hasMore.value = moreClubs.length >= pageSize
   } catch {
@@ -68,16 +56,8 @@ const loadMore = async () => {
   }
 }
 
-watch(
-  schoolSlug,
-  () => {
-    page.value = 0
-    void loadClubs()
-  },
-  { immediate: true },
-)
-
 onMounted(() => {
+  void loadClubs()
   startHeroInterval()
 })
 
@@ -172,7 +152,7 @@ const showHeroImage = (index: number) => {
         <RouterLink
           v-for="club in topClubs"
           :key="club.id"
-          :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`"
+          :to="`/clubs/${club.id}`"
           custom
           v-slot="{ navigate }"
         >
@@ -214,7 +194,7 @@ const showHeroImage = (index: number) => {
         <RouterLink
           v-for="club in clubs"
           :key="club.id"
-          :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`"
+          :to="`/clubs/${club.id}`"
           custom
           v-slot="{ navigate }"
         >

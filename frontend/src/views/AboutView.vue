@@ -12,17 +12,13 @@ const loading = ref(true)
 const error = ref('')
 
 const route = useRoute()
-const schoolSlug = computed(() => {
-  const slug = route.params.schoolSlug
-  return typeof slug === 'string' ? slug : undefined
-})
 const selectedCategoryTitle = ref(clubCategoryOptions[0]?.title ?? '')
 
 const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    clubs.value = await fetchClubs({ schoolSlug: schoolSlug.value })
+    clubs.value = await fetchClubs({})
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load clubs'
   } finally {
@@ -44,8 +40,7 @@ const categories = computed(() =>
     return {
       ...category,
       clubCount: categoryClubs.length,
-      clubs: categoryClubs,
-    }
+      clubs: categoryClubs}
   }),
 )
 
@@ -114,7 +109,7 @@ const activeCategory = computed(
           <article v-if="!activeCategory.clubs.length" class="empty-card">
             <p>No clubs have been assigned to {{ activeCategory.title }} yet.</p>
           </article>
-          <RouterLink v-for="club in activeCategory.clubs" :key="club.id" class="top-card" :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`">
+          <RouterLink v-for="club in activeCategory.clubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
             <div class="club-avatar large">
               <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
             </div>
