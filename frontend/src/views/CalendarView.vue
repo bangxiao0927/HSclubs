@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
-import { fetchClubs, fetchSchoolCalendar, type CalendarEvent } from '../services/clubService'
+import { fetchClubs, fetchCalendar, type CalendarEvent } from '../services/clubService'
 import type { Club } from '../types/club'
 
 type DailyEvent = {
@@ -43,8 +43,7 @@ const todayLabel = computed(() =>
   new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
     month: 'long',
-    day: 'numeric',
-  }).format(today),
+    day: 'numeric'}).format(today),
 )
 
 const todayShortLabel = computed(() =>
@@ -78,15 +77,8 @@ onMounted(async () => {
   loading.value = true
   error.value = ''
   try {
-    const route = useRoute()
-    const slug = typeof route.params.schoolSlug === 'string' ? route.params.schoolSlug : ''
-    if (slug) {
-      const events = await fetchSchoolCalendar(slug)
-      dailySchedule.value = buildScheduleFromEvents(events)
-    } else {
-      const clubs = await fetchClubs()
-      dailySchedule.value = buildSchedule(clubs)
-    }
+    const events = await fetchCalendar()
+    dailySchedule.value = buildScheduleFromEvents(events)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load schedule'
   } finally {
@@ -117,8 +109,7 @@ function buildScheduleFromEvents(events: CalendarEvent[]) {
       timeLabel: parsed.timeLabel,
       scheduleNote: event.scheduleNote ?? null,
       location: event.location ?? null,
-      advisor: event.advisor ?? null,
-    }
+      advisor: event.advisor ?? null}
 
     const bucket = schedule[parsed.day] ?? []
     bucket.push(entry)
@@ -148,8 +139,7 @@ function buildSchedule(clubs: Club[]) {
       timeLabel: parsed.timeLabel,
       scheduleNote: club.scheduleNote ?? null,
       location: club.location ?? null,
-      advisor: club.advisor ?? null,
-    }
+      advisor: club.advisor ?? null}
 
     const bucket = schedule[parsed.day] ?? []
     bucket.push(entry)
@@ -193,8 +183,7 @@ function extractDay(value: string) {
     sat: 'Sat',
     saturday: 'Sat',
     sun: 'Sun',
-    sunday: 'Sun',
-  }
+    sunday: 'Sun'}
 
   const match = value.toLowerCase().match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)/)
   if (!match) return null

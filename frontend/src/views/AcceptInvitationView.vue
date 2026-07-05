@@ -25,8 +25,7 @@ const acceptInvitation = async () => {
     const response = await fetch(buildApiUrl(`/api/platform/invitations/${token}/accept`), {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-    })
+      headers: { 'Content-Type': 'application/json' }})
     const data = await response.json()
     if (response.ok) {
       status.value = 'success'
