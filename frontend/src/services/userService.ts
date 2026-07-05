@@ -19,10 +19,8 @@ const withCredentials = (init?: RequestInit): RequestInit => ({
   credentials: 'include',
   headers: {
     'Content-Type': 'application/json',
-    ...(init?.headers || {}),
-  },
-  ...init,
-})
+    ...(init?.headers || {})},
+  ...init})
 
 const readErrorMessage = async (response: Response) => {
   const text = await response.text()
@@ -34,8 +32,7 @@ export const updateGraduationYear = async (graduationYear: number): Promise<void
     buildApiUrl('/api/users/me/graduation-year'),
     withCredentials({
       method: 'PATCH',
-      body: JSON.stringify({ graduationYear }),
-    }),
+      body: JSON.stringify({ graduationYear })}),
   )
 
   if (!response.ok) {

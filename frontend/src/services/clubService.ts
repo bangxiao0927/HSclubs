@@ -3,7 +3,6 @@ import { buildApiUrl } from './httpClient'
 
 type FetchClubsOptions = {
   force?: boolean
-  schoolSlug?: string
   page?: number
   size?: number
 }
@@ -24,8 +23,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
     credentials: init?.credentials ?? 'include',
-    headers,
-  })
+    headers})
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `Request failed with status ${response.status}`)
@@ -50,10 +48,8 @@ export const invalidateClubCache = () => {
   clubsRequest = null
 }
 
-const clubPath = (schoolSlug: string | undefined, suffix: string, page?: number, size?: number) => {
-  let path = schoolSlug
-    ? `/api/schools/${schoolSlug}/clubs${suffix}`
-    : `/api/clubs${suffix}`
+const clubPath = (suffix: string, page?: number, size?: number) => {
+  let path = `/api/clubs${suffix}`
   if (page !== undefined && size !== undefined) {
     const sep = path.includes('?') ? '&' : '?'
     path += `${sep}page=${page}&size=${size}`
@@ -62,8 +58,8 @@ const clubPath = (schoolSlug: string | undefined, suffix: string, page?: number,
 }
 
 export const fetchClubs = async (options: FetchClubsOptions = {}) => {
-  const { force = false, schoolSlug } = options
-  const cacheKey = schoolSlug ?? '__global__'
+  const { force = false } = options
+  const cacheKey = '__global__'
   const now = Date.now()
 
   if (!force && clubsCache && cacheKey === clubsCacheKey && now < clubsCacheExpiresAt) {
@@ -75,7 +71,7 @@ export const fetchClubs = async (options: FetchClubsOptions = {}) => {
   }
 
   const { page, size } = options
-  clubsRequest = request<Club[]>(clubPath(schoolSlug, '', page, size))
+  clubsRequest = request<Club[]>(clubPath('', page, size))
 
   try {
     const clubs = await clubsRequest
@@ -86,18 +82,16 @@ export const fetchClubs = async (options: FetchClubsOptions = {}) => {
   }
 }
 
-export const fetchClubById = (id: number | string, schoolSlug?: string) =>
-  request<Club>(clubPath(schoolSlug, `/${id}`))
+export const fetchClubById = (id: number | string) =>
+  request<Club>(clubPath(`/${id}`))
 
 export const updateClub = async (
   id: number | string,
   data: Partial<Club>,
-  schoolSlug?: string,
 ) => {
-  const updatedClub = await request<Club>(clubPath(schoolSlug, `/${id}`), {
+  const updatedClub = await request<Club>(clubPath(`/${id}`), {
     method: 'PUT',
-    body: JSON.stringify(data),
-  })
+    body: JSON.stringify(data)})
   if (clubsCache) {
     const nextClubs = clubsCache.map((club) =>
       String(club.id) === String(updatedClub.id) ? { ...club, ...updatedClub } : club,
@@ -107,32 +101,29 @@ export const updateClub = async (
   return updatedClub
 }
 
-export const fetchClubMembers = (id: number | string, schoolSlug?: string) =>
-  request<ClubMember[]>(clubPath(schoolSlug, `/${id}/members`))
+export const fetchClubMembers = (id: number | string) =>
+  request<ClubMember[]>(clubPath(`/${id}/members`))
 
-export const applyToClub = (id: number | string, schoolSlug?: string) =>
-  request<void>(clubPath(schoolSlug, `/${id}/members/apply`), {
+export const applyToClub = (id: number | string) =>
+  request<void>(clubPath(`/${id}/members/apply`), {
     method: 'POST',
-    body: JSON.stringify({}),
-  })
+    body: JSON.stringify({})})
 
-export const cancelMembershipRequest = (id: number | string, schoolSlug?: string) =>
-  request<void>(clubPath(schoolSlug, `/${id}/members/apply`), {
-    method: 'DELETE',
-  })
+export const cancelMembershipRequest = (id: number | string) =>
+  request<void>(clubPath(`/${id}/members/apply`), {
+    method: 'DELETE'})
 
-export const fetchMembershipRequests = (id: number | string, schoolSlug?: string) =>
+export const fetchMembershipRequests = (id: number | string) =>
   request<ClubMembershipRequest[]>(
-    clubPath(schoolSlug, `/${id}/membership-requests`),
+    clubPath(`/${id}/membership-requests`),
   )
 
 export const approveMembershipRequest = (
   clubId: number | string,
   requestId: number | string,
-  schoolSlug?: string,
 ) =>
   request<void>(
-    clubPath(schoolSlug, `/${clubId}/membership-requests/${requestId}/approve`),
+    clubPath(`/${clubId}/membership-requests/${requestId}/approve`),
     { method: 'POST', body: JSON.stringify({}) },
   )
 
@@ -147,14 +138,12 @@ export interface CalendarEvent {
   advisor: string | null
 }
 
-export const fetchSchoolCalendar = (schoolSlug: string) =>
-  request<CalendarEvent[]>(`/api/schools/${schoolSlug}/clubs/calendar`)
+export const fetchCalendar = () =>
+  request<CalendarEvent[]>(`/api/clubs/calendar`)
 
 export const rejectMembershipRequest = (
   clubId: number | string,
   requestId: number | string,
-  schoolSlug?: string,
 ) =>
-  request<void>(clubPath(schoolSlug, `/${clubId}/membership-requests/${requestId}`), {
-    method: 'DELETE',
-  })
+  request<void>(clubPath(`/${clubId}/membership-requests/${requestId}`), {
+    method: 'DELETE'})

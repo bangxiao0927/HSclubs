@@ -23,7 +23,6 @@ public class Club {
     private String instagramUrl;
     private Integer memberCount;
     private List<String> achievements;
-    private Long schoolId;
     private String status;
     private String visibility;
     private LocalDateTime approvedAt;
@@ -153,14 +152,6 @@ public class Club {
 
     public void setAchievements(List<String> achievements) {
         this.achievements = achievements;
-    }
-
-    public Long getSchoolId() {
-        return schoolId;
-    }
-
-    public void setSchoolId(Long schoolId) {
-        this.schoolId = schoolId;
     }
 
     public String getStatus() {

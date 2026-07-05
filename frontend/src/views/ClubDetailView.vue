@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
-
+import { RouterLink, useRoute } from 'vue-router'
 import { applyToClub, cancelMembershipRequest, fetchClubById, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
@@ -30,11 +29,6 @@ const canApply = computed(
 const hasPendingRequest = computed(() => Boolean(club.value?.viewerHasPendingRequest))
 
 
-const schoolSlug = computed(() => {
-  const slug = route.params.schoolSlug
-  return typeof slug === 'string' ? slug : undefined
-})
-
 const authStore = useAuthStore()
 const { currentUser, isAuthenticated } = storeToRefs(authStore)
 const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
@@ -56,7 +50,7 @@ const loadClub = async (id: string) => {
   joinError.value = ''
   joinSuccess.value = ''
   try {
-    const [clubResponse, allClubs] = await Promise.all([fetchClubById(id, schoolSlug.value), fetchClubs()])
+    const [clubResponse, allClubs] = await Promise.all([fetchClubById(id), fetchClubs()])
     club.value = clubResponse
     relatedClubs.value = allClubs.filter((item) => item.id !== clubResponse.id).slice(0, 3)
   } catch (err) {
@@ -72,7 +66,7 @@ const refreshClubSnapshot = async () => {
     return
   }
   try {
-    club.value = await fetchClubById(String(club.value.id), schoolSlug.value)
+    club.value = await fetchClubById(String(club.value.id))
   } catch (err) {
     console.error(err)
   }
@@ -86,7 +80,7 @@ const handleApply = async () => {
   joinError.value = ''
   joinSuccess.value = ''
   try {
-    await applyToClub(club.value.id, schoolSlug.value)
+    await applyToClub(club.value.id)
     joinSuccess.value = 'Request received. A club lead will reach out soon.'
     await refreshClubSnapshot()
   } catch (err) {
@@ -104,7 +98,7 @@ const handleCancelRequest = async () => {
   joinError.value = ''
   joinSuccess.value = ''
   try {
-    await cancelMembershipRequest(club.value.id, schoolSlug.value)
+    await cancelMembershipRequest(club.value.id)
     joinSuccess.value = 'Request withdrawn. You can apply again any time.'
     await refreshClubSnapshot()
   } catch (err) {
@@ -170,7 +164,7 @@ watch(
         <div class="hero-side">
           <RouterLink
             v-if="club.canManage || isOwner"
-            :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}/admin` : `/clubs/${club.id}/admin`"
+            :to="`/clubs/${club.id}/admin`"
             class="admin-link"
           >
             Manage club
@@ -249,7 +243,7 @@ watch(
         <h3>Also trending</h3>
         <ul>
           <li v-for="item in relatedClubs" :key="item.id">
-            <RouterLink :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${item.id}` : `/clubs/${item.id}`" class="related-link">
+            <RouterLink :to="`/clubs/${item.id}`" class="related-link">
               <div class="club-avatar small">
                 <img :src="clubImage(item)" :alt="`${item.name} avatar`" loading="lazy" />
               </div>

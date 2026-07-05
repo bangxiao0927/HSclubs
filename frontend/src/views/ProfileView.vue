@@ -157,7 +157,7 @@ const handleGraduationYearSave = async () => {
             </div>
           </div>
           <div class="cta-group">
-            <RouterLink to="/schools" class="btn primary">Browse clubs</RouterLink>
+            <RouterLink to="/" class="btn primary">Browse clubs</RouterLink>
             <RouterLink
               v-if="currentUser?.isOwner"
               to="/platform/admin"
@@ -176,7 +176,7 @@ const handleGraduationYearSave = async () => {
         <div v-else-if="myClubsError" class="status-error">{{ myClubsError }}</div>
         <ul v-else-if="myClubs.length" class="club-list">
           <li v-for="club in myClubs" :key="club.id">
-            <RouterLink :to="`/schools/${club.schoolId}/clubs/${club.id}`" class="club-row">
+            <RouterLink :to="`/clubs/${club.id}`" class="club-row">
               <div class="club-avatar small">
                 <img :src="clubImage(club)" :alt="club.name" />
               </div>

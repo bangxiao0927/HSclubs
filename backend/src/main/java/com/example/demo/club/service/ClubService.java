@@ -6,8 +6,6 @@ import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubMemberView;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.model.ViewerMembershipStatus;
-import com.example.demo.school.mapper.SchoolMapper;
-import com.example.demo.school.model.School;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,24 +27,45 @@ public class ClubService {
     );
 
     private final ClubMapper clubMapper;
-    private final SchoolMapper schoolMapper;
     private final OAuthUserMapper oAuthUserMapper;
 
-    public ClubService(ClubMapper clubMapper, SchoolMapper schoolMapper, OAuthUserMapper oAuthUserMapper) {
+    public ClubService(ClubMapper clubMapper, OAuthUserMapper oAuthUserMapper) {
         this.clubMapper = clubMapper;
-        this.schoolMapper = schoolMapper;
         this.oAuthUserMapper = oAuthUserMapper;
     }
 
-    // ---- Global (deprecated, kept for backward compatibility) ----
+    // ---- Listing ----
 
-    /**
-     * @deprecated Use {@link #findAllBySchoolId(Long)} or {@link #findAllBySchoolIdPaginated(Long, int, int)} instead.
-     */
-    @Deprecated
     public List<Club> findAll() {
         return clubMapper.findAll();
     }
+
+    public List<Club> findAllPaginated(int page, int size) {
+        int offset = Math.max(0, page) * size;
+        int limit = Math.max(1, Math.min(size, 100));
+        return clubMapper.findAllPaginated(offset, limit);
+    }
+
+    public List<Club> search(String name, String category, String alias,
+                             String advisor, String query, int page, int size) {
+        int limit = Math.max(1, Math.min(size, 100));
+        int offset = Math.max(0, page) * limit;
+        return clubMapper.search(
+            cleanSearchTerm(name),
+            cleanSearchTerm(category),
+            cleanSearchTerm(alias),
+            cleanSearchTerm(advisor),
+            cleanSearchTerm(query),
+            offset,
+            limit
+        );
+    }
+
+    public int countAll() {
+        return clubMapper.countAll();
+    }
+
+    // ---- Single club ----
 
     public Club findById(Long id) {
         return clubMapper.findById(id);
@@ -58,12 +77,21 @@ public class ClubService {
         return club;
     }
 
+    public Club findBySlug(String slug, String viewerEmail) {
+        Club club = clubMapper.findBySlug(slug);
+        applyViewerPermissions(club, viewerEmail);
+        return club;
+    }
+
+    // ---- Members ----
+
     public List<ClubMemberView> findMembers(Long clubId) {
         return clubMapper.findMembersByClubId(clubId);
     }
 
+    // ---- CRUD ----
+
     public Club create(Club club) {
-        ensureSchoolExists(club.getSchoolId());
         normalizeClub(club);
         club.setId(null);
         clubMapper.insert(club);
@@ -71,7 +99,6 @@ public class ClubService {
     }
 
     public Club update(Long id, Club club) {
-        ensureSchoolExists(club.getSchoolId());
         normalizeClub(club);
         club.setId(id);
         clubMapper.update(club);
@@ -82,104 +109,9 @@ public class ClubService {
         clubMapper.delete(id);
     }
 
-    // ---- School-scoped ----
+    // ---- Membership requests ----
 
-    public List<Club> findAllBySchoolId(Long schoolId) {
-        return clubMapper.findAllBySchoolId(schoolId);
-    }
-
-    public List<Club> findAllBySchoolIdPaginated(Long schoolId, int page, int size) {
-        int offset = Math.max(0, page) * size;
-        int limit = Math.max(1, Math.min(size, 100));
-        return clubMapper.findAllBySchoolIdPaginated(schoolId, offset, limit);
-    }
-
-    public List<Club> searchBySchoolId(Long schoolId,
-                                       String name,
-                                       String category,
-                                       String alias,
-                                       String advisor,
-                                       String query,
-                                       int page,
-                                       int size) {
-        int limit = Math.max(1, Math.min(size, 100));
-        int offset = Math.max(0, page) * limit;
-        return clubMapper.searchBySchoolId(
-            schoolId,
-            cleanSearchTerm(name),
-            cleanSearchTerm(category),
-            cleanSearchTerm(alias),
-            cleanSearchTerm(advisor),
-            cleanSearchTerm(query),
-            offset,
-            limit
-        );
-    }
-
-    public int countBySchoolId(Long schoolId) {
-        return clubMapper.countBySchoolId(schoolId);
-    }
-
-        public Club findBySchoolAndClubSlug(Long schoolId, String clubSlug, String viewerEmail) {
-        Club club = clubMapper.findBySchoolIdAndSlug(schoolId, clubSlug);
-        applyViewerPermissions(club, viewerEmail);
-        return club;
-    }
-
-    public Club findBySchoolAndClubId(Long schoolId, Long clubId, String viewerEmail) {
-        Club club = clubMapper.findBySchoolIdAndId(schoolId, clubId);
-        applyViewerPermissions(club, viewerEmail);
-        return club;
-    }
-
-    public Club createInSchool(Long schoolId, Club club) {
-        ensureSchoolExists(schoolId);
-        club.setSchoolId(schoolId);
-        normalizeClub(club);
-        club.setId(null);
-        club.setStatus(coalesceStatus(club.getStatus()));
-        club.setVisibility(coalesceVisibility(club.getVisibility()));
-        clubMapper.insert(club);
-        return club;
-    }
-
-    public Club updateInSchool(Long schoolId, Long clubId, Club club) {
-        Club existing = clubMapper.findBySchoolIdAndId(schoolId, clubId);
-        if (existing == null) {
-            throw new IllegalArgumentException("Club not found in this school");
-        }
-        club.setSchoolId(schoolId);
-        normalizeClub(club);
-        club.setId(clubId);
-        club.setStatus(coalesceStatus(club.getStatus()));
-        club.setVisibility(coalesceVisibility(club.getVisibility()));
-        clubMapper.update(club);
-        return club;
-    }
-
-    public void deleteInSchool(Long schoolId, Long clubId) {
-        Club existing = clubMapper.findBySchoolIdAndId(schoolId, clubId);
-        if (existing == null) {
-            throw new IllegalArgumentException("Club not found in this school");
-        }
-        clubMapper.delete(clubId);
-    }
-
-    // ---- School resolver helpers ----
-
-    public School resolveSchool(String schoolSlug) {
-        School school = schoolMapper.findBySlug(schoolSlug);
-        if (school == null) {
-            throw new IllegalArgumentException("School not found: " + schoolSlug);
-        }
-        if (!"active".equalsIgnoreCase(school.getStatus())) {
-            throw new IllegalArgumentException("School is not active: " + schoolSlug);
-        }
-        return school;
-    }
-
-    // ---- Membership (clubId-based, suitable for both global and school-scoped) ----
-
+    @Transactional
     public void applyForMembership(Long clubId, String viewerEmail) {
         if (!StringUtils.hasText(viewerEmail)) {
             throw new IllegalArgumentException("Viewer email is required");
@@ -188,12 +120,8 @@ public class ClubService {
         if (oauthUserId == null) {
             throw new IllegalStateException("Viewer is not registered as an OAuth user");
         }
-        ViewerMembershipStatus membershipStatus = clubMapper.findMembershipStatus(clubId, viewerEmail);
-        if (membershipStatus != null && Boolean.TRUE.equals(membershipStatus.getMember())) {
-            throw new IllegalStateException("You are already a member of this club");
-        }
-        ClubMembershipRequest pendingRequest = clubMapper.findPendingRequestByClubAndUser(clubId, oauthUserId);
-        if (pendingRequest != null) {
+        ClubMembershipRequest existing = clubMapper.findPendingRequestByClubAndUser(clubId, oauthUserId);
+        if (existing != null) {
             throw new IllegalStateException("You already have a pending request for this club");
         }
         clubMapper.insertMembershipRequest(clubId, oauthUserId);
@@ -246,12 +174,6 @@ public class ClubService {
 
     // ---- Internal helpers ----
 
-    private void ensureSchoolExists(Long schoolId) {
-        if (schoolId == null || schoolMapper.findById(schoolId) == null) {
-            throw new IllegalArgumentException("Invalid schoolId");
-        }
-    }
-
     private void normalizeClub(Club club) {
         if (!StringUtils.hasText(club.getCategory())) {
             throw new IllegalArgumentException("Category is required");
@@ -267,14 +189,6 @@ public class ClubService {
         if (club.getMemberCount() == null) {
             club.setMemberCount(0);
         }
-    }
-
-    private String coalesceStatus(String status) {
-        return StringUtils.hasText(status) ? status : "active";
-    }
-
-    private String coalesceVisibility(String visibility) {
-        return StringUtils.hasText(visibility) ? visibility : "public";
     }
 
     private String cleanSearchTerm(String value) {

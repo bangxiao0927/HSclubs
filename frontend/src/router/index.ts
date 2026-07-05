@@ -4,7 +4,6 @@ import HomeView from '../views/HomeView.vue'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    // ---- Single-school template routes ----
     {
       path: '/',
       name: 'home',
@@ -50,74 +49,6 @@ const router = createRouter({
       name: 'profile',
       component: () => import('../views/ProfileView.vue'),
     },
-
-    // ---- Compatibility routes for future multi-school work ----
-    {
-      path: '/schools',
-      name: 'school-picker',
-      redirect: '/',
-    },
-    {
-      path: '/schools/:schoolSlug',
-      name: 'school-home',
-      component: HomeView,
-    },
-    {
-      path: '/schools/:schoolSlug/search',
-      name: 'school-club-search',
-      component: () => import('../views/ClubSearchView.vue'),
-    },
-    {
-      path: '/schools/:schoolSlug/calendar',
-      name: 'school-calendar',
-      component: () => import('../views/CalendarView.vue'),
-    },
-    {
-      path: '/schools/:schoolSlug/categories',
-      name: 'school-about',
-      component: () => import('../views/AboutView.vue'),
-    },
-    {
-      path: '/schools/:schoolSlug/clubs/:clubSlugOrId',
-      name: 'school-club-detail',
-      component: () => import('../views/ClubDetailView.vue'),
-    },
-    {
-      path: '/schools/:schoolSlug/clubs/:clubSlugOrId/admin',
-      name: 'school-club-admin',
-      component: () => import('../views/ClubAdminView.vue'),
-    },
-    {
-      path: '/schools/:schoolSlug/clubs/:clubSlugOrId/admin/pending',
-      name: 'school-club-admin-pending',
-      component: () => import('../views/ClubPendingView.vue'),
-    },
-    {
-      path: '/schools/:schoolSlug/admin',
-      name: 'school-owner-clubs',
-      component: () => import('../views/OwnerAdminView.vue'),
-    },
-    {
-      path: '/schools/:schoolSlug/profile',
-      name: 'school-profile',
-      component: () => import('../views/ProfileView.vue'),
-    },
-
-    // ---- Platform routes ----
-    {
-      path: '/platform/admin',
-      name: 'platform-admin',
-      component: () => import('../views/PlatformAdminView.vue'),
-    },
-
-    // ---- Invitation ----
-    {
-      path: '/accept-invitation',
-      name: 'accept-invitation',
-      component: () => import('../views/AcceptInvitationView.vue'),
-    },
-
-    // ---- Settings ----
     {
       path: '/settings',
       name: 'settings',
@@ -134,6 +65,13 @@ const router = createRouter({
       path: '/auth/callback',
       name: 'auth-callback',
       component: () => import('../views/AuthCallbackView.vue'),
+    },
+
+    // ---- Invitation ----
+    {
+      path: '/accept-invitation',
+      name: 'accept-invitation',
+      component: () => import('../views/AcceptInvitationView.vue'),
     },
 
     // ---- 404 (must be last) ----

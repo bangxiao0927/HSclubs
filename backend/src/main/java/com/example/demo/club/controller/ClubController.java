@@ -9,7 +9,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,22 +16,19 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-/**
- * Legacy global club endpoints — retained for backward compatibility.
- * Prefer {@link SchoolClubController} for new development.
- *
- * @deprecated Use school-scoped {@code /api/schools/{slug}/clubs/...} instead.
- */
-@Deprecated
 @RestController
 @RequestMapping("/api/clubs")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class ClubController {
 
     private final ClubService clubService;
@@ -43,19 +39,32 @@ public class ClubController {
         this.securityProperties = securityProperties;
     }
 
+    // ---- Club listing & detail ----
+
     @GetMapping
-    public List<Club> list() {
-        return clubService.findAll();
+    public List<Club> list(@RequestParam(defaultValue = "0") int page,
+                           @RequestParam(defaultValue = "50") int size,
+                           @RequestParam(required = false) String name,
+                           @RequestParam(required = false) String category,
+                           @RequestParam(required = false) String alias,
+                           @RequestParam(required = false) String advisor,
+                           @RequestParam(name = "q", required = false) String query) {
+        if (hasSearchTerm(name, category, alias, advisor, query)) {
+            return clubService.search(name, category, alias, advisor, query, page, size);
+        }
+        return clubService.findAllPaginated(page, size);
     }
 
-    @GetMapping("/{id}")
-    public Club get(@PathVariable Long id, Authentication authentication) {
-        Club club = clubService.findById(id, resolveViewerEmail(authentication));
+    @GetMapping("/{clubSlugOrId}")
+    public Club get(@PathVariable String clubSlugOrId, Authentication authentication) {
+        Club club = resolveClub(clubSlugOrId, resolveViewerEmail(authentication));
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
         return club;
     }
+
+    // ---- Create / Update / Delete ----
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -68,44 +77,53 @@ public class ClubController {
         }
     }
 
-    @PutMapping("/{id}")
-    public Club update(@PathVariable Long id, @RequestBody Club club, Authentication authentication) {
-        requireManageAccess(id, authentication);
+    @PutMapping("/{clubSlugOrId}")
+    public Club update(@PathVariable String clubSlugOrId,
+                       @RequestBody Club club,
+                       Authentication authentication) {
+        Club existing = requireManageAccess(clubSlugOrId, authentication);
         try {
-            return clubService.update(id, club);
+            return clubService.update(existing.getId(), club);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
         }
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{clubSlugOrId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id, Authentication authentication) {
+    public void delete(@PathVariable String clubSlugOrId, Authentication authentication) {
         requirePlatformOwner(authentication);
-        if (clubService.findById(id) == null) {
+        Club existing = resolveClub(clubSlugOrId, resolveViewerEmail(authentication));
+        if (existing == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
-        clubService.delete(id);
+        clubService.delete(existing.getId());
     }
 
-    @GetMapping("/{id}/members")
-    public List<ClubMemberView> listMembers(@PathVariable Long id, Authentication authentication) {
-        requireManageAccess(id, authentication);
-        return clubService.findMembers(id);
+    // ---- Members ----
+
+    @GetMapping("/{clubSlugOrId}/members")
+    public List<ClubMemberView> listMembers(@PathVariable String clubSlugOrId,
+                                             Authentication authentication) {
+        Club club = requireManageAccess(clubSlugOrId, authentication);
+        return clubService.findMembers(club.getId());
     }
 
-    @PostMapping("/{id}/members/apply")
+    // ---- Membership application ----
+
+    @PostMapping("/{clubSlugOrId}/members/apply")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void applyToClub(@PathVariable Long id, Authentication authentication) {
+    public void applyToClub(@PathVariable String clubSlugOrId, Authentication authentication) {
         String viewerEmail = resolveViewerEmail(authentication);
         if (viewerEmail == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        if (clubService.findById(id) == null) {
+        Club club = resolveClub(clubSlugOrId, viewerEmail);
+        if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
         try {
-            clubService.applyForMembership(id, viewerEmail);
+            clubService.applyForMembership(club.getId(), viewerEmail);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
         } catch (IllegalStateException ex) {
@@ -113,18 +131,19 @@ public class ClubController {
         }
     }
 
-    @DeleteMapping("/{id}/members/apply")
+    @DeleteMapping("/{clubSlugOrId}/members/apply")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void cancelApplication(@PathVariable Long id, Authentication authentication) {
+    public void cancelApplication(@PathVariable String clubSlugOrId, Authentication authentication) {
         String viewerEmail = resolveViewerEmail(authentication);
         if (viewerEmail == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        if (clubService.findById(id) == null) {
+        Club club = resolveClub(clubSlugOrId, viewerEmail);
+        if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
         try {
-            clubService.cancelMembershipRequest(id, viewerEmail);
+            clubService.cancelMembershipRequest(club.getId(), viewerEmail);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
         } catch (IllegalStateException ex) {
@@ -132,35 +151,68 @@ public class ClubController {
         }
     }
 
-    @GetMapping("/{id}/membership-requests")
-    public List<ClubMembershipRequest> listMembershipRequests(@PathVariable Long id, Authentication authentication) {
-        requireManageAccess(id, authentication);
-        return clubService.findPendingRequests(id);
+    @GetMapping("/{clubSlugOrId}/membership-requests")
+    public List<ClubMembershipRequest> listMembershipRequests(@PathVariable String clubSlugOrId,
+                                                               Authentication authentication) {
+        Club club = requireManageAccess(clubSlugOrId, authentication);
+        return clubService.findPendingRequests(club.getId());
     }
 
-    @PostMapping("/{id}/membership-requests/{requestId}/approve")
+    @PostMapping("/{clubSlugOrId}/membership-requests/{requestId}/approve")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void approveMembershipRequest(@PathVariable Long id,
+    public void approveMembershipRequest(@PathVariable String clubSlugOrId,
                                           @PathVariable Long requestId,
                                           Authentication authentication) {
-        requireManageAccess(id, authentication);
+        Club club = requireManageAccess(clubSlugOrId, authentication);
         try {
-            clubService.approveMembershipRequest(id, requestId);
+            clubService.approveMembershipRequest(club.getId(), requestId);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
         }
     }
 
-    @DeleteMapping("/{id}/membership-requests/{requestId}")
+    @DeleteMapping("/{clubSlugOrId}/membership-requests/{requestId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void rejectMembershipRequest(@PathVariable Long id,
+    public void rejectMembershipRequest(@PathVariable String clubSlugOrId,
                                          @PathVariable Long requestId,
                                          Authentication authentication) {
-        requireManageAccess(id, authentication);
+        Club club = requireManageAccess(clubSlugOrId, authentication);
         try {
-            clubService.rejectMembershipRequest(id, requestId);
+            clubService.rejectMembershipRequest(club.getId(), requestId);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
+    // ---- Calendar ----
+
+    @GetMapping("/calendar")
+    public List<Map<String, Object>> calendar() {
+        List<Club> clubs = clubService.findAll();
+        List<Map<String, Object>> events = new ArrayList<>();
+        for (Club club : clubs) {
+            Map<String, Object> event = new HashMap<>();
+            event.put("clubId", club.getId());
+            event.put("clubName", club.getName());
+            event.put("clubSlug", club.getSlug());
+            event.put("category", club.getCategory());
+            event.put("meetingSchedule", club.getMeetingSchedule());
+            event.put("scheduleNote", club.getScheduleNote());
+            event.put("location", club.getLocation());
+            event.put("advisor", club.getAdvisor());
+            events.add(event);
+        }
+        return events;
+    }
+
+    // ---- Permission helpers ----
+
+    private Club resolveClub(String clubSlugOrId, String viewerEmail) {
+        try {
+            Long numericId = Long.valueOf(clubSlugOrId);
+            return clubService.findById(numericId, viewerEmail);
+        } catch (NumberFormatException e) {
+            return clubService.findBySlug(clubSlugOrId, viewerEmail);
         }
     }
 
@@ -176,7 +228,7 @@ public class ClubController {
         return (email instanceof String str && !str.isBlank()) ? str : null;
     }
 
-    private boolean isOwner(Authentication authentication) {
+    private boolean isPlatformOwner(Authentication authentication) {
         String email = resolveViewerEmail(authentication);
         if (email == null || securityProperties.getOwnerEmails() == null) {
             return false;
@@ -191,24 +243,33 @@ public class ClubController {
         if (email == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        if (!isOwner(authentication)) {
+        if (!isPlatformOwner(authentication)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Platform owner access required");
         }
     }
 
-    private Club requireManageAccess(Long clubId, Authentication authentication) {
+    private Club requireManageAccess(String clubSlugOrId, Authentication authentication) {
         String viewerEmail = resolveViewerEmail(authentication);
         if (viewerEmail == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-        Club club = clubService.findById(clubId, viewerEmail);
+        Club club = resolveClub(clubSlugOrId, viewerEmail);
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
-        boolean canManage = Boolean.TRUE.equals(club.getCanManage()) || isOwner(authentication);
+        boolean canManage = Boolean.TRUE.equals(club.getCanManage()) || isPlatformOwner(authentication);
         if (!canManage) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to member details");
         }
         return club;
+    }
+
+    private boolean hasSearchTerm(String... values) {
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

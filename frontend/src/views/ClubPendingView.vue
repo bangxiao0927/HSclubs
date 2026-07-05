@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
-
+import { RouterLink, useRoute } from 'vue-router'
 import {
   approveMembershipRequest,
   fetchClubById,
   fetchMembershipRequests,
-  rejectMembershipRequest,
-} from '../services/clubService'
+  rejectMembershipRequest} from '../services/clubService'
 import type { Club, ClubMembershipRequest } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
@@ -24,11 +22,6 @@ const approvalError = ref('')
 const approvingRequestId = ref<number | null>(null)
 const decliningRequestId = ref<number | null>(null)
 
-
-const schoolSlug = computed(() => {
-  const slug = route.params.schoolSlug
-  return typeof slug === 'string' ? slug : undefined
-})
 
 const authStore = useAuthStore()
 const { currentUser } = storeToRefs(authStore)
@@ -46,7 +39,7 @@ const loadPendingRequests = async (id: string) => {
   pendingError.value = ''
   approvalError.value = ''
   try {
-    pendingRequests.value = await fetchMembershipRequests(id, schoolSlug.value)
+    pendingRequests.value = await fetchMembershipRequests(id)
   } catch (err) {
     pendingError.value = err instanceof Error ? err.message : 'Failed to load pending requests'
     pendingRequests.value = []
@@ -59,7 +52,7 @@ const loadClub = async (id: string) => {
   loading.value = true
   loadError.value = ''
   try {
-    const response = await fetchClubById(id, schoolSlug.value)
+    const response = await fetchClubById(id)
     club.value = response
     if (canManageMembers.value) {
       await loadPendingRequests(id)
@@ -91,7 +84,7 @@ const approveRequest = async (requestId: number) => {
   pendingError.value = ''
   approvingRequestId.value = requestId
   try {
-    await approveMembershipRequest(club.value.id, requestId, schoolSlug.value)
+    await approveMembershipRequest(club.value.id, requestId)
     await loadPendingRequests(String(club.value.id))
   } catch (err) {
     approvalError.value = err instanceof Error ? err.message : 'Failed to approve request'
@@ -108,7 +101,7 @@ const rejectRequest = async (requestId: number) => {
   pendingError.value = ''
   decliningRequestId.value = requestId
   try {
-    await rejectMembershipRequest(club.value.id, requestId, schoolSlug.value)
+    await rejectMembershipRequest(club.value.id, requestId)
     await loadPendingRequests(String(club.value.id))
   } catch (err) {
     approvalError.value = err instanceof Error ? err.message : 'Failed to decline request'
@@ -160,8 +153,8 @@ watch(
     <div class="admin-toolbar">
       <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
       <div class="toolbar-actions" v-if="club">
-        <RouterLink :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`" class="ghost-btn">View public page</RouterLink>
-        <RouterLink :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}/admin` : `/clubs/${club.id}/admin`" class="ghost-btn">Club settings</RouterLink>
+        <RouterLink :to="`/clubs/${club.id}`" class="ghost-btn">View public page</RouterLink>
+        <RouterLink :to="`/clubs/${club.id}/admin`" class="ghost-btn">Club settings</RouterLink>
       </div>
     </div>
 

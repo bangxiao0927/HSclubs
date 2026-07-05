@@ -13,16 +13,11 @@ const loading = ref(true)
 const error = ref('')
 
 const route = useRoute()
-const schoolSlug = computed(() => {
-  const slug = route.params.schoolSlug
-  return typeof slug === 'string' ? slug : undefined
-})
-
 const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    clubs.value = await fetchClubs({ schoolSlug: schoolSlug.value })
+    clubs.value = await fetchClubs({})
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load clubs'
   } finally {
@@ -58,7 +53,7 @@ const filteredClubs = computed(() =>
 
     <section class="results-section page-shell">
       <div v-if="rawSearchQuery && filteredClubs.length" class="results-list">
-        <RouterLink v-for="club in filteredClubs" :key="club.id" :to="schoolSlug ? `/schools/${schoolSlug}/clubs/${club.id}` : `/clubs/${club.id}`" custom v-slot="{ navigate }">
+        <RouterLink v-for="club in filteredClubs" :key="club.id" :to="`/clubs/${club.id}`" custom v-slot="{ navigate }">
           <article
             class="result-card"
             role="link"

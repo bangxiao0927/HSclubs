@@ -3,9 +3,6 @@ package com.example.demo.auth.model;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.util.ArrayList;
-import java.util.List;
-
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AuthUser {
 
@@ -17,8 +14,6 @@ public class AuthUser {
     private Integer graduationYear;
     @JsonProperty("isOwner")
     private boolean platformOwner;
-    private SchoolMembership homeSchool;
-    private List<SchoolMembership> schoolMemberships;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -40,21 +35,4 @@ public class AuthUser {
 
     public boolean isPlatformOwner() { return platformOwner; }
     public void setPlatformOwner(boolean platformOwner) { this.platformOwner = platformOwner; }
-
-    public SchoolMembership getHomeSchool() { return homeSchool; }
-    public void setHomeSchool(SchoolMembership homeSchool) { this.homeSchool = homeSchool; }
-
-    public List<SchoolMembership> getSchoolMemberships() {
-        return schoolMemberships;
-    }
-    public void setSchoolMemberships(List<SchoolMembership> schoolMemberships) {
-        this.schoolMemberships = schoolMemberships;
-    }
-
-    public void addSchoolMembership(SchoolMembership membership) {
-        if (this.schoolMemberships == null) {
-            this.schoolMemberships = new ArrayList<>();
-        }
-        this.schoolMemberships.add(membership);
-    }
 }
