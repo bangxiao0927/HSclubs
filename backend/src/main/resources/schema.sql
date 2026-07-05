@@ -7,11 +7,8 @@ DROP TABLE IF EXISTS club_tag;
 DROP TABLE IF EXISTS club_social_medias;
 DROP TABLE IF EXISTS clubs;
 DROP TABLE IF EXISTS user_profiles;
-DROP TABLE IF EXISTS school_admin_invitations;
-DROP TABLE IF EXISTS school_users;
 DROP TABLE IF EXISTS oauth_users;
 DROP TABLE IF EXISTS club_category;
-DROP TABLE IF EXISTS schools;
 SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE IF NOT EXISTS oauth_users (
@@ -27,44 +24,11 @@ CREATE TABLE IF NOT EXISTS oauth_users (
     CONSTRAINT uq_provider_user UNIQUE (provider, provider_user_id)
 );
 
-CREATE TABLE IF NOT EXISTS schools (
-    id            BIGINT PRIMARY KEY AUTO_INCREMENT,
-    slug          VARCHAR(80)  NOT NULL,
-    school_name   VARCHAR(200) NOT NULL,
-    short_name    VARCHAR(120) NULL,
-    logo_url      VARCHAR(500) NULL,
-    banner_url    VARCHAR(500) NULL,
-    primary_color VARCHAR(20)  NULL,
-    school_domain VARCHAR(160) NULL,
-    timezone      VARCHAR(80)  NOT NULL DEFAULT 'America/Los_Angeles',
-    status        VARCHAR(30)  NOT NULL DEFAULT 'active',
-    created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_schools_slug (slug),
-    UNIQUE KEY uq_schools_domain (school_domain)
-);
-
 CREATE TABLE IF NOT EXISTS user_profiles (
     oauth_user_id BIGINT PRIMARY KEY,
     graduation_year INT NOT NULL,
-    home_school_id BIGINT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_profiles_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE,
-    CONSTRAINT fk_user_profiles_home_school FOREIGN KEY (home_school_id) REFERENCES schools(id) ON DELETE SET NULL
-);
-
-CREATE TABLE IF NOT EXISTS school_users (
-    id                       BIGINT PRIMARY KEY AUTO_INCREMENT,
-    school_id                BIGINT      NOT NULL,
-    oauth_user_id            BIGINT      NOT NULL,
-    role                     VARCHAR(50) NOT NULL DEFAULT 'student',
-    status                   VARCHAR(30) NOT NULL DEFAULT 'active',
-    joined_at                TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    invited_by_oauth_user_id BIGINT      NULL,
-    UNIQUE KEY uq_school_user (school_id, oauth_user_id),
-    CONSTRAINT fk_school_users_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE,
-    CONSTRAINT fk_school_users_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE,
-    CONSTRAINT fk_school_users_invited_by FOREIGN KEY (invited_by_oauth_user_id) REFERENCES oauth_users(uid) ON DELETE SET NULL
+    CONSTRAINT fk_profiles_oauth_user FOREIGN KEY (oauth_user_id) REFERENCES oauth_users(uid) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS club_category (
@@ -89,17 +53,15 @@ CREATE TABLE IF NOT EXISTS clubs (
     image_url VARCHAR(300),
     member_count INT NOT NULL DEFAULT 0,
     achievements JSON NOT NULL DEFAULT (JSON_ARRAY()),
-    school_id BIGINT NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'active',
     visibility VARCHAR(30) NOT NULL DEFAULT 'public',
     approved_at TIMESTAMP NULL,
     approved_by_oauth_user_id BIGINT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_clubs_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE,
     CONSTRAINT fk_clubs_approved_by FOREIGN KEY (approved_by_oauth_user_id) REFERENCES oauth_users(uid) ON DELETE SET NULL,
     CONSTRAINT fk_clubs_category FOREIGN KEY (category) REFERENCES club_category(cate_name),
-    UNIQUE KEY uq_clubs_school_slug (school_id, slug)
+    UNIQUE KEY uq_clubs_slug (slug)
 );
 
 CREATE TABLE IF NOT EXISTS club_social_medias (
@@ -158,20 +120,4 @@ CREATE TABLE IF NOT EXISTS calenders (
     meeting_time VARCHAR(50) NOT NULL,
     PRIMARY KEY (club_id, week_day),
     CONSTRAINT fk_calender_club FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS school_admin_invitations (
-    id                       BIGINT PRIMARY KEY AUTO_INCREMENT,
-    school_id                BIGINT       NOT NULL,
-    email                    VARCHAR(200) NOT NULL,
-    role                     VARCHAR(50)  NOT NULL DEFAULT 'school_admin',
-    status                   VARCHAR(30)  NOT NULL DEFAULT 'pending',
-    token                    VARCHAR(255) NOT NULL,
-    expires_at               TIMESTAMP    NOT NULL,
-    created_at               TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    invited_by_oauth_user_id BIGINT       NULL,
-    UNIQUE KEY uq_school_invite_token (token),
-    UNIQUE KEY uq_school_invite_email (school_id, email, status),
-    CONSTRAINT fk_school_admin_invites_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE,
-    CONSTRAINT fk_school_admin_invites_invited_by FOREIGN KEY (invited_by_oauth_user_id) REFERENCES oauth_users(uid) ON DELETE SET NULL
 );
