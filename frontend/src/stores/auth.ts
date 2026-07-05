@@ -49,7 +49,6 @@ export const useAuthStore = defineStore('auth', () => {
       avatarUrl: trimmed ? buildApiUrl(trimmed) : buildFallbackAvatar(user),
       // Support both isOwner (backward compat) and isPlatformOwner
       isOwner: user.isOwner ?? user.isPlatformOwner ?? false,
-      schoolMemberships: user.schoolMemberships ?? [],
     }
   }
 

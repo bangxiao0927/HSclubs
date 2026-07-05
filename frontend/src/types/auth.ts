@@ -4,20 +4,6 @@ export interface AuthProvider {
   authorizationUrl: string
 }
 
-export interface SchoolMembership {
-  schoolId: number
-  slug: string
-  schoolName: string
-  role: string
-  status: string
-}
-
-export interface HomeSchool {
-  schoolId: number
-  slug: string
-  schoolName: string
-}
-
 export interface AuthUser {
   id: string
   email: string
@@ -27,6 +13,4 @@ export interface AuthUser {
   isOwner: boolean
   isPlatformOwner?: boolean
   graduationYear?: number | null
-  homeSchool?: HomeSchool | null
-  schoolMemberships?: SchoolMembership[]
 }

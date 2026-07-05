@@ -14,7 +14,6 @@ export interface Club {
   instagramUrl?: string | null
   memberCount: number
   achievements: string[]
-  schoolId: number
   status?: string | null
   visibility?: string | null
   viewerRole?: string | null
