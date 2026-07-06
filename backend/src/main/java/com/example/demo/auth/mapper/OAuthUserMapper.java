@@ -10,4 +10,8 @@ public interface OAuthUserMapper {
     void upsert(OAuthUserRecord record);
 
     Long findIdByEmail(@Param("email") String email);
+
+    int acceptTerms(@Param("email") String email);
+
+    Boolean hasAcceptedTerms(@Param("email") String email);
 }

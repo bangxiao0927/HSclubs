@@ -55,6 +55,23 @@ const router = createRouter({
       component: () => import('../views/SettingsView.vue'),
     },
 
+    // ---- Legal ----
+    {
+      path: '/terms',
+      name: 'terms',
+      component: () => import('../views/TermsOfUseView.vue'),
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('../views/PrivacyPolicyView.vue'),
+    },
+    {
+      path: '/accept-terms',
+      name: 'accept-terms',
+      component: () => import('../views/AcceptTermsView.vue'),
+    },
+
     // ---- Auth routes ----
     {
       path: '/auth',

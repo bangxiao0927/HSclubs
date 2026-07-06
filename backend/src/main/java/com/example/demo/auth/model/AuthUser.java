@@ -14,6 +14,7 @@ public class AuthUser {
     private Integer graduationYear;
     @JsonProperty("isOwner")
     private boolean platformOwner;
+    private Boolean acceptedTerms;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -32,6 +33,9 @@ public class AuthUser {
 
     public Integer getGraduationYear() { return graduationYear; }
     public void setGraduationYear(Integer graduationYear) { this.graduationYear = graduationYear; }
+
+    public Boolean getAcceptedTerms() { return acceptedTerms; }
+    public void setAcceptedTerms(Boolean acceptedTerms) { this.acceptedTerms = acceptedTerms; }
 
     public boolean isPlatformOwner() { return platformOwner; }
     public void setPlatformOwner(boolean platformOwner) { this.platformOwner = platformOwner; }
