@@ -17,7 +17,11 @@ onMounted(async () => {
   await authStore.refreshUser()
 
   if (authStore.isAuthenticated) {
-    router.replace(resolveRedirectTarget())
+    if (authStore.currentUser && authStore.currentUser.acceptedTerms === false) {
+      router.replace('/accept-terms')
+    } else {
+      router.replace(resolveRedirectTarget())
+    }
   } else {
     router.replace({ path: '/auth', query: { error: 'login_failed' } })
   }

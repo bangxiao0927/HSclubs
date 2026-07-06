@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS oauth_users (
     display_name VARCHAR(200),
     avatar_url VARCHAR(500),
     role VARCHAR(50) NOT NULL DEFAULT 'student',
+    accepted_terms_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uq_provider_user UNIQUE (provider, provider_user_id)
