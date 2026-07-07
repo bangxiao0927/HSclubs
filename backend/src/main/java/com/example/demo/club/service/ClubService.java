@@ -172,6 +172,44 @@ public class ClubService {
         return oAuthUserMapper.findIdByEmail(email);
     }
 
+    // ---- Recommendations ----
+
+    /**
+     * Recommend clubs based on categories the user already belongs to.
+     * Falls back to popular clubs (highest member count) for cold start.
+     */
+    public List<Club> getRecommendations(String viewerEmail, int limit) {
+        List<Club> allClubs = clubMapper.findAll();
+
+        if (viewerEmail != null && !viewerEmail.isBlank()) {
+            Long userId = oAuthUserMapper.findIdByEmail(viewerEmail);
+            if (userId != null) {
+                // Find categories the user is already a member of
+                List<String> userCategories = clubMapper.findCategoriesByOauthUserId(userId);
+                if (!userCategories.isEmpty()) {
+                    // Recommend clubs in same categories that user hasn't joined
+                    List<Long> joinedClubIds = clubMapper.findClubIdsByOauthUserId(userId);
+                    return allClubs.stream()
+                        .filter(c -> userCategories.contains(c.getCategory()))
+                        .filter(c -> !joinedClubIds.contains(c.getId()))
+                        .sorted((a, b) -> Integer.compare(
+                            b.getMemberCount() != null ? b.getMemberCount() : 0,
+                            a.getMemberCount() != null ? a.getMemberCount() : 0))
+                        .limit(limit)
+                        .toList();
+                }
+            }
+        }
+
+        // Cold start: return most popular clubs
+        return allClubs.stream()
+            .sorted((a, b) -> Integer.compare(
+                b.getMemberCount() != null ? b.getMemberCount() : 0,
+                a.getMemberCount() != null ? a.getMemberCount() : 0))
+            .limit(limit)
+            .toList();
+    }
+
     // ---- Internal helpers ----
 
     private void normalizeClub(Club club) {

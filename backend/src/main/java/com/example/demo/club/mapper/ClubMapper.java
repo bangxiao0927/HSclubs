@@ -66,4 +66,8 @@ public interface ClubMapper {
     List<Club> findClubsByOauthUserId(@Param("oauthUserId") Long oauthUserId);
 
     List<ClubMembershipRequest> findPendingRequestsByOauthUserId(@Param("oauthUserId") Long oauthUserId);
+
+    List<String> findCategoriesByOauthUserId(@Param("oauthUserId") Long oauthUserId);
+
+    List<Long> findClubIdsByOauthUserId(@Param("oauthUserId") Long oauthUserId);
 }

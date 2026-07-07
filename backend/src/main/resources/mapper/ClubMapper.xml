@@ -308,4 +308,16 @@
         ORDER BY cmr.created_at DESC
     </select>
 
+    <select id="findCategoriesByOauthUserId" resultType="string">
+        SELECT DISTINCT c.category
+        FROM clubs c
+        INNER JOIN club_member cm ON cm.club_id = c.id
+        WHERE cm.oauth_user_id = #{oauthUserId}
+          AND c.category IS NOT NULL
+    </select>
+
+    <select id="findClubIdsByOauthUserId" resultType="long">
+        SELECT club_id FROM club_member WHERE oauth_user_id = #{oauthUserId}
+    </select>
+
 </mapper>

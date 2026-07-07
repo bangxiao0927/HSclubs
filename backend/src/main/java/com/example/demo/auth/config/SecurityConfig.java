@@ -48,6 +48,7 @@ public class SecurityConfig {
                 // OAuth2 login flow (must be unauthenticated)
                 .requestMatchers("/api/auth/**", "/oauth2/**", "/login/**", "/error").permitAll()
                 // Public club data
+                .requestMatchers(HttpMethod.GET, "/api/clubs/recommendations").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/clubs").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/clubs/calendar").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/clubs/*").permitAll()
