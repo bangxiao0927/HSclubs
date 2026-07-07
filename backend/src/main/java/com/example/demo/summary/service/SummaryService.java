@@ -3,6 +3,7 @@ package com.example.demo.summary.service;
 import com.example.demo.club.mapper.ClubMapper;
 import com.example.demo.club.model.Club;
 import com.example.demo.summary.model.SummaryResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -19,9 +20,18 @@ import java.util.stream.Collectors;
 public class SummaryService {
 
     private final ClubMapper clubMapper;
+    private final String schoolName;
+    private final String shortName;
+    private final String slug;
 
-    public SummaryService(ClubMapper clubMapper) {
+    public SummaryService(ClubMapper clubMapper,
+                          @Value("${app.summary.school-name:HS Clubs}") String schoolName,
+                          @Value("${app.summary.short-name:HS Clubs}") String shortName,
+                          @Value("${app.summary.slug:hsclubs}") String slug) {
         this.clubMapper = clubMapper;
+        this.schoolName = schoolName;
+        this.shortName = shortName;
+        this.slug = slug;
     }
 
     public SummaryResponse buildSummary() {
@@ -46,9 +56,9 @@ public class SummaryService {
             .orElse(null);
 
         SummaryResponse summary = new SummaryResponse();
-        summary.setSchoolName("HS Clubs");
-        summary.setShortName("HS Clubs");
-        summary.setSlug("hsclubs");
+        summary.setSchoolName(schoolName);
+        summary.setShortName(shortName);
+        summary.setSlug(slug);
         summary.setStatus("active");
         summary.setClubCount(clubs.size());
         summary.setCategories(categoryCounts);
