@@ -50,6 +50,13 @@ public class OAuthUserService {
         return null;
     }
 
+    public java.time.LocalDateTime findCreatedAtByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return oAuthUserMapper.findCreatedAtByEmail(email);
+    }
+
     public Long findIdByEmail(String email) {
         if (email == null || email.isBlank()) {
             return null;

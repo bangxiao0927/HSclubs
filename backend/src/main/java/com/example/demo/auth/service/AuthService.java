@@ -75,6 +75,12 @@ public class AuthService {
         }
         user.setPlatformOwner(isPlatformOwner(user.getEmail()));
 
+        // Set member-since from database
+        java.time.LocalDateTime created = oAuthUserService.findCreatedAtByEmail(user.getEmail());
+        if (created != null) {
+            user.setCreatedAt(created.toString());
+        }
+
         oAuthUserService.recordLogin(provider, attributes);
         return user;
     }

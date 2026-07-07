@@ -15,6 +15,10 @@
             last_login_at = CURRENT_TIMESTAMP
     </insert>
 
+    <select id="findCreatedAtByEmail" resultType="java.time.LocalDateTime">
+        SELECT created_at FROM oauth_users WHERE LOWER(email) = LOWER(#{email}) LIMIT 1
+    </select>
+
     <select id="findIdByEmail" parameterType="string" resultType="long">
         SELECT uid
         FROM oauth_users

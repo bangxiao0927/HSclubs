@@ -69,7 +69,15 @@ const topClubs = computed(() =>
   [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4),
 )
 
-const heroImages = ['/hsclubs1.jpg', '/hsclubs2.png', '/hsclubs3.png']
+// Hero images: prefer top club images, fall back to static defaults
+const heroImages = computed(() => {
+  const clubImages = topClubs.value
+    .map((c) => clubImage(c))
+    .filter((url) => url && !url.includes('dicebear'))
+  return clubImages.length >= 2
+    ? clubImages.slice(0, 4)
+    : ['/hsclubs1.jpg', '/hsclubs2.png', '/hsclubs3.png']
+})
 
 const stopHeroInterval = () => {
   if (heroInterval !== undefined) {
@@ -81,7 +89,7 @@ const stopHeroInterval = () => {
 const startHeroInterval = () => {
   stopHeroInterval()
   heroInterval = window.setInterval(() => {
-    currentHeroImageIndex.value = (currentHeroImageIndex.value + 1) % heroImages.length
+    currentHeroImageIndex.value = (currentHeroImageIndex.value + 1) % heroImages.value.length
   }, 3000)
 }
 

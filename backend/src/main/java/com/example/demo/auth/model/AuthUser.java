@@ -14,6 +14,7 @@ public class AuthUser {
     private Integer graduationYear;
     @JsonProperty("isOwner")
     private boolean platformOwner;
+    private String createdAt;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -35,4 +36,7 @@ public class AuthUser {
 
     public boolean isPlatformOwner() { return platformOwner; }
     public void setPlatformOwner(boolean platformOwner) { this.platformOwner = platformOwner; }
+
+    public String getCreatedAt() { return createdAt; }
+    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
 }
