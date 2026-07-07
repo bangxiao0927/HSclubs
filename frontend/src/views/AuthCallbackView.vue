@@ -17,7 +17,13 @@ onMounted(async () => {
   await authStore.refreshUser()
 
   if (authStore.isAuthenticated) {
-    router.replace(resolveRedirectTarget())
+    const user = authStore.currentUser
+    // New users without a graduation year set go to onboarding first
+    if (user && user.graduationYear == null) {
+      router.replace('/onboarding')
+    } else {
+      router.replace(resolveRedirectTarget())
+    }
   } else {
     router.replace({ path: '/auth', query: { error: 'login_failed' } })
   }
