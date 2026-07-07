@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -62,6 +63,10 @@ public class ClubImageController {
         String filename = UUID.randomUUID() + resolveImageExtension(file.getContentType());
 
         try {
+            // Delete old image file before saving the new one
+            String oldImageUrl = club.getImageUrl();
+            deleteImageFile(oldImageUrl);
+
             Path target = uploadDir.resolve(filename).normalize();
             if (!target.startsWith(uploadDir)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid file name");
@@ -140,5 +145,24 @@ public class ClubImageController {
         return securityProperties.getOwnerEmails().stream()
             .filter(item -> item != null && !item.isBlank())
             .anyMatch(item -> email.equalsIgnoreCase(item.trim()));
+    }
+
+    // Delete an image file from disk by its URL path (e.g. "/uploads/uuid.jpg")
+    private void deleteImageFile(String imageUrl) {
+        if (imageUrl == null || !imageUrl.startsWith("/uploads/")) {
+            return;
+        }
+        String filename = imageUrl.substring("/uploads/".length());
+        if (filename.contains("..") || filename.contains("/")) {
+            return; // path traversal guard
+        }
+        try {
+            Path file = uploadDir.resolve(filename).normalize();
+            if (file.startsWith(uploadDir)) {
+                Files.deleteIfExists(file);
+            }
+        } catch (IOException ignored) {
+            // Best-effort cleanup; don't fail the upload if cleanup fails
+        }
     }
 }
