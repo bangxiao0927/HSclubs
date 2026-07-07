@@ -1,5 +1,7 @@
 package com.example.demo.user.controller;
 
+import com.example.demo.auth.mapper.OAuthUserMapper;
+import com.example.demo.auth.model.OAuthUserRecord;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.user.dto.UpdateGraduationYearRequest;
@@ -12,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,8 +28,9 @@ public class UserController {
 
     private final UserService userService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, OAuthUserMapper oAuthUserMapper) {
         this.userService = userService;
+        this.oAuthUserMapper = oAuthUserMapper;
     }
 
     @PatchMapping("/me/graduation-year")
@@ -62,6 +66,19 @@ public class UserController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
         }
     }
+
+    @GetMapping("/search")
+    public List<OAuthUserRecord> searchUsers(@RequestParam("q") String query,
+                                              @RequestParam(defaultValue = "10") int limit) {
+        String trimmed = query != null ? query.trim() : "";
+        if (trimmed.length() < 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search query must be at least 2 characters");
+        }
+        int cappedLimit = Math.max(1, Math.min(limit, 20));
+        return oAuthUserMapper.searchByEmailOrName(trimmed, cappedLimit);
+    }
+
+    private final OAuthUserMapper oAuthUserMapper;
 
     private String requireAuthenticatedEmail(Authentication authentication) {
         if (!(authentication instanceof OAuth2AuthenticationToken token)) {

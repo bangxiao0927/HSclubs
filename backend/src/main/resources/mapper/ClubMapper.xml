@@ -308,4 +308,18 @@
         ORDER BY cmr.created_at DESC
     </select>
 
+    <select id="findMembershipStatusByUserId" resultType="com.example.demo.club.model.ViewerMembershipStatus">
+        SELECT
+            CASE WHEN cm.oauth_user_id IS NOT NULL THEN TRUE ELSE FALSE END AS member,
+            cm.role_name AS roleName
+        FROM (SELECT 1) AS dummy
+        LEFT JOIN club_member cm ON cm.club_id = #{clubId} AND cm.oauth_user_id = #{oauthUserId}
+    </select>
+
+    <update id="updateMemberRole">
+        UPDATE club_member
+        SET role_name = #{roleName}
+        WHERE club_id = #{clubId} AND oauth_user_id = #{oauthUserId}
+    </update>
+
 </mapper>
