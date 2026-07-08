@@ -1,6 +1,7 @@
 package com.example.demo.auth.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import com.example.demo.auth.model.AuthProvider;
 import com.example.demo.auth.model.AuthUser;
@@ -8,8 +9,11 @@ import com.example.demo.auth.service.AuthService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -40,5 +44,34 @@ public class AuthController {
         }
 
         return currentUser;
+    }
+
+    @PostMapping("/accept-terms")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void acceptTerms(Authentication authentication) {
+        String email = resolveEmail(authentication);
+        if (email == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        authService.acceptTerms(email);
+    }
+
+    @GetMapping("/me/has-accepted-terms")
+    public Map<String, Boolean> hasAcceptedTerms(Authentication authentication) {
+        String email = resolveEmail(authentication);
+        boolean accepted = email != null && authService.hasAcceptedTerms(email);
+        return Map.of("accepted", accepted);
+    }
+
+    private String resolveEmail(Authentication authentication) {
+        if (!(authentication instanceof OAuth2AuthenticationToken token)) {
+            return null;
+        }
+        OAuth2User principal = token.getPrincipal();
+        if (principal == null) {
+            return null;
+        }
+        Object email = principal.getAttributes().get("email");
+        return (email instanceof String str && !str.isBlank()) ? str : null;
     }
 }

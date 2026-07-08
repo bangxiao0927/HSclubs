@@ -13,4 +13,5 @@ export interface AuthUser {
   isOwner: boolean
   isPlatformOwner?: boolean
   graduationYear?: number | null
+  acceptedTerms?: boolean | null
 }

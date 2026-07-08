@@ -18,8 +18,10 @@ onMounted(async () => {
 
   if (authStore.isAuthenticated) {
     const user = authStore.currentUser
-    // New users without a graduation year set go to onboarding first
-    if (user && user.graduationYear == null) {
+    if (user?.acceptedTerms === false) {
+      router.replace('/accept-terms')
+    } else if (user && user.graduationYear == null) {
+      // New users without a graduation year set go to onboarding first
       router.replace('/onboarding')
     } else {
       router.replace(resolveRedirectTarget())

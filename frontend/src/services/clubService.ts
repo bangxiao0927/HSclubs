@@ -147,3 +147,12 @@ export const rejectMembershipRequest = (
 ) =>
   request<void>(clubPath(`/${clubId}/membership-requests/${requestId}`), {
     method: 'DELETE'})
+
+export const createClub = async (data: Partial<Club>) => {
+  const club = await request<Club>(clubPath(''), {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+  invalidateClubCache()
+  return club
+}

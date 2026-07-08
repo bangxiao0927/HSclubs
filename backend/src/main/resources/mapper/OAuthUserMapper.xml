@@ -22,4 +22,19 @@
         LIMIT 1
     </select>
 
+    <update id="acceptTerms">
+        UPDATE oauth_users
+        SET accepted_terms_at = NOW()
+        WHERE LOWER(email) = LOWER(#{email})
+          AND accepted_terms_at IS NULL
+    </update>
+
+    <select id="hasAcceptedTerms" resultType="boolean">
+        SELECT COUNT(*) > 0
+        FROM oauth_users
+        WHERE LOWER(email) = LOWER(#{email})
+          AND accepted_terms_at IS NOT NULL
+        LIMIT 1
+    </select>
+
 </mapper>
