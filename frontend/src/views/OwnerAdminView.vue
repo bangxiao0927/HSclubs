@@ -2,10 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
-import { fetchClubs } from '../services/clubService'
+import { fetchClubs, createClub } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
+import { clubCategoryOptions } from '../utils/clubCategories'
 
 
 const route = useRoute()
@@ -22,6 +23,58 @@ const lastFetchedAt = ref<Date | null>(null)
 
 const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
 const sessionReady = computed(() => hasCheckedSession.value || !userLoading.value)
+
+// Create club modal state
+const showCreateModal = ref(false)
+const createLoading = ref(false)
+const createError = ref('')
+const newClub = ref<Partial<Club>>({
+  name: '',
+  aliasName: '',
+  description: '',
+  category: clubCategoryOptions[0]?.title ?? '',
+  meetingSchedule: '',
+  location: '',
+  contactEmail: '',
+  advisor: '',
+})
+
+const openCreateModal = () => {
+  createError.value = ''
+  newClub.value = {
+    name: '',
+    aliasName: '',
+    description: '',
+    category: clubCategoryOptions[0]?.title ?? '',
+    meetingSchedule: '',
+    location: '',
+    contactEmail: '',
+    advisor: '',
+  }
+  showCreateModal.value = true
+}
+
+const handleCreateClub = async () => {
+  if (!newClub.value.name?.trim()) {
+    createError.value = 'Club name is required.'
+    return
+  }
+  if (!newClub.value.category?.trim()) {
+    createError.value = 'Category is required.'
+    return
+  }
+  createLoading.value = true
+  createError.value = ''
+  try {
+    await createClub(newClub.value)
+    showCreateModal.value = false
+    await loadClubs()
+  } catch (err) {
+    createError.value = err instanceof Error ? err.message : 'Failed to create club'
+  } finally {
+    createLoading.value = false
+  }
+}
 
 const loadClubs = async () => {
   if (loading.value) {
@@ -133,6 +186,7 @@ const resetFilters = () => {
         <button type="button" class="ghost-btn" @click="loadClubs" :disabled="loading">
           {{ loading ? 'Refreshing…' : 'Refresh data' }}
         </button>
+        <button type="button" class="primary-btn" @click="openCreateModal">+ Create Club</button>
       </div>
     </header>
 
@@ -162,7 +216,11 @@ const resetFilters = () => {
       <button type="button" class="ghost-btn" @click="loadClubs">Try again</button>
     </div>
     <div v-else>
-      <div v-if="filteredClubs.length" class="club-table">
+      <div v-if="!filteredClubs.length && !clubs.length" class="status-card muted">
+        <p>No clubs yet. Create the first one to get started.</p>
+        <button type="button" class="primary-btn" @click="openCreateModal">+ Create Club</button>
+      </div>
+      <div v-else-if="filteredClubs.length" class="club-table">
         <article v-for="club in filteredClubs" :key="club.id" class="club-row">
           <div class="club-main">
             <div class="club-avatar">
@@ -196,6 +254,61 @@ const resetFilters = () => {
         >Clear filters</button>
       </div>
     </div>
+
+    <!-- Create Club Modal -->
+    <Teleport to="body">
+      <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h2>Create Club</h2>
+            <button type="button" class="ghost-btn small" @click="showCreateModal = false" aria-label="Close">&times;</button>
+          </div>
+          <form class="modal-body" @submit.prevent="handleCreateClub">
+            <label>
+              <span>Club name <em>(required)</em></span>
+              <input v-model="newClub.name" type="text" placeholder="e.g. Robotics Club" required />
+            </label>
+            <label>
+              <span>Alias / short name</span>
+              <input v-model="newClub.aliasName" type="text" placeholder="e.g. RC" />
+            </label>
+            <label>
+              <span>Category <em>(required)</em></span>
+              <select v-model="newClub.category" required>
+                <option v-for="cat in clubCategoryOptions" :key="cat.title" :value="cat.title">{{ cat.title }}</option>
+              </select>
+            </label>
+            <label>
+              <span>Description</span>
+              <textarea v-model="newClub.description" rows="3" placeholder="What does this club do?" />
+            </label>
+            <label>
+              <span>Meeting schedule</span>
+              <input v-model="newClub.meetingSchedule" type="text" placeholder="e.g. Tuesday · Weekly · Lunch" />
+            </label>
+            <label>
+              <span>Location</span>
+              <input v-model="newClub.location" type="text" placeholder="e.g. Room 411" />
+            </label>
+            <label>
+              <span>Contact email</span>
+              <input v-model="newClub.contactEmail" type="email" placeholder="e.g. president@school.org" />
+            </label>
+            <label>
+              <span>Advisor name</span>
+              <input v-model="newClub.advisor" type="text" placeholder="e.g. Dr. Smith" />
+            </label>
+            <div v-if="createError" class="status-card error">{{ createError }}</div>
+            <div class="modal-actions">
+              <button type="button" class="ghost-btn" @click="showCreateModal = false">Cancel</button>
+              <button type="submit" class="primary-btn" :disabled="createLoading">
+                {{ createLoading ? 'Creating…' : 'Create Club' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Teleport>
   </section>
 
   <section v-else class="page-shell gate-shell">
@@ -527,4 +640,77 @@ select {
     text-align: center;
   }
 }
+/* ---- Create Club Modal ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-card {
+  background: var(--mv-surface-card-strong);
+  border-radius: 24px;
+  border: 1px solid var(--mv-border);
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--mv-border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.modal-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.modal-body label span em {
+  font-style: normal;
+  color: var(--mv-status-danger);
+}
+
+.modal-body input,
+.modal-body select,
+.modal-body textarea {
+  padding: 0.6rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
 </style>

@@ -7,6 +7,7 @@ import java.util.Map;
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.auth.model.AuthProvider;
 import com.example.demo.auth.model.AuthUser;
+import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.user.service.UserService;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -23,9 +24,11 @@ public class AuthService {
     private final OAuthUserService oAuthUserService;
     private final SecurityProperties securityProperties;
     private final UserService userService;
+    private final OAuthUserMapper oAuthUserMapper;
     private final String authorizationRequestBaseUri;
 
     public AuthService(ClientRegistrationRepository clientRegistrationRepository,
+                       OAuthUserMapper oAuthUserMapper,
                        OAuthUserService oAuthUserService,
                        SecurityProperties securityProperties,
                        UserService userService) {
@@ -37,6 +40,7 @@ public class AuthService {
         this.oAuthUserService = oAuthUserService;
         this.securityProperties = securityProperties;
         this.userService = userService;
+        this.oAuthUserMapper = oAuthUserMapper;
         this.authorizationRequestBaseUri = resolveAuthorizationRequestBaseUri(securityProperties);
     }
 
@@ -74,6 +78,7 @@ public class AuthService {
             user.setGraduationYear(storedGraduationYear);
         }
         user.setPlatformOwner(isPlatformOwner(user.getEmail()));
+        user.setAcceptedTerms(hasAcceptedTerms(user.getEmail()));
 
         // Set member-since from database
         java.time.LocalDateTime created = oAuthUserService.findCreatedAtByEmail(user.getEmail());
@@ -83,6 +88,18 @@ public class AuthService {
 
         oAuthUserService.recordLogin(provider, attributes);
         return user;
+    }
+
+    public void acceptTerms(String email) {
+        oAuthUserMapper.acceptTerms(email);
+    }
+
+    public boolean hasAcceptedTerms(String email) {
+        if (!StringUtils.hasText(email)) {
+            return false;
+        }
+        Boolean result = oAuthUserMapper.hasAcceptedTerms(email);
+        return Boolean.TRUE.equals(result);
     }
 
     private String stringAttribute(Map<String, Object> attributes, String... keys) {

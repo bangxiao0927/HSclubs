@@ -55,6 +55,30 @@ const router = createRouter({
       component: () => import('../views/SettingsView.vue'),
     },
 
+    // ---- Onboarding ----
+    {
+      path: '/onboarding',
+      name: 'onboarding',
+      component: () => import('../views/OnboardingView.vue'),
+    },
+
+    // ---- Legal ----
+    {
+      path: '/terms',
+      name: 'terms',
+      component: () => import('../views/TermsOfUseView.vue'),
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('../views/PrivacyPolicyView.vue'),
+    },
+    {
+      path: '/accept-terms',
+      name: 'accept-terms',
+      component: () => import('../views/AcceptTermsView.vue'),
+    },
+
     // ---- Auth routes ----
     {
       path: '/auth',

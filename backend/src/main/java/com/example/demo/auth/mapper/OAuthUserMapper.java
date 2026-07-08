@@ -14,4 +14,8 @@ public interface OAuthUserMapper {
     Long findIdByEmail(@Param("email") String email);
 
     LocalDateTime findCreatedAtByEmail(@Param("email") String email);
+
+    int acceptTerms(@Param("email") String email);
+
+    Boolean hasAcceptedTerms(@Param("email") String email);
 }
