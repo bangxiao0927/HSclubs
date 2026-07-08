@@ -187,9 +187,8 @@ public class ClubService {
                 // Find categories the user is already a member of
                 List<String> userCategories = clubMapper.findCategoriesByOauthUserId(userId);
                 if (!userCategories.isEmpty()) {
-                    // Recommend clubs in same categories that user hasn't joined
                     List<Long> joinedClubIds = clubMapper.findClubIdsByOauthUserId(userId);
-                    return allClubs.stream()
+                    List<Club> personalized = allClubs.stream()
                         .filter(c -> userCategories.contains(c.getCategory()))
                         .filter(c -> !joinedClubIds.contains(c.getId()))
                         .sorted((a, b) -> Integer.compare(
@@ -197,6 +196,10 @@ public class ClubService {
                             a.getMemberCount() != null ? a.getMemberCount() : 0))
                         .limit(limit)
                         .toList();
+                    if (!personalized.isEmpty()) {
+                        return personalized;
+                    }
+                    // Fall through to popular clubs if no unjoined clubs in user's categories
                 }
             }
         }
