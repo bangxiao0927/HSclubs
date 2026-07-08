@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { updateGraduationYear } from '../services/userService'
-import { clubCategoryOptions } from '../utils/clubCategories'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -11,25 +10,15 @@ const authStore = useAuthStore()
 const saving = ref(false)
 const error = ref('')
 const graduationYear = ref<number | null>(authStore.currentUser?.graduationYear ?? null)
-const selectedInterests = ref<string[]>([])
 
 const yearOptions = computed(() => {
   const currentYear = new Date().getFullYear()
   const years: number[] = []
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 4; i++) {
     years.push(currentYear + i)
   }
   return years
 })
-
-const toggleInterest = (title: string) => {
-  const idx = selectedInterests.value.indexOf(title)
-  if (idx >= 0) {
-    selectedInterests.value.splice(idx, 1)
-  } else {
-    selectedInterests.value.push(title)
-  }
-}
 
 const canSave = computed(() => graduationYear.value !== null && graduationYear.value > 0)
 
@@ -47,6 +36,13 @@ const handleSave = async () => {
     saving.value = false
   }
 }
+
+// Redirect already-onboarded users away from this page
+onMounted(() => {
+  if (authStore.currentUser?.graduationYear != null) {
+    router.replace({ path: '/profile' })
+  }
+})
 
 const handleSkip = () => {
   router.replace({ path: '/profile' })
@@ -68,22 +64,9 @@ const handleSkip = () => {
           </select>
         </label>
 
-        <fieldset>
-          <legend>Interests (optional) — helps us recommend clubs</legend>
-          <div class="interest-chips">
-            <button
-              v-for="cat in clubCategoryOptions"
-              :key="cat.title"
-              type="button"
-              class="chip"
-              :class="{ active: selectedInterests.includes(cat.title) }"
-              @click="toggleInterest(cat.title)"
-            >
-              <span class="chip-icon">{{ cat.icon }}</span>
-              {{ cat.title }}
-            </button>
-          </div>
-        </fieldset>
+        <p class="interest-note">
+          After setup, you can browse clubs by category and join the ones that match your interests.
+        </p>
 
         <div v-if="error" class="error-msg">{{ error }}</div>
 
@@ -134,6 +117,13 @@ const handleSkip = () => {
   line-height: 1.6;
 }
 
+.interest-note {
+  color: rgba(254, 252, 232, 0.6);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
 .onboarding-form {
   display: flex;
   flex-direction: column;
@@ -171,41 +161,6 @@ fieldset {
 legend {
   font-size: 0.9rem;
   margin-bottom: 0.6rem;
-}
-
-.interest-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.85rem;
-  border-radius: 20px;
-  border: 1px solid rgba(254, 252, 232, 0.15);
-  background: rgba(10, 10, 20, 0.5);
-  color: rgba(254, 252, 232, 0.8);
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.chip:hover {
-  border-color: rgba(250, 204, 21, 0.4);
-}
-
-.chip.active {
-  border-color: #fde047;
-  background: rgba(250, 204, 21, 0.15);
-  color: #fde047;
-}
-
-.chip-icon {
-  font-size: 1rem;
 }
 
 .error-msg {
