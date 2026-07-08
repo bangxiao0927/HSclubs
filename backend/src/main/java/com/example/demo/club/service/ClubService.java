@@ -172,6 +172,31 @@ public class ClubService {
         return oAuthUserMapper.findIdByEmail(email);
     }
 
+    // ---- President management ----
+
+    @Transactional
+    public void assignPresident(Long clubId, Long oauthUserId) {
+        // Check if already a member
+        ViewerMembershipStatus status = clubMapper.findMembershipStatusByUserId(clubId, oauthUserId);
+        if (status != null && Boolean.TRUE.equals(status.getMember())) {
+            // Update existing membership to president role
+            clubMapper.updateMemberRole(clubId, oauthUserId, "president");
+        } else {
+            // Insert as president
+            clubMapper.insertMember(clubId, oauthUserId, "president");
+        }
+    }
+
+    @Transactional
+    public void removePresident(Long clubId, Long oauthUserId) {
+        ViewerMembershipStatus status = clubMapper.findMembershipStatusByUserId(clubId, oauthUserId);
+        if (status == null || !"president".equalsIgnoreCase(status.getRoleName())) {
+            throw new IllegalArgumentException("User is not a president of this club");
+        }
+        // Downgrade to regular member
+        clubMapper.updateMemberRole(clubId, oauthUserId, "member");
+    }
+
     // ---- Internal helpers ----
 
     private void normalizeClub(Club club) {

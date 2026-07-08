@@ -3,7 +3,9 @@ import { computed, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
 import { fetchClubById, fetchClubMembers, updateClub } from '../services/clubService'
+import { searchUsers, assignPresident, removePresident } from '../services/userService'
 import type { Club, ClubMember } from '../types/club'
+import type { UserSearchResult } from '../services/userService'
 import { useAuthStore } from '../stores/auth'
 import { clubCategoryOptions } from '../utils/clubCategories'
 import { buildApiUrl } from '../services/httpClient'
@@ -19,6 +21,64 @@ const successMessage = ref('')
 const members = ref<ClubMember[]>([])
 const membersLoading = ref(false)
 const membersError = ref('')
+
+// President management state
+const presidentSearchQuery = ref('')
+const presidentSearchResults = ref<UserSearchResult[]>([])
+const presidentSearching = ref(false)
+const presidentSearchError = ref('')
+const presidentUpdating = ref<number | null>(null)
+const presidentActionError = ref('')
+
+const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
+
+const handlePresidentSearch = async () => {
+  const q = presidentSearchQuery.value.trim()
+  if (q.length < 2) {
+    presidentSearchResults.value = []
+    return
+  }
+  presidentSearching.value = true
+  presidentSearchError.value = ''
+  try {
+    presidentSearchResults.value = await searchUsers(q, 10)
+  } catch (err) {
+    presidentSearchError.value = err instanceof Error ? err.message : 'Search failed'
+    presidentSearchResults.value = []
+  } finally {
+    presidentSearching.value = false
+  }
+}
+
+const handleAssignPresident = async (userId: number) => {
+  if (!club.value) return
+  presidentUpdating.value = userId
+  presidentActionError.value = ''
+  try {
+    await assignPresident(club.value.id, userId)
+    await refreshMembers()
+    presidentSearchResults.value = []
+    presidentSearchQuery.value = ''
+  } catch (err) {
+    presidentActionError.value = err instanceof Error ? err.message : 'Failed to assign president'
+  } finally {
+    presidentUpdating.value = null
+  }
+}
+
+const handleRemovePresident = async (userId: number) => {
+  if (!club.value) return
+  presidentUpdating.value = userId
+  presidentActionError.value = ''
+  try {
+    await removePresident(club.value.id, userId)
+    await refreshMembers()
+  } catch (err) {
+    presidentActionError.value = err instanceof Error ? err.message : 'Failed to remove president'
+  } finally {
+    presidentUpdating.value = null
+  }
+}
 
 const form = reactive<{
   name: string; aliasName: string; description: string; category: string
@@ -70,6 +130,7 @@ const hydrateForm = (data: Club) => {
 const authStore = useAuthStore()
 const { currentUser } = storeToRefs(authStore)
 const canManageMembers = computed(() => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner))
+const presidents = computed(() => members.value.filter((m) => m.roleName?.toLowerCase() === 'president'))
 
 const loadClub = async (id: string) => {
   loading.value = true
@@ -407,6 +468,77 @@ watch(
           </ul>
           <p v-else class="member-empty">No members have been linked yet.</p>
         </section>
+      </section>
+
+      <!-- President management (owner only) -->
+      <section v-if="isOwner" class="member-panel president-panel">
+        <div class="member-panel__header">
+          <div>
+            <h2>President management</h2>
+            <p>Assign or remove club presidents. Presidents can edit club details and manage members.</p>
+          </div>
+        </div>
+
+        <div class="president-search">
+          <label>
+            <span>Search users by name or email</span>
+            <div class="search-row">
+              <input
+                v-model="presidentSearchQuery"
+                type="search"
+                placeholder="e.g. maya.chen@example.com"
+                @keyup.enter="handlePresidentSearch"
+              />
+              <button type="button" class="primary-btn small" @click="handlePresidentSearch" :disabled="presidentSearching">
+                {{ presidentSearching ? 'Searching…' : 'Search' }}
+              </button>
+            </div>
+          </label>
+
+          <p v-if="presidentActionError" class="upload-error">{{ presidentActionError }}</p>
+
+          <ul v-if="presidentSearchResults.length" class="member-list">
+            <li v-for="user in presidentSearchResults" :key="user.id" class="member-entry">
+              <div class="member-info">
+                <p>{{ user.displayName || 'Unnamed' }}</p>
+                <small>{{ user.email }}</small>
+              </div>
+              <button
+                type="button"
+                class="primary-btn small"
+                :disabled="presidentUpdating === user.id"
+                @click="handleAssignPresident(user.id)"
+              >
+                {{ presidentUpdating === user.id ? 'Assigning…' : 'Assign as President' }}
+              </button>
+            </li>
+          </ul>
+          <p v-else-if="presidentSearchQuery && !presidentSearching" class="member-empty">
+            No users found. Try a different search term.
+          </p>
+        </div>
+
+        <!-- Current presidents list -->
+        <div class="current-presidents">
+          <h3>Current Presidents</h3>
+          <ul v-if="presidents.length" class="member-list">
+            <li v-for="member in presidents" :key="member.oauthUserId" class="member-entry">
+              <div class="member-info">
+                <p>{{ member.displayName || 'Unnamed' }}</p>
+                <small>{{ member.email }}</small>
+              </div>
+              <button
+                type="button"
+                class="ghost-btn danger small"
+                :disabled="presidentUpdating === member.oauthUserId"
+                @click="handleRemovePresident(member.oauthUserId)"
+              >
+                {{ presidentUpdating === member.oauthUserId ? 'Removing…' : 'Remove President' }}
+              </button>
+            </li>
+          </ul>
+          <p v-else class="member-empty">No presidents assigned yet.</p>
+        </div>
       </section>
     </template>
   </section>
@@ -848,5 +980,43 @@ textarea {
   .form-actions button {
     width: 100%;
   }
+}
+.president-panel {
+  margin-top: 1rem;
+}
+
+.president-search {
+  margin-top: 1rem;
+}
+
+.search-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.search-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.president-search .member-list {
+  margin-top: 0.75rem;
+}
+
+.current-presidents {
+  margin-top: 1.5rem;
+}
+
+.current-presidents h3 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.primary-btn.small,
+.ghost-btn.small {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 </style>
