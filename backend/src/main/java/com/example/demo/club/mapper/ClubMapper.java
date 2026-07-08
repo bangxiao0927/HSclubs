@@ -70,4 +70,10 @@ public interface ClubMapper {
     List<String> findCategoriesByOauthUserId(@Param("oauthUserId") Long oauthUserId);
 
     List<Long> findClubIdsByOauthUserId(@Param("oauthUserId") Long oauthUserId);
+    ViewerMembershipStatus findMembershipStatusByUserId(@Param("clubId") Long clubId,
+                                                         @Param("oauthUserId") Long oauthUserId);
+
+    int updateMemberRole(@Param("clubId") Long clubId,
+                         @Param("oauthUserId") Long oauthUserId,
+                         @Param("roleName") String roleName);
 }

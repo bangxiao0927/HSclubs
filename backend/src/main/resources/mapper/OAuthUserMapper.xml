@@ -15,10 +15,44 @@
             last_login_at = CURRENT_TIMESTAMP
     </insert>
 
+    <select id="findCreatedAtByEmail" resultType="java.time.LocalDateTime">
+        SELECT created_at FROM oauth_users WHERE LOWER(email) = LOWER(#{email}) LIMIT 1
+    </select>
+
     <select id="findIdByEmail" parameterType="string" resultType="long">
         SELECT uid
         FROM oauth_users
         WHERE LOWER(email) = LOWER(#{email})
+        LIMIT 1
+    </select>
+
+    <select id="searchByEmailOrName" resultType="com.example.demo.auth.model.OAuthUserRecord">
+        SELECT uid, provider, provider_user_id, email, display_name, avatar_url, role
+        FROM oauth_users
+        WHERE LOWER(email) LIKE CONCAT('%', LOWER(#{query}), '%')
+           OR LOWER(display_name) LIKE CONCAT('%', LOWER(#{query}), '%')
+        ORDER BY display_name ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findByUid" resultType="com.example.demo.auth.model.OAuthUserRecord">
+        SELECT uid, provider, provider_user_id, email, display_name, avatar_url, role
+        FROM oauth_users
+        WHERE uid = #{uid}
+    </select>
+
+    <update id="acceptTerms">
+        UPDATE oauth_users
+        SET accepted_terms_at = NOW()
+        WHERE LOWER(email) = LOWER(#{email})
+          AND accepted_terms_at IS NULL
+    </update>
+
+    <select id="hasAcceptedTerms" resultType="boolean">
+        SELECT COUNT(*) > 0
+        FROM oauth_users
+        WHERE LOWER(email) = LOWER(#{email})
+          AND accepted_terms_at IS NOT NULL
         LIMIT 1
     </select>
 

@@ -44,3 +44,19 @@ export const fetchMyClubs = () => request<Club[]>('/api/users/me/clubs')
 
 export const fetchMyMembershipRequests = () =>
   request<ClubMembershipRequest[]>('/api/users/me/membership-requests')
+
+export interface UserSearchResult {
+  id: number
+  email: string
+  displayName: string
+  avatarUrl: string | null
+}
+
+export const searchUsers = (query: string, limit = 10) =>
+  request<UserSearchResult[]>(`/api/users/search?q=${encodeURIComponent(query)}&limit=${limit}`)
+
+export const assignPresident = (clubId: number | string, userId: number) =>
+  request<void>(`/api/clubs/${clubId}/presidents/${userId}`, { method: 'POST' })
+
+export const removePresident = (clubId: number | string, userId: number) =>
+  request<void>(`/api/clubs/${clubId}/presidents/${userId}`, { method: 'DELETE' })

@@ -1,6 +1,11 @@
 server:
   address: 127.0.0.1
   port: 8080
+  servlet:
+    session:
+      timeout: 7d
+      cookie:
+        max-age: 7d  # Persist JSESSIONID across browser restarts
 
 app:
   security:
@@ -12,6 +17,10 @@ app:
     authorization-request-base-uri: ${APP_AUTHORIZATION_REQUEST_BASE_URI:/api/auth/authorize}
   upload:
     dir: ${APP_UPLOAD_DIR:uploads}
+  summary:
+    school-name: ${APP_SUMMARY_SCHOOL_NAME:HS Clubs}
+    short-name: ${APP_SUMMARY_SHORT_NAME:HS Clubs}
+    slug: ${APP_SUMMARY_SLUG:hsclubs}
 
 spring:
   config:
@@ -22,7 +31,7 @@ spring:
     # DB_PASSWORD is required. Provide it via backend/.env (see backend/.env.example).
     # Fail fast at startup if it is missing instead of silently using a committed default.
     password: ${DB_PASSWORD:}
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:com.mysql.cj.jdbc.Driver}
   sql:
     init:
       mode: always
@@ -45,3 +54,7 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# H2 Console (dev only)
+spring.h2.console.enabled: true
+spring.h2.console.path: /h2-console
