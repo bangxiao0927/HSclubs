@@ -155,6 +155,10 @@ const handleGraduationYearSave = async () => {
               <span>Graduation year</span>
               <strong>{{ graduationYearLabel }}</strong>
             </div>
+            <div v-if="currentUser?.createdAt">
+              <span>Member since</span>
+              <strong>{{ new Date(currentUser.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) }}</strong>
+            </div>
           </div>
           <div class="cta-group">
             <RouterLink to="/" class="btn primary">Browse clubs</RouterLink>
