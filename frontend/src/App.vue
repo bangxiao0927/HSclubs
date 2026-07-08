@@ -239,6 +239,16 @@ watch(
       <ErrorDisplay v-if="appError" :message="appError" @retry="resetError" />
       <RouterView v-else />
     </main>
+
+    <footer class="app-footer">
+      <div class="footer-inner page-shell">
+        <span class="footer-brand">HS Clubs</span>
+        <nav class="footer-links">
+          <RouterLink to="/terms">Terms of Use</RouterLink>
+          <RouterLink to="/privacy">Privacy Policy</RouterLink>
+        </nav>
+      </div>
+    </footer>
   </div>
 </template>
 
@@ -606,6 +616,48 @@ watch(
   .logo-icon {
     width: 36px;
     height: 36px;
+  }
+}
+/* ---- Footer ---- */
+.app-footer {
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--mv-header-border);
+  background: var(--mv-header-bg);
+  margin-top: auto;
+}
+
+.footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.footer-brand {
+  font-size: 0.85rem;
+  color: var(--mv-text-faint);
+}
+
+.footer-links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.footer-links a {
+  font-size: 0.85rem;
+  color: var(--mv-text-faint);
+  text-decoration: none;
+}
+
+.footer-links a:hover {
+  color: var(--mv-nav-text-hover);
+}
+
+@media (max-width: 480px) {
+  .footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

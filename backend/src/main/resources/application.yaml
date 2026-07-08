@@ -22,7 +22,7 @@ spring:
     # DB_PASSWORD is required. Provide it via backend/.env (see backend/.env.example).
     # Fail fast at startup if it is missing instead of silently using a committed default.
     password: ${DB_PASSWORD:}
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:com.mysql.cj.jdbc.Driver}
   sql:
     init:
       mode: always
@@ -45,3 +45,7 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# H2 Console (dev only)
+spring.h2.console.enabled: true
+spring.h2.console.path: /h2-console
