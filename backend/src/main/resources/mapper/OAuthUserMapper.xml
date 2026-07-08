@@ -22,6 +22,21 @@
         LIMIT 1
     </select>
 
+    <select id="searchByEmailOrName" resultType="com.example.demo.auth.model.OAuthUserRecord">
+        SELECT uid, provider, provider_user_id, email, display_name, avatar_url, role
+        FROM oauth_users
+        WHERE LOWER(email) LIKE CONCAT('%', LOWER(#{query}), '%')
+           OR LOWER(display_name) LIKE CONCAT('%', LOWER(#{query}), '%')
+        ORDER BY display_name ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findByUid" resultType="com.example.demo.auth.model.OAuthUserRecord">
+        SELECT uid, provider, provider_user_id, email, display_name, avatar_url, role
+        FROM oauth_users
+        WHERE uid = #{uid}
+    </select>
+
     <update id="acceptTerms">
         UPDATE oauth_users
         SET accepted_terms_at = NOW()

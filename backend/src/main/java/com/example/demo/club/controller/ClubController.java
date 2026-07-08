@@ -184,6 +184,38 @@ public class ClubController {
         }
     }
 
+    // ---- President assignment (platform owner only) ----
+
+    @PostMapping("/{clubSlugOrId}/presidents/{userId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void assignPresident(@PathVariable String clubSlugOrId,
+                                 @PathVariable Long userId,
+                                 Authentication authentication) {
+        requirePlatformOwner(authentication);
+        Club club = resolveClub(clubSlugOrId, resolveViewerEmail(authentication));
+        if (club == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
+        try {
+            clubService.assignPresident(club.getId(), userId);
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{clubSlugOrId}/presidents/{userId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removePresident(@PathVariable String clubSlugOrId,
+                                 @PathVariable Long userId,
+                                 Authentication authentication) {
+        requirePlatformOwner(authentication);
+        Club club = resolveClub(clubSlugOrId, resolveViewerEmail(authentication));
+        if (club == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
+        clubService.removePresident(club.getId(), userId);
+    }
+
     // ---- Calendar ----
 
     @GetMapping("/calendar")

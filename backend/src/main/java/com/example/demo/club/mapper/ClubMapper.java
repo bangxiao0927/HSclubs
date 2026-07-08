@@ -66,4 +66,11 @@ public interface ClubMapper {
     List<Club> findClubsByOauthUserId(@Param("oauthUserId") Long oauthUserId);
 
     List<ClubMembershipRequest> findPendingRequestsByOauthUserId(@Param("oauthUserId") Long oauthUserId);
+
+    ViewerMembershipStatus findMembershipStatusByUserId(@Param("clubId") Long clubId,
+                                                         @Param("oauthUserId") Long oauthUserId);
+
+    int updateMemberRole(@Param("clubId") Long clubId,
+                         @Param("oauthUserId") Long oauthUserId,
+                         @Param("roleName") String roleName);
 }
