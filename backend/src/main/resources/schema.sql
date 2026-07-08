@@ -1,4 +1,4 @@
-SET FOREIGN_KEY_CHECKS = 0;
+-- SET FOREIGN_KEY_CHECKS = 0; (H2)
 DROP TABLE IF EXISTS calenders;
 DROP TABLE IF EXISTS club_activities;
 DROP TABLE IF EXISTS club_member;
@@ -9,7 +9,7 @@ DROP TABLE IF EXISTS clubs;
 DROP TABLE IF EXISTS user_profiles;
 DROP TABLE IF EXISTS oauth_users;
 DROP TABLE IF EXISTS club_category;
-SET FOREIGN_KEY_CHECKS = 1;
+-- SET FOREIGN_KEY_CHECKS = 1; (H2)
 
 CREATE TABLE IF NOT EXISTS oauth_users (
     uid BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS clubs (
     advisor VARCHAR(150),
     image_url VARCHAR(300),
     member_count INT NOT NULL DEFAULT 0,
-    achievements JSON NOT NULL DEFAULT (JSON_ARRAY()),
+    achievements CLOB NOT NULL DEFAULT '[]',
     status VARCHAR(30) NOT NULL DEFAULT 'active',
     visibility VARCHAR(30) NOT NULL DEFAULT 'public',
     approved_at TIMESTAMP NULL,
