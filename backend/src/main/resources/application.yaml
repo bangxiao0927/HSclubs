@@ -1,6 +1,11 @@
 server:
   address: 127.0.0.1
   port: 8080
+  servlet:
+    session:
+      timeout: 7d
+      cookie:
+        max-age: 7d  # Persist JSESSIONID across browser restarts
 
 app:
   security:
@@ -12,6 +17,10 @@ app:
     authorization-request-base-uri: ${APP_AUTHORIZATION_REQUEST_BASE_URI:/api/auth/authorize}
   upload:
     dir: ${APP_UPLOAD_DIR:uploads}
+  summary:
+    school-name: ${APP_SUMMARY_SCHOOL_NAME:HS Clubs}
+    short-name: ${APP_SUMMARY_SHORT_NAME:HS Clubs}
+    slug: ${APP_SUMMARY_SLUG:hsclubs}
 
 spring:
   config:
