@@ -3,7 +3,9 @@ server:
   port: 8080
   servlet:
     session:
-      timeout: 7d  # Keep users signed in for 7 days
+      timeout: 7d
+      cookie:
+        max-age: 7d  # Persist JSESSIONID across browser restarts
 
 app:
   security:
