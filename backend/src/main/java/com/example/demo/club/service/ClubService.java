@@ -189,6 +189,12 @@ public class ClubService {
         if (club.getMemberCount() == null) {
             club.setMemberCount(0);
         }
+        if (!StringUtils.hasText(club.getStatus())) {
+            club.setStatus("active");
+        }
+        if (!StringUtils.hasText(club.getVisibility())) {
+            club.setVisibility("public");
+        }
     }
 
     private String cleanSearchTerm(String value) {
