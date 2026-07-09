@@ -7,6 +7,12 @@ This roadmap turns the planning note into a practical order for the first public
 3. Low maintenance cost.
 4. Builds the foundation for later repos without starting them too early.
 
+## Project Rules
+
+- Keep the repo focused on a single-school site. Other schools should copy the pattern instead of sharing a multi-tenant platform.
+- All user-facing and documentation copy must remain in English only.
+- After completing a PR (merging/resolving conflicts), open a follow-up commit to self-review the changes and verify PR status checks pass before marking the PR as ready.
+
 ## P0 - Stabilize the Sample School Site
 
 These items should happen first because they protect the core workflow and reduce future cleanup.
@@ -49,7 +55,7 @@ Scope:
 
 Reason:
 
-The current API already supports much of the multi-school direction. The priority is consistency, not more endpoints.
+The current API already supports the single-school workflow. The priority is consistency, not more endpoints.
 
 ### 4. Fix mobile layout and phone usability
 
@@ -196,9 +202,9 @@ Reason:
 
 Design polish matters, but it should follow the functional workflow.
 
-## P2 - Prepare for the 2nd Repo
+## P2 - Prepare for Optional Future Repos (Do Not Start Yet)
 
-These items create the bridge to the future multi-school aggregator.
+These items only apply after the single-school workflow is stable. They describe optional summaries or discovery work for other schools, but they do not make this repo multi-tenant.
 
 ### 15. Add public summary data API
 

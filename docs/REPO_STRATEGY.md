@@ -8,6 +8,12 @@ Work on the 1st repo first.
 
 The 1st repo must become the reference implementation for one school before the project creates a separate aggregator repo or mobile repo. This keeps the work useful quickly, avoids duplicated systems, and lowers maintenance cost for a volunteer school project.
 
+Project rules:
+
+- Keep the repo focused on a single-school site. Other schools should copy the pattern instead of sharing a multi-tenant platform.
+- All user-facing and documentation copy must remain in English only.
+- After completing a PR (merging/resolving conflicts), open a follow-up commit to self-review the changes and verify PR status checks pass before marking the PR as ready.
+
 ## Original Three-Repo Structure
 
 ### 1st Repo - Public Sample School Site
@@ -35,7 +41,7 @@ The 1st repo owns:
 
 Purpose:
 
-- Create a separate multi-school summary layer after the sample repo is stable.
+- Create a separate summary layer for multiple independent single-school sites after the sample repo is stable.
 - Keep the frontend public.
 - Keep the backend private if it collects status, verification, or operational data.
 - Display all verified schools and their summary data.
@@ -77,7 +83,7 @@ Likely future responsibilities:
     -> make the core school workflow stable
     -> add a public summary API when useful
 
-2nd repo: build the multi-school aggregator
+2nd repo: build the optional aggregator for separate single-school sites
     -> consume summaries from verified school sites
     -> display and search schools
 

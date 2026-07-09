@@ -2,6 +2,8 @@
 
 This repository is the first HSclubs repo: the sample school club directory that must be stable, useful, safe, and easy to maintain before any aggregator or mobile repo is created.
 
+**Language:** All project content, documentation, and user-facing copy must be in English.
+
 The short-term goal is not to split the product yet. The short-term goal is to make one school experience good enough that other schools can copy the pattern with confidence.
 
 ## Current Direction
@@ -81,6 +83,12 @@ cd frontend && npm run build
 ## Maintainer Rule
 
 Prefer the smallest useful feature that improves the sample school workflow. Avoid starting a new repo, large social features, or native mobile work until this repo is stable for real school users.
+
+Additional rules for every update:
+
+- Keep the repo focused on a single-school site. Other schools should copy the pattern instead of sharing a multi-tenant platform.
+- After completing a PR (merging/resolving conflicts), open a follow-up commit to self-review the changes and verify PR status checks pass before marking the PR as ready.
+- All user-facing and documentation copy must remain in English only.
 
 ## License
 

@@ -13,6 +13,9 @@ Each issue includes: Status, PR, Problem, Solution, Expected Outcome.
 | `deferred` | Intentionally postponed per roadmap priority |
 
 **Rule:** When an issue is completed, fill in `Status: done`, the PR number, and the date. Never leave a completed issue unmarked — future sessions depend on this.
+**Rule:** Keep the repo focused on a single-school site. Other schools should copy the pattern instead of sharing a multi-tenant platform.
+**Rule:** All user-facing and documentation copy must remain in English only.
+**Rule:** After completing a PR (merging/resolving conflicts), open a follow-up commit to self-review the changes and verify PR status checks pass before marking the PR as ready.
 
 ---
 
@@ -40,24 +43,21 @@ Work through issues in this order. Completed issues are collapsed at the bottom.
 
 ---
 
-## Issue #1: Resolve Multi-School Architecture Contradiction
+## Issue #1: Single-School Direction Confirmed
 
-**Status:** `invalid`
+**Status:** `done`
 **PR:** —
-**Verified:** 2025-07-17 — No school-scoped controllers exist in the codebase, no `school_id` FK in clubs table. Codebase is already single-school. Issue description was based on outdated plan; no action needed.
+**Verified:** 2025-07-17 — Codebase is already single-school; direction confirmed. No action needed.
 
 **Problem:**
-The task list says "discard all the school changes, roll back the school structure changes." However, the codebase already has a full multi-school architecture built out: `schools` database table, school-scoped API routes (`/api/schools/{slug}/clubs/...`), school-scoped frontend routes (`/schools/:schoolSlug/...`), and the `FIRST_REPO_ROADMAP.md` explicitly states the long-term direction is multi-school. The task list and the roadmap contradict each other.
+The task list said "discard all the school changes, roll back the school structure changes." The codebase is already single-school (no school-scoped controllers, no `school_id` FK in clubs). The long-term direction is now confirmed as single-school. The task list and the roadmap no longer contradict.
 
 **Solution:**
-1. Confirm with stakeholders whether the 1st repo should remain single-school (MVHS only) or keep the multi-school structure.
-2. If single-school: Remove the `schools` table foreign keys from clubs, remove school-scoped routes, simplify `SchoolClubController` into `ClubController`, remove school-picker and multi-school frontend routes.
-3. If multi-school stays: Close this issue as "won't fix" and update the task list to reflect the decision.
+Decision made: the 1st repo stays single-school. Other schools will adopt the pattern by copying the repo rather than running a shared multi-tenant instance. No architecture changes needed.
 
 **Expected Outcome:**
-- Clear, documented decision on school scoping.
-- No dead code or confusing dual-route architecture.
-- All routes follow a single consistent pattern.
+- Single-school direction documented in CODET.md and roadmap.
+- No dead code or dual-route confusion.
 
 ---
 
