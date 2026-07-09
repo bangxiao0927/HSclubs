@@ -59,6 +59,8 @@ const router = createRouter({
       path: '/recommendations',
       name: 'recommendations',
       component: () => import('../views/RecommendationView.vue'),
+    },
+
     // ---- Onboarding ----
     {
       path: '/onboarding',
