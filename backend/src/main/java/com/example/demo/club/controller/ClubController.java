@@ -184,6 +184,16 @@ public class ClubController {
         }
     }
 
+    // ---- Recommendations ----
+
+    @GetMapping("/recommendations")
+    public List<Club> recommendations(Authentication authentication,
+                                       @RequestParam(defaultValue = "8") int limit) {
+        String viewerEmail = resolveViewerEmail(authentication);
+        int cappedLimit = Math.max(1, Math.min(limit, 20));
+        return clubService.getRecommendations(viewerEmail, cappedLimit);
+    }
+
     // ---- President assignment (platform owner only) ----
 
     @PostMapping("/{clubSlugOrId}/presidents/{userId}")

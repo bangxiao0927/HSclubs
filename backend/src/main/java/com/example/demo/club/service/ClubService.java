@@ -172,6 +172,47 @@ public class ClubService {
         return oAuthUserMapper.findIdByEmail(email);
     }
 
+    // ---- Recommendations ----
+
+    /**
+     * Recommend clubs based on categories the user already belongs to.
+     * Falls back to popular clubs (highest member count) for cold start.
+     */
+    public List<Club> getRecommendations(String viewerEmail, int limit) {
+        List<Club> allClubs = clubMapper.findAll();
+
+        if (viewerEmail != null && !viewerEmail.isBlank()) {
+            Long userId = oAuthUserMapper.findIdByEmail(viewerEmail);
+            if (userId != null) {
+                // Find categories the user is already a member of
+                List<String> userCategories = clubMapper.findCategoriesByOauthUserId(userId);
+                if (!userCategories.isEmpty()) {
+                    List<Long> joinedClubIds = clubMapper.findClubIdsByOauthUserId(userId);
+                    List<Club> personalized = allClubs.stream()
+                        .filter(c -> userCategories.contains(c.getCategory()))
+                        .filter(c -> !joinedClubIds.contains(c.getId()))
+                        .sorted((a, b) -> Integer.compare(
+                            b.getMemberCount() != null ? b.getMemberCount() : 0,
+                            a.getMemberCount() != null ? a.getMemberCount() : 0))
+                        .limit(limit)
+                        .toList();
+                    if (!personalized.isEmpty()) {
+                        return personalized;
+                    }
+                    // Fall through to popular clubs if no unjoined clubs in user's categories
+                }
+            }
+        }
+
+        // Cold start: return most popular clubs
+        return allClubs.stream()
+            .sorted((a, b) -> Integer.compare(
+                b.getMemberCount() != null ? b.getMemberCount() : 0,
+                a.getMemberCount() != null ? a.getMemberCount() : 0))
+            .limit(limit)
+            .toList();
+    }
+
     // ---- President management ----
 
     @Transactional
