@@ -1,4 +1,4 @@
-# HSclubs — Deployment Guide
+# HSclubs — Single-School Deployment Guide
 
 ## Architecture
 
@@ -106,19 +106,24 @@ This script uses only `ALTER TABLE` and `CREATE TABLE IF NOT EXISTS` — safe to
 ### Verify
 
 ```sql
--- Check schools
-SELECT id, slug, school_name, status FROM schools;
+-- Check clubs
+SELECT id, name, slug, category, status FROM clubs LIMIT 5;
 
--- Check clubs with school context
-SELECT c.name, s.school_name, c.status
-FROM clubs c JOIN schools s ON c.school_id = s.id
+-- Check users
+SELECT uid, email, display_name, provider FROM oauth_users LIMIT 5;
+
+-- Check user profiles (includes graduation year)
+SELECT up.oauth_user_id, ou.email, up.graduation_year
+FROM user_profiles up
+JOIN oauth_users ou ON ou.uid = up.oauth_user_id
 LIMIT 5;
 
--- Check user-school relationships
-SELECT ou.email, su.role, s.school_name
-FROM school_users su
-JOIN oauth_users ou ON ou.uid = su.oauth_user_id
-JOIN schools s ON s.id = su.school_id;
+-- Check club members
+SELECT ou.email, cm.role_name, c.name
+FROM club_member cm
+JOIN oauth_users ou ON ou.uid = cm.oauth_user_id
+JOIN clubs c ON c.id = cm.club_id
+LIMIT 5;
 ```
 
 ---
@@ -176,8 +181,8 @@ sudo systemctl status hsclubs
 ### Health check
 
 ```bash
-# List schools (public endpoint)
-curl http://localhost:8080/api/schools
+# List clubs (public endpoint)
+curl http://localhost:8080/api/clubs
 
 # Check auth providers
 curl http://localhost:8080/api/auth/providers
@@ -341,10 +346,9 @@ The `/api/auth/providers` endpoint auto-discovers all configured providers.
 ### First-run steps
 
 1. Deploy and start the backend — tables auto-create
-2. Open `/schools` — should show "Mountain View High School"
+2. Open the home page — should show the club directory
 3. Sign in as a platform owner (email in `APP_OWNER_EMAILS`)
-4. Visit `/platform/admin` — create additional schools
-5. Invite school admins via `/platform/admin` invite form
+4. Visit `/admin` — create clubs and manage the directory
 
 ---
 
@@ -373,15 +377,7 @@ Google OAuth redirect URIs must match exactly:
 - Dev: `http://localhost:8080/api/auth/google/callback`
 - Prod: `https://yourdomain.com/api/auth/google/callback`
 
-### "School not found" on valid slug
 
-Check `schools.status` is `active`:
-
-```sql
-SELECT slug, school_name, status FROM schools;
-```
-
-Inactive or `pending` schools are hidden from the public API.
 
 ### Invitation link not working
 
