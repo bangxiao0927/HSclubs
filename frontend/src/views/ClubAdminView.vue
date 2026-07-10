@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/auth'
 import { clubCategoryOptions } from '../utils/clubCategories'
 import { buildApiUrl } from '../services/httpClient'
 import { clubImage } from '../utils/clubImages'
+import { userAvatar } from '../utils/avatarImages'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -500,7 +501,7 @@ watch(
               <li v-for="member in members" :key="member.oauthUserId" class="member-entry">
                 <div class="member-avatar">
                   <img
-                    :src="member.avatarUrl || 'https://api.dicebear.com/7.x/thumbs/svg?seed=' + encodeURIComponent(member.displayName || 'Member')"
+                    :src="userAvatar(member.avatarUrl, member.displayName || 'Member')"
                     :alt="member.displayName || 'Club member'"
                   />
                 </div>
