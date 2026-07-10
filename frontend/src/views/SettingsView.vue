@@ -52,7 +52,7 @@ const clearCache = () => {
       <div class="setting-row">
         <div>
           <strong>HS Clubs</strong>
-          <p>Multi-school club directory platform. Built with Vue 3 + Spring Boot.</p>
+          <p>Single-school club directory platform. Built with Vue 3 + Spring Boot.</p>
         </div>
       </div>
     </section>
