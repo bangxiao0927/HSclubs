@@ -410,11 +410,11 @@ CREATE TABLE meeting_attendance (
 );
 ```
 2. Backend endpoints:
-   - `POST /api/schools/{slug}/clubs/{id}/meetings` (president/admin creates a meeting)
-   - `GET /api/schools/{slug}/clubs/{id}/meetings` (list upcoming meetings)
-   - `POST /api/schools/{slug}/clubs/{id}/meetings/{meetingId}/attend` (member requests attendance)
-   - `GET /api/schools/{slug}/clubs/{id}/meetings/{meetingId}/attendance` (president views requests)
-   - `PUT /api/schools/{slug}/clubs/{id}/meetings/{meetingId}/attendance/{attendanceId}` (president confirms/rejects)
+   - `POST /api/clubs/{id}/meetings` (president/admin creates a meeting)
+   - `GET /api/clubs/{id}/meetings` (list upcoming meetings)
+   - `POST /api/clubs/{id}/meetings/{meetingId}/attend` (member requests attendance)
+   - `GET /api/clubs/{id}/meetings/{meetingId}/attendance` (president views requests)
+   - `PUT /api/clubs/{id}/meetings/{meetingId}/attendance/{attendanceId}` (president confirms/rejects)
 3. Frontend: Add "Meetings" tab to `ClubDetailView.vue` for members, and meeting management to `ClubAdminView.vue` for presidents.
 
 **Expected Outcome:**
