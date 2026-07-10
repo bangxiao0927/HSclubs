@@ -13,6 +13,21 @@ const authStore = useAuthStore()
 const { isAuthenticated, currentUser } = storeToRefs(authStore)
 
 const mobileMenuOpen = ref(false)
+const profileAvatarFailed = ref(false)
+
+const profileInitial = computed(() => {
+  const seed = currentUser.value?.displayName?.trim() || currentUser.value?.email?.trim() || 'U'
+  return seed.charAt(0).toUpperCase()
+})
+
+const profileAvatarUrl = computed(() => {
+  if (profileAvatarFailed.value) return ''
+  return currentUser.value?.avatarUrl?.trim() || ''
+})
+
+const handleProfileAvatarError = () => {
+  profileAvatarFailed.value = true
+}
 
 const toggleMobileMenu = () => {
   mobileMenuOpen.value = !mobileMenuOpen.value
@@ -102,6 +117,13 @@ watch(isAuthenticated, (authenticated, previous) => {
   }
 })
 
+watch(
+  () => currentUser.value?.avatarUrl,
+  () => {
+    profileAvatarFailed.value = false
+  },
+)
+
 watch(theme, (value) => applyTheme(value), { immediate: true })
 
 watch(
@@ -182,7 +204,15 @@ watch(
             <span>{{ themeLabel }}</span>
           </button>
           <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link">
-            <span class="profile-icon">👤</span>
+            <img
+              v-if="profileAvatarUrl"
+              class="profile-avatar"
+              :src="profileAvatarUrl"
+              :alt="`${currentUser?.displayName || 'Profile'} avatar`"
+              referrerpolicy="no-referrer"
+              @error="handleProfileAvatarError"
+            />
+            <span v-else class="profile-icon">{{ profileInitial }}</span>
             <span>Profile</span>
           </RouterLink>
           <div v-if="!isAuthenticated" class="auth-actions">
@@ -398,8 +428,27 @@ watch(
   border-color: var(--mv-profile-hover-border);
 }
 
+.profile-avatar,
 .profile-icon {
-  font-size: 1.1rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  flex: 0 0 1.5rem;
+}
+
+.profile-avatar {
+  object-fit: cover;
+  border: 1px solid var(--mv-profile-border);
+}
+
+.profile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mv-surface-soft);
+  border: 1px solid var(--mv-profile-border);
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .theme-toggle {

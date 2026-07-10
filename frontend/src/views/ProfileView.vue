@@ -19,6 +19,29 @@ const { isAuthenticated, currentUser, userLoading, userError } = storeToRefs(aut
 
 const handleLogout = () => authStore.logout()
 
+const avatarFailed = ref(false)
+
+const profileInitial = computed(() => {
+  const seed = currentUser.value?.displayName?.trim() || currentUser.value?.email?.trim() || 'U'
+  return seed.charAt(0).toUpperCase()
+})
+
+const profileAvatarUrl = computed(() => {
+  if (avatarFailed.value) return ''
+  return currentUser.value?.avatarUrl?.trim() || ''
+})
+
+const handleAvatarError = () => {
+  avatarFailed.value = true
+}
+
+watch(
+  () => currentUser.value?.avatarUrl,
+  () => {
+    avatarFailed.value = false
+  },
+)
+
 // ---- My Clubs ----
 const myClubs = ref<Club[]>([])
 const myClubsLoading = ref(false)
@@ -138,10 +161,14 @@ const handleGraduationYearSave = async () => {
       <section class="profile-hero">
         <div class="hero-avatar-pane">
           <img
+            v-if="profileAvatarUrl"
             class="profile-avatar"
-            :src="currentUser?.avatarUrl"
+            :src="profileAvatarUrl"
             :alt="`${currentUser?.displayName || 'Member'} avatar`"
+            referrerpolicy="no-referrer"
+            @error="handleAvatarError"
           />
+          <span v-else class="profile-avatar profile-avatar-fallback">{{ profileInitial }}</span>
         </div>
         <div class="hero-copy">
           <p class="section-label">Personal hub</p>
@@ -305,6 +332,15 @@ const handleGraduationYearSave = async () => {
   background: var(--mv-surface-soft);
   object-fit: cover;
   box-shadow: var(--mv-shadow-elevated);
+}
+
+.profile-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mv-text);
+  font-size: clamp(3rem, 8vw, 5rem);
+  font-weight: 800;
 }
 
 .hero-copy { max-width: 560px; display: flex; flex-direction: column; gap: 1rem; }
