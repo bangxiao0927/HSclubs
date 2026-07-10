@@ -25,6 +25,7 @@ public class ClubService {
         "Wellness & Athletics",
         "Competition & Strategy"
     );
+    private static final Set<String> ALLOWED_MEMBER_ROLES = Set.of("member", "president");
 
     private final ClubMapper clubMapper;
     private final OAuthUserMapper oAuthUserMapper;
@@ -87,6 +88,18 @@ public class ClubService {
 
     public List<ClubMemberView> findMembers(Long clubId) {
         return clubMapper.findMembersByClubId(clubId);
+    }
+
+    @Transactional
+    public void updateMemberRole(Long clubId, Long oauthUserId, String roleName) {
+        String normalizedRole = normalizeMemberRole(roleName);
+        int updated = clubMapper.updateMemberRole(clubId, oauthUserId, normalizedRole);
+        if (updated == 0) {
+            throw new IllegalArgumentException("Member not found for this club");
+        }
+        if ("president".equals(normalizedRole)) {
+            clubMapper.demoteOtherPresidents(clubId, oauthUserId);
+        }
     }
 
     // ---- CRUD ----
@@ -220,11 +233,10 @@ public class ClubService {
         // Check if already a member
         ViewerMembershipStatus status = clubMapper.findMembershipStatusByUserId(clubId, oauthUserId);
         if (status != null && Boolean.TRUE.equals(status.getMember())) {
-            // Update existing membership to president role
-            clubMapper.updateMemberRole(clubId, oauthUserId, "president");
+            updateMemberRole(clubId, oauthUserId, "president");
         } else {
-            // Insert as president
             clubMapper.insertMember(clubId, oauthUserId, "president");
+            clubMapper.demoteOtherPresidents(clubId, oauthUserId);
         }
     }
 
@@ -265,6 +277,17 @@ public class ClubService {
 
     private String cleanSearchTerm(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private String normalizeMemberRole(String roleName) {
+        if (!StringUtils.hasText(roleName)) {
+            throw new IllegalArgumentException("Member role is required");
+        }
+        String normalizedRole = roleName.trim().toLowerCase();
+        if (!ALLOWED_MEMBER_ROLES.contains(normalizedRole)) {
+            throw new IllegalArgumentException("Invalid member role");
+        }
+        return normalizedRole;
     }
 
     private void applyViewerPermissions(Club club, String viewerEmail) {

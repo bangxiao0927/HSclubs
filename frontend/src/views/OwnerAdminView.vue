@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
-import { fetchClubs, createClub } from '../services/clubService'
+import { fetchClubCount, fetchClubs, createClub } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
@@ -20,6 +20,7 @@ const searchQuery = ref('')
 const categoryFilter = ref('all')
 const hasLoadedOnce = ref(false)
 const lastFetchedAt = ref<Date | null>(null)
+const totalClubCount = ref(0)
 
 const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
 const sessionReady = computed(() => hasCheckedSession.value || !userLoading.value)
@@ -83,7 +84,12 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    clubs.value = await fetchClubs({ force: hasLoadedOnce.value})
+    const [clubList, clubCount] = await Promise.all([
+      fetchClubs({ force: true, size: 100 }),
+      fetchClubCount(),
+    ])
+    clubs.value = clubList
+    totalClubCount.value = clubCount
     hasLoadedOnce.value = true
     lastFetchedAt.value = new Date()
   } catch (err) {
@@ -101,6 +107,7 @@ watch(
     }
     if (!owner) {
       clubs.value = []
+      totalClubCount.value = 0
       hasLoadedOnce.value = false
     }
   },
@@ -169,7 +176,7 @@ const resetFilters = () => {
         <div class="hero-stats">
           <div class="stat-card">
             <span>Total clubs</span>
-            <strong>{{ clubs.length }}</strong>
+            <strong>{{ totalClubCount }}</strong>
           </div>
           <div class="stat-card">
             <span>Total members</span>

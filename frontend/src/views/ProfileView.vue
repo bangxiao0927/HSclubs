@@ -136,6 +136,13 @@ const handleGraduationYearSave = async () => {
 
     <div v-if="isAuthenticated" class="profile page-shell">
       <section class="profile-hero">
+        <div class="hero-avatar-pane">
+          <img
+            class="profile-avatar"
+            :src="currentUser?.avatarUrl"
+            :alt="`${currentUser?.displayName || 'Member'} avatar`"
+          />
+        </div>
         <div class="hero-copy">
           <p class="section-label">Personal hub</p>
           <h1>Welcome back, {{ currentUser?.displayName || 'Explorer' }}</h1>
@@ -272,16 +279,32 @@ const handleGraduationYearSave = async () => {
 }
 
 .profile-hero {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 1fr);
   gap: clamp(1.5rem, 3vw, 2.5rem);
   padding: clamp(1.5rem, 4vw, 3rem);
   border-radius: 36px;
   border: 1px solid var(--mv-border);
   background: var(--mv-surface-hero-strong);
-  flex-wrap: wrap;
-  justify-content: space-between;
   align-items: center;
   box-shadow: var(--mv-shadow-card);
+}
+
+.hero-avatar-pane {
+  min-height: clamp(220px, 28vw, 320px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-avatar {
+  width: clamp(140px, 20vw, 220px);
+  height: clamp(140px, 20vw, 220px);
+  border-radius: 32px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-soft);
+  object-fit: cover;
+  box-shadow: var(--mv-shadow-elevated);
 }
 
 .hero-copy { max-width: 560px; display: flex; flex-direction: column; gap: 1rem; }
@@ -451,9 +474,13 @@ const handleGraduationYearSave = async () => {
 
 @media (max-width: 720px) {
   .profile-hero {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     padding: 1.5rem;
     border-radius: 24px;
+  }
+
+  .hero-avatar-pane {
+    min-height: 180px;
   }
 
   .hero-copy {

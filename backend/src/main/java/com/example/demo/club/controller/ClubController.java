@@ -55,6 +55,11 @@ public class ClubController {
         return clubService.findAllPaginated(page, size);
     }
 
+    @GetMapping("/count")
+    public Map<String, Integer> count() {
+        return Map.of("count", clubService.countAll());
+    }
+
     @GetMapping("/{clubSlugOrId}")
     public Club get(@PathVariable String clubSlugOrId, Authentication authentication) {
         Club club = resolveClub(clubSlugOrId, resolveViewerEmail(authentication));
@@ -107,6 +112,24 @@ public class ClubController {
                                              Authentication authentication) {
         Club club = requireManageAccess(clubSlugOrId, authentication);
         return clubService.findMembers(club.getId());
+    }
+
+    @PutMapping("/{clubSlugOrId}/members/{oauthUserId}/role")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void updateMemberRole(@PathVariable String clubSlugOrId,
+                                 @PathVariable Long oauthUserId,
+                                 @RequestBody UpdateMemberRoleRequest request,
+                                 Authentication authentication) {
+        requirePlatformOwner(authentication);
+        Club club = resolveClub(clubSlugOrId, resolveViewerEmail(authentication));
+        if (club == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
+        try {
+            clubService.updateMemberRole(club.getId(), oauthUserId, request == null ? null : request.roleName());
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
     }
 
     // ---- Membership application ----
@@ -314,4 +337,6 @@ public class ClubController {
         }
         return false;
     }
+
+    public record UpdateMemberRoleRequest(String roleName) {}
 }

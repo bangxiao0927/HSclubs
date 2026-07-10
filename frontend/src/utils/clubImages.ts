@@ -1,9 +1,8 @@
 import type { Club } from '../types/club'
+import { buildApiUrl } from '../services/httpClient'
+import { localAvatar } from './avatarImages'
 
-const fallbackAvatar = (name: string) =>
-  `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(name)}`
-
-const instagramAvatar = (url?: string | null) => {
+const instagramHandle = (url?: string | null) => {
   if (!url) {
     return null
   }
@@ -18,8 +17,17 @@ const instagramAvatar = (url?: string | null) => {
   const lastPart = parts[parts.length - 1] ?? ''
   const handle = lastPart.startsWith('@') ? lastPart.slice(1) : lastPart
 
-  return handle ? `https://unavatar.io/instagram/${encodeURIComponent(handle)}` : null
+  return handle || null
 }
 
-export const clubImage = (club: Club): string =>
-  club.imageUrl ?? instagramAvatar(club.instagramUrl) ?? fallbackAvatar(club.name)
+const cachedInstagramAvatar = (url?: string | null) => {
+  const handle = instagramHandle(url)
+  return handle ? buildApiUrl(`/api/avatars/instagram/${encodeURIComponent(handle)}`) : null
+}
+
+export const clubImage = (club: Club): string => {
+  if (club.imageUrl) {
+    return buildApiUrl(club.imageUrl)
+  }
+  return cachedInstagramAvatar(club.instagramUrl) ?? localAvatar(club.name)
+}
