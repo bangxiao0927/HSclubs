@@ -110,7 +110,13 @@ This script uses only `ALTER TABLE` and `CREATE TABLE IF NOT EXISTS` — safe to
 SELECT id, name, slug, category, status FROM clubs LIMIT 5;
 
 -- Check users
-SELECT uid, email, display_name, graduation_year, is_owner FROM oauth_users LIMIT 5;
+SELECT uid, email, display_name, provider FROM oauth_users LIMIT 5;
+
+-- Check user profiles (includes graduation year)
+SELECT up.oauth_user_id, ou.email, up.graduation_year
+FROM user_profiles up
+JOIN oauth_users ou ON ou.uid = up.oauth_user_id
+LIMIT 5;
 
 -- Check club members
 SELECT ou.email, cm.role_name, c.name

@@ -71,7 +71,7 @@ All club endpoints live under `/api/clubs`. This is the single-school API patter
 List active clubs. Public. Supports `page` and `size` query parameters for pagination.
 
 ### POST /api/clubs
-Create a club. Requires: admin or platform_owner.
+Create a club. Requires: platform_owner.
 
 Request body:
 ```json
@@ -94,17 +94,17 @@ Status: 201 | 400 | 403
 Get club detail. Accepts numeric ID or slug string. Viewer permissions (viewerIsMember, canManage, viewerHasPendingRequest) included when authenticated.
 
 ### PUT /api/clubs/{clubSlugOrId}
-Update club. Requires: admin, platform_owner, or club president.
+Update club. Requires: platform_owner, or club president.
 
 ### DELETE /api/clubs/{clubSlugOrId}
-Delete club. Requires: admin or platform_owner. Status: 204
+Delete club. Requires: platform_owner. Status: 204
 
 ---
 
 ## Membership
 
 ### GET /api/clubs/{id}/members
-List club members. Requires: admin, platform_owner, or club president.
+List club members. Requires: platform_owner, or club president.
 
 Response:
 ```json
@@ -132,7 +132,7 @@ Cancel own membership application. Requires: authenticated.
 ## Membership Requests (Admin)
 
 ### GET /api/clubs/{id}/membership-requests
-List pending membership requests. Requires: admin, platform_owner, or club president.
+List pending membership requests. Requires: platform_owner, or club president.
 
 ### POST /api/clubs/{id}/membership-requests/{requestId}/approve
 Approve a membership request. Adds user as member. Status: 204
@@ -140,19 +140,7 @@ Approve a membership request. Adds user as member. Status: 204
 ### DELETE /api/clubs/{id}/membership-requests/{requestId}
 Reject/delete a membership request. Status: 204
 
-## Platform Admin
 
-All under `/api/platform`. Requires: platform_owner.
-
-### GET /api/platform/stats
-Platform-level statistics (club count, user count, pending requests).
-
-### POST /api/platform/owners
-Add a platform owner by email. Requires: platform_owner.
-
-Status: 201 | 400
-
----
 
 ## Route Summary
 
@@ -166,8 +154,9 @@ The following endpoints have been identified as likely needs. **Do not build the
 - `GET /api/clubs/{id}/summary` — club detail summary: member count, pending request count, recent activity, advisor.
 - `GET /api/clubs/{id}/events` — recurring schedule and one-off events for a club.
 - `GET /api/me/summary` — user-centered summary: active memberships, pending applications, unread notifications.
-- `GET /api/users/search` — admin-only search across members (for roster management).
-- `GET /api/platform/summary` — platform-owner landing summary: total clubs, active users, pending requests.
+- `GET /api/users/search` — platform-owner search across members (for roster management).
+- `GET /api/platform/stats` — platform-owner landing stats: total clubs, active users, pending requests.
+- `GET /api/platform/owners` — manage platform owners (post/delete by email).
 
 Before any of these are implemented, the proposer should:
 
