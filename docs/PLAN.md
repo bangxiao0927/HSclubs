@@ -1,13 +1,19 @@
-# HSclubs - Long-Term Multi-School Platform Plan
+# HSclubs - Single-School Reference Plan (Historical Multi-School Draft)
 
-> Status: reference material. For current active work, start with README.md, docs/REPO_STRATEGY.md, docs/FIRST_REPO_ROADMAP.md, and docs/DEVELOPMENT_SEQUENCE.md. This file preserves the broader platform plan, but it is not the current execution order for the 1st repo.
+> Status: reference material. For current active work, start with README.md, docs/REPO_STRATEGY.md, docs/FIRST_REPO_ROADMAP.md, and docs/DEVELOPMENT_SEQUENCE.md. This file preserves older multi-school planning notes and must not drive implementation for the 1st repo.
+
+Current direction reminder:
+
+- Build and maintain a single-school club site. Other schools should copy this repo rather than sharing a multi-tenant platform.
+- All user-facing and documentation copy must remain in English only.
+- After completing a PR (merging/resolving conflicts), open a follow-up commit to self-review the changes and verify PR status checks pass before marking the PR as ready.
 
 
-## 1. Vision
+## 1. Historical multi-school vision (not current direction)
 
-HSclubs evolves from a single‑school (Mountain View High School) club directory into a
-**multi‑school platform** where any school can onboard, manage its own club directory,
-and let its students/admins operate independently — all within one unified system.
+This historical concept described a multi-school platform. The current direction is a
+single-school club directory that other schools can copy, so do not build the platform
+layer described below in this repo.
 
 ### 1.1 Core goals
 

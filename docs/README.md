@@ -34,3 +34,6 @@ Use these docs in this order when planning work for the 1st repo.
 - Keep long-term platform ideas in reference docs until they become active work.
 - Do not start the 2nd or 3rd repo until the exit checks in DEVELOPMENT_SEQUENCE.md say the 1st repo is ready.
 - Prefer simple web features over high-maintenance social, native mobile, or distributed backend work.
+- Keep the platform single-school first. Other schools should copy the pattern instead of sharing a multi-tenant platform.
+- After completing a PR (merging/resolving conflicts), open a follow-up commit to self-review the changes and verify PR status checks pass before marking the PR as ready.
+- All user-facing and documentation copy must remain in English only.

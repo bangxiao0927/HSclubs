@@ -13,6 +13,9 @@ Each issue includes: Status, PR, Problem, Solution, Expected Outcome.
 | `deferred` | Intentionally postponed per roadmap priority |
 
 **Rule:** When an issue is completed, fill in `Status: done`, the PR number, and the date. Never leave a completed issue unmarked — future sessions depend on this.
+**Rule:** Keep the repo focused on a single-school site. Other schools should copy the pattern instead of sharing a multi-tenant platform.
+**Rule:** All user-facing and documentation copy must remain in English only.
+**Rule:** After completing a PR (merging/resolving conflicts), open a follow-up commit to self-review the changes and verify PR status checks pass before marking the PR as ready.
 
 ---
 
@@ -30,7 +33,7 @@ Work through issues in this order. Completed issues are collapsed at the bottom.
 | 6 | #8 | President assignment page | open | P1 | Medium |
 | 7 | #14 | Profile page completeness | open | P1 | Small |
 | 8 | #6 | Homepage images from DB | open | P1 | Small |
-| 9 | #3 | School-scoped summary API | open | P1 | Medium |
+| 9 | #3 | Club summary API | open | P1 | Medium |
 | 10 | #16 | Login remember period | open | P2 | Small |
 | 11 | #15 | Theme matching design PDF | open | P2 | Medium |
 | 12 | #11 | Club recommendation page | open | P2 | Medium |
@@ -40,24 +43,21 @@ Work through issues in this order. Completed issues are collapsed at the bottom.
 
 ---
 
-## Issue #1: Resolve Multi-School Architecture Contradiction
+## Issue #1: Single-School Direction Confirmed
 
-**Status:** `invalid`
-**PR:** —
-**Verified:** 2025-07-17 — No school-scoped controllers exist in the codebase, no `school_id` FK in clubs table. Codebase is already single-school. Issue description was based on outdated plan; no action needed.
+**Status:** `done`
+**PR:** #53
+**Verified:** 2025-07-17 — Codebase is already single-school; direction confirmed. No action needed.
 
 **Problem:**
-The task list says "discard all the school changes, roll back the school structure changes." However, the codebase already has a full multi-school architecture built out: `schools` database table, school-scoped API routes (`/api/schools/{slug}/clubs/...`), school-scoped frontend routes (`/schools/:schoolSlug/...`), and the `FIRST_REPO_ROADMAP.md` explicitly states the long-term direction is multi-school. The task list and the roadmap contradict each other.
+The task list said "discard all the school changes, roll back the school structure changes." The codebase is already single-school (no school-scoped controllers, no `school_id` FK in clubs). The long-term direction is now confirmed as single-school. The task list and the roadmap no longer contradict.
 
 **Solution:**
-1. Confirm with stakeholders whether the 1st repo should remain single-school (MVHS only) or keep the multi-school structure.
-2. If single-school: Remove the `schools` table foreign keys from clubs, remove school-scoped routes, simplify `SchoolClubController` into `ClubController`, remove school-picker and multi-school frontend routes.
-3. If multi-school stays: Close this issue as "won't fix" and update the task list to reflect the decision.
+Decision made: the 1st repo stays single-school. Other schools will adopt the pattern by copying the repo rather than running a shared multi-tenant instance. Open issues that still reference school-scoped endpoints (`/api/schools/{slug}/...`) must be updated to the single-school `/api/clubs` pattern before implementation.
 
 **Expected Outcome:**
-- Clear, documented decision on school scoping.
-- No dead code or confusing dual-route architecture.
-- All routes follow a single consistent pattern.
+- Single-school direction documented in CODET.md and roadmap.
+- No dead code or dual-route confusion.
 
 ---
 
@@ -78,8 +78,7 @@ CSRF protection is disabled globally (line 41: `csrf.disable()`), which is accep
 
 **Solution:**
 1. Change `SecurityConfig.java` to deny `/api/**` by default and explicitly permit only the public endpoints:
-   - `GET /api/schools` and `GET /api/schools/{slug}` (public)
-   - `GET /api/schools/{slug}/clubs` and `GET /api/schools/{slug}/clubs/{id}` (public read)
+   - `GET /api/clubs` and `GET /api/clubs/{id}` (public read)
    - `GET /api/auth/providers` (public)
    - Everything else under `/api/**` -> `authenticated()`
 2. Audit every controller method to confirm it has proper role checks (platform owner, school admin, club president).
@@ -92,7 +91,7 @@ CSRF protection is disabled globally (line 41: `csrf.disable()`), which is accep
 
 ---
 
-## Issue #3: Add School Summary Data API with Hash
+## Issue #3: Add Club Summary Data API with Hash
 
 **Status:** `open` (partial — generic `/api/summary` exists but is not school-scoped)
 **PR:** —
@@ -102,15 +101,15 @@ CSRF protection is disabled globally (line 41: `csrf.disable()`), which is accep
 The 2nd repo (multi-school aggregator) needs a public API from each 1st-repo instance that provides summary data: school identity, club count, category breakdowns, last-updated timestamp, and a hash/checksum to detect changes. This endpoint does not exist yet.
 
 Relevant files:
-- `backend/src/main/java/com/example/demo/school/controller/SchoolController.java` — currently only lists schools and gets by slug
-- `backend/src/main/java/com/example/demo/school/service/SchoolService.java`
+- `backend/src/main/java/com/example/demo/club/controller/ClubController.java` — currently serves club data
+- `backend/src/main/java/com/example/demo/club/service/ClubService.java`
 
 **Solution:**
-1. Add a new endpoint: `GET /api/schools/{slug}/summary`
+1. Add a new endpoint: `GET /api/clubs/summary`
 2. The response should include:
 ```json
 {
-  "schoolName": "Mountain View High School",
+  "siteName": "Mountain View High School Clubs",
   "shortName": "MVHS",
   "slug": "mvhs",
   "status": "active",
@@ -122,7 +121,7 @@ Relevant files:
 }
 ```
 3. The `dataHash` should be computed from club names, categories, and member counts so the 2nd repo can detect changes without re-fetching all data.
-4. Add a `SchoolSummary` model class and a `SchoolSummaryService` or extend `SchoolService`.
+4. Add a `ClubSummary` model class and a `ClubSummaryService` or extend `ClubService`.
 
 **Expected Outcome:**
 - 2nd repo can poll this endpoint to stay in sync.
@@ -171,7 +170,7 @@ Relevant files:
 1. After OAuth callback, check if the user has a `user_profiles` row or if `graduation_year IS NULL`.
 2. If profile is incomplete, redirect to a new `OnboardingView.vue` instead of the home page.
 3. The onboarding page collects:
-   - Home school (dropdown from `/api/schools`)
+   - Home school (dropdown from `/api/clubs/schools` or pre-configured list)
    - Graduation year (dropdown, current year + 3)
    - Optional: interest categories (checkboxes matching club categories)
 4. Submit to `POST /api/auth/onboarding` which populates `user_profiles` and optionally creates a `school_users` row.
@@ -199,7 +198,7 @@ This means every school deployment must manually provide these exact filenames i
 1. Use `currentSchool.bannerUrl` from the school store as the primary hero image.
 2. Fall back to top clubs' `imageUrl` values for the carousel if no school banner exists.
 3. As a last resort, keep one default placeholder image.
-4. Update `SchoolClubController` (or a new endpoint) to return featured/hero data.
+4. Update `ClubController` (or a new endpoint) to return featured/hero data.
 5. Remove the hardcoded array and replace with reactive data from the API.
 
 **Expected Outcome:**
@@ -251,9 +250,9 @@ The `club_member` table has a `role_name` column that supports `president` role,
 1. Add a "Manage Presidents" section to `ClubAdminView.vue` (visible to platform owners and school admins).
 2. Include:
    - Search users by email or display name (new endpoint: `GET /api/users/search?q=...`).
-   - Add a user as president (new endpoint: `POST /api/schools/{slug}/clubs/{id}/presidents`).
-   - Remove a president (new endpoint: `DELETE /api/schools/{slug}/clubs/{id}/presidents/{userId}`).
-   - List current presidents for the club (extend `GET /api/schools/{slug}/clubs/{id}/members`).
+   - Add a user as president (new endpoint: `POST /api/clubs/{id}/presidents`).
+   - Remove a president (new endpoint: `DELETE /api/clubs/{id}/presidents/{userId}`).
+   - List current presidents for the club (extend `GET /api/clubs/{id}/members`).
 3. Add backend permission checks: only platform owner or school admin can assign presidents.
 
 **Expected Outcome:**
@@ -311,10 +310,10 @@ CREATE TABLE club_reviews (
 );
 ```
 2. Backend: Add `ClubReview` model, mapper, service, and controller endpoints:
-   - `GET /api/schools/{slug}/clubs/{id}/reviews` (paginated, newest first)
-   - `POST /api/schools/{slug}/clubs/{id}/reviews` (authenticated, one per user per club)
-   - `PUT /api/schools/{slug}/clubs/{id}/reviews` (update own review)
-   - `DELETE /api/schools/{slug}/clubs/{id}/reviews` (delete own review)
+   - `GET /api/clubs/{id}/reviews` (paginated, newest first)
+   - `POST /api/clubs/{id}/reviews` (authenticated, one per user per club)
+   - `PUT /api/clubs/{id}/reviews` (update own review)
+   - `DELETE /api/clubs/{id}/reviews` (delete own review)
 3. Frontend: Add review section to `ClubDetailView.vue` with star rating input and comment textarea.
 4. Show average rating and review count on club cards.
 
@@ -336,7 +335,7 @@ No recommendation feature exists. The task requires an interest-based club recom
 **Solution:**
 1. Add `interest_categories` column (JSON or comma-separated) to `user_profiles` table (populated during onboarding from Issue #5).
 2. Create `RecommendationView.vue` at route `/recommendations`.
-3. Backend: Add `GET /api/schools/{slug}/recommendations` that:
+3. Backend: Add `GET /api/clubs/recommendations` that:
    - Reads the user's interest categories.
    - Finds clubs with matching categories that the user hasn't joined.
    - Sorts by category match count, then by member count or rating.
@@ -360,11 +359,11 @@ No recommendation feature exists. The task requires an interest-based club recom
 No QR code feature exists. The task requires scanning a QR code to apply to a club.
 
 **Solution:**
-1. Each club gets a unique application URL: `/schools/{slug}/clubs/{id}/apply?src=qr`
+1. Each club gets a unique application URL: `/clubs/{id}/apply?src=qr`
 2. Generate a QR code image for that URL (use a library like `qrcode` on the frontend or generate server-side).
 3. Display the QR code on the club detail page and in the club admin page (for presidents to print/share).
 4. When scanned, the URL opens the club detail page with the "Apply" button prominently displayed.
-5. The apply flow reuses the existing `POST /api/schools/{slug}/clubs/{id}/members/apply` endpoint.
+5. The apply flow reuses the existing `POST /api/clubs/{id}/members/apply` endpoint.
 
 **Expected Outcome:**
 - Each club has a scannable QR code.
@@ -411,11 +410,11 @@ CREATE TABLE meeting_attendance (
 );
 ```
 2. Backend endpoints:
-   - `POST /api/schools/{slug}/clubs/{id}/meetings` (president/admin creates a meeting)
-   - `GET /api/schools/{slug}/clubs/{id}/meetings` (list upcoming meetings)
-   - `POST /api/schools/{slug}/clubs/{id}/meetings/{meetingId}/attend` (member requests attendance)
-   - `GET /api/schools/{slug}/clubs/{id}/meetings/{meetingId}/attendance` (president views requests)
-   - `PUT /api/schools/{slug}/clubs/{id}/meetings/{meetingId}/attendance/{attendanceId}` (president confirms/rejects)
+   - `POST /api/clubs/{id}/meetings` (president/admin creates a meeting)
+   - `GET /api/clubs/{id}/meetings` (list upcoming meetings)
+   - `POST /api/clubs/{id}/meetings/{meetingId}/attend` (member requests attendance)
+   - `GET /api/clubs/{id}/meetings/{meetingId}/attendance` (president views requests)
+   - `PUT /api/clubs/{id}/meetings/{meetingId}/attendance/{attendanceId}` (president confirms/rejects)
 3. Frontend: Add "Meetings" tab to `ClubDetailView.vue` for members, and meeting management to `ClubAdminView.vue` for presidents.
 
 **Expected Outcome:**
