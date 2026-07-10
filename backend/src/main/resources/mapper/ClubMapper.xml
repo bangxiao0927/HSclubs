@@ -164,6 +164,7 @@
 
     <!-- Members -->
     <resultMap id="ClubMemberViewMap" type="com.example.demo.club.model.ClubMemberView">
+        <id column="oauth_user_id" property="oauthUserId" />
         <result column="display_name" property="displayName" />
         <result column="email" property="email" />
         <result column="avatar_url" property="avatarUrl" />
@@ -172,7 +173,8 @@
     </resultMap>
 
     <select id="findMembersByClubId" resultMap="ClubMemberViewMap" parameterType="long">
-        SELECT ou.display_name,
+        SELECT cm.oauth_user_id,
+               ou.display_name,
                ou.email,
                ou.avatar_url,
                cm.role_name,
@@ -182,6 +184,21 @@
         WHERE cm.club_id = #{clubId}
         ORDER BY cm.joined_at ASC
     </select>
+
+    <update id="updateMemberRole">
+        UPDATE club_member
+        SET role_name = #{roleName}
+        WHERE club_id = #{clubId}
+          AND oauth_user_id = #{oauthUserId}
+    </update>
+
+    <update id="demoteOtherPresidents">
+        UPDATE club_member
+        SET role_name = 'member'
+        WHERE club_id = #{clubId}
+          AND oauth_user_id != #{oauthUserId}
+          AND LOWER(role_name) = 'president'
+    </update>
 
     <insert id="insertMember">
         INSERT INTO club_member (club_id, oauth_user_id, role_name)
@@ -326,11 +343,5 @@
         FROM (SELECT 1) AS dummy
         LEFT JOIN club_member cm ON cm.club_id = #{clubId} AND cm.oauth_user_id = #{oauthUserId}
     </select>
-
-    <update id="updateMemberRole">
-        UPDATE club_member
-        SET role_name = #{roleName}
-        WHERE club_id = #{clubId} AND oauth_user_id = #{oauthUserId}
-    </update>
 
 </mapper>

@@ -13,6 +13,7 @@ let clubsCache: Club[] | null = null
 let clubsCacheKey = ''
 let clubsCacheExpiresAt = 0
 let clubsRequest: Promise<Club[]> | null = null
+let clubsRequestKey = ''
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = buildApiUrl(path)
@@ -46,6 +47,7 @@ export const invalidateClubCache = () => {
   clubsCacheKey = ''
   clubsCacheExpiresAt = 0
   clubsRequest = null
+  clubsRequestKey = ''
 }
 
 const clubPath = (suffix: string, page?: number, size?: number) => {
@@ -59,18 +61,19 @@ const clubPath = (suffix: string, page?: number, size?: number) => {
 
 export const fetchClubs = async (options: FetchClubsOptions = {}) => {
   const { force = false } = options
-  const cacheKey = '__global__'
+  const { page, size } = options
+  const cacheKey = `page:${page ?? 'default'}:size:${size ?? 'default'}`
   const now = Date.now()
 
   if (!force && clubsCache && cacheKey === clubsCacheKey && now < clubsCacheExpiresAt) {
     return cloneClubs(clubsCache)
   }
 
-  if (!force && clubsRequest) {
+  if (!force && clubsRequest && clubsRequestKey === cacheKey) {
     return cloneClubs(await clubsRequest)
   }
 
-  const { page, size } = options
+  clubsRequestKey = cacheKey
   clubsRequest = request<Club[]>(clubPath('', page, size))
 
   try {
@@ -79,7 +82,13 @@ export const fetchClubs = async (options: FetchClubsOptions = {}) => {
     return cloneClubs(clubs)
   } finally {
     clubsRequest = null
+    clubsRequestKey = ''
   }
+}
+
+export const fetchClubCount = async () => {
+  const response = await request<{ count: number }>(clubPath('/count'))
+  return response.count
 }
 
 export const fetchClubById = (id: number | string) =>
@@ -103,6 +112,16 @@ export const updateClub = async (
 
 export const fetchClubMembers = (id: number | string) =>
   request<ClubMember[]>(clubPath(`/${id}/members`))
+
+export const updateClubMemberRole = (
+  clubId: number | string,
+  oauthUserId: number | string,
+  roleName: string,
+) =>
+  request<void>(clubPath(`/${clubId}/members/${oauthUserId}/role`), {
+    method: 'PUT',
+    body: JSON.stringify({ roleName }),
+  })
 
 export const applyToClub = (id: number | string) =>
   request<void>(clubPath(`/${id}/members/apply`), {

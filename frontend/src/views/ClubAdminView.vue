@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
-import { fetchClubById, fetchClubMembers, updateClub } from '../services/clubService'
+import { fetchClubById, fetchClubMembers, updateClub, updateClubMemberRole } from '../services/clubService'
 import { searchUsers, assignPresident, removePresident } from '../services/userService'
 import type { Club, ClubMember } from '../types/club'
 import type { UserSearchResult } from '../services/userService'
@@ -21,6 +21,12 @@ const successMessage = ref('')
 const members = ref<ClubMember[]>([])
 const membersLoading = ref(false)
 const membersError = ref('')
+const memberRoleError = ref('')
+const roleSavingMemberId = ref<number | null>(null)
+const memberRoleOptions = [
+  { value: 'member', label: 'Member' },
+  { value: 'president', label: 'President' },
+]
 
 // President management state
 const presidentSearchQuery = ref('')
@@ -175,9 +181,46 @@ const loadMembers = async (id: string) => {
   }
 }
 
-const refreshMembers = () => {
+const refreshMembers = async () => {
   if (club.value && canManageMembers.value) {
-    void loadMembers(String(club.value.id))
+    await loadMembers(String(club.value.id))
+  }
+}
+
+const handleMemberRoleChange = async (member: ClubMember, event: Event) => {
+  if (!club.value || !canManageMembers.value || roleSavingMemberId.value) {
+    return
+  }
+  const select = event.target as HTMLSelectElement
+  const previousRole = member.roleName || 'member'
+  const nextRole = select.value
+  if (nextRole === previousRole) {
+    return
+  }
+
+  memberRoleError.value = ''
+  roleSavingMemberId.value = member.oauthUserId
+  try {
+    await updateClubMemberRole(club.value.id, member.oauthUserId, nextRole)
+    await loadMembers(String(club.value.id))
+    await refreshClubSnapshot()
+  } catch (err) {
+    member.roleName = previousRole
+    memberRoleError.value = err instanceof Error ? err.message : 'Failed to update member role'
+    await loadMembers(String(club.value.id))
+  } finally {
+    roleSavingMemberId.value = null
+  }
+}
+
+const refreshClubSnapshot = async () => {
+  if (!club.value) {
+    return
+  }
+  try {
+    club.value = await fetchClubById(String(club.value.id))
+  } catch (err) {
+    console.error(err)
   }
 }
 
@@ -451,22 +494,37 @@ watch(
             <p>{{ membersError }}</p>
             <button type="button" class="ghost-btn" @click="refreshMembers">Try again</button>
           </div>
-          <ul v-else-if="members.length" class="member-list">
-            <li v-for="member in members" :key="member.oauthUserId" class="member-entry">
-              <div class="member-avatar">
-                <img
-                  :src="member.avatarUrl || 'https://api.dicebear.com/7.x/thumbs/svg?seed=' + encodeURIComponent(member.displayName || 'Member')"
-                  :alt="member.displayName || 'Club member'"
-                />
-              </div>
-              <div class="member-info">
-                <p>{{ member.displayName || 'Unnamed member' }}</p>
-                <small>{{ member.roleName || 'Member' }}</small>
-              </div>
-              <a v-if="member.email" class="member-email" :href="`mailto:${member.email}`">{{ member.email }}</a>
-            </li>
-          </ul>
-          <p v-else class="member-empty">No members have been linked yet.</p>
+          <template v-else>
+            <p v-if="memberRoleError" class="member-hint error" role="alert">{{ memberRoleError }}</p>
+            <ul v-if="members.length" class="member-list">
+              <li v-for="member in members" :key="member.oauthUserId" class="member-entry">
+                <div class="member-avatar">
+                  <img
+                    :src="member.avatarUrl || 'https://api.dicebear.com/7.x/thumbs/svg?seed=' + encodeURIComponent(member.displayName || 'Member')"
+                    :alt="member.displayName || 'Club member'"
+                  />
+                </div>
+                <div class="member-info">
+                  <p>{{ member.displayName || 'Unnamed member' }}</p>
+                  <small>{{ member.roleName || 'Member' }}</small>
+                </div>
+                <label v-if="isOwner" class="member-role">
+                  <span>Role</span>
+                  <select
+                    :value="member.roleName || 'member'"
+                    :disabled="roleSavingMemberId === member.oauthUserId"
+                    @change="handleMemberRoleChange(member, $event)"
+                  >
+                    <option v-for="option in memberRoleOptions" :key="option.value" :value="option.value">
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+                <a v-if="member.email" class="member-email" :href="`mailto:${member.email}`">{{ member.email }}</a>
+              </li>
+            </ul>
+            <p v-else class="member-empty">No members have been linked yet.</p>
+          </template>
         </section>
       </section>
 
@@ -837,7 +895,7 @@ textarea {
 
 .member-entry {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) minmax(150px, auto) auto;
   gap: 0.75rem;
   align-items: center;
   padding: 0.75rem 0;
@@ -873,9 +931,25 @@ textarea {
   color: var(--mv-text-dim);
 }
 
+.member-role {
+  min-width: 150px;
+  gap: 0.25rem;
+}
+
+.member-role span {
+  font-size: 0.75rem;
+  color: var(--mv-text-dim);
+}
+
+.member-role select {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.75rem;
+}
+
 .member-email {
   color: var(--mv-gold);
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 900px) {
@@ -951,8 +1025,13 @@ textarea {
     grid-template-columns: auto 1fr;
   }
 
+  .member-role,
   .member-email {
     grid-column: 1 / -1;
+  }
+
+  .member-role {
+    width: 100%;
   }
 }
 

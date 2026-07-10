@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -111,6 +112,40 @@ const router = createRouter({
       component: () => import('../views/NotFoundView.vue'),
     },
   ],
+})
+
+const termsBypassRouteNames = new Set([
+  'auth-choice',
+  'auth-callback',
+  'accept-terms',
+  'terms',
+  'privacy',
+  'not-found',
+])
+
+router.beforeEach(async (to) => {
+  const authStore = useAuthStore()
+  if (!authStore.hasCheckedSession) {
+    await authStore.refreshUser()
+  }
+
+  if (to.name === 'accept-terms' && !authStore.isAuthenticated) {
+    return { name: 'auth-choice', query: { intent: 'login' } }
+  }
+
+  if (
+    authStore.isAuthenticated &&
+    authStore.currentUser?.acceptedTerms === false &&
+    !termsBypassRouteNames.has(String(to.name))
+  ) {
+    return { name: 'accept-terms' }
+  }
+
+  if (to.name === 'accept-terms' && authStore.currentUser?.acceptedTerms === true) {
+    return { name: 'home' }
+  }
+
+  return true
 })
 
 export default router
