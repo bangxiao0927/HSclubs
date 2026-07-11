@@ -11,6 +11,7 @@ import type { Club, ClubMembershipRequest } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
 import { userAvatar } from '../utils/avatarImages'
+import BackButton from '../components/BackButton.vue'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -152,7 +153,7 @@ watch(
 <template>
   <section class="pending-admin page-shell">
     <div class="admin-toolbar">
-      <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
+      <BackButton>← Back to clubs</BackButton>
       <div class="toolbar-actions" v-if="club">
         <RouterLink :to="`/clubs/${club.id}`" class="ghost-btn">View public page</RouterLink>
         <RouterLink :to="`/clubs/${club.id}/admin`" class="ghost-btn">Club settings</RouterLink>
