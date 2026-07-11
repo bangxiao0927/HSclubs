@@ -133,7 +133,7 @@ public class AvatarCacheController {
             <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
               <rect width="160" height="160" rx="32" fill="#0f766e"/>
               <circle cx="122" cy="32" r="48" fill="#67e8f9" opacity="0.18"/>
-              <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#67e8f9">%s</text>
+              <text x="50%%" y="54%%" text-anchor="middle" dominant-baseline="middle" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#67e8f9">%s</text>
             </svg>
             """.formatted(label);
         return svg.getBytes(StandardCharsets.UTF_8);
