@@ -11,7 +11,6 @@ import type { Club, ClubMembershipRequest } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
 import { userAvatar } from '../utils/avatarImages'
-import BackButton from '../components/BackButton.vue'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -30,6 +29,12 @@ const { currentUser } = storeToRefs(authStore)
 const canManageMembers = computed(
   () => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner)
 )
+
+const clubAdminTarget = computed(() => {
+  const routeId = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
+  const clubId = club.value?.id ?? (typeof routeId === 'string' ? routeId : '')
+  return clubId ? `/clubs/${clubId}/admin` : '/admin'
+})
 
 const loadPendingRequests = async (id: string) => {
   if (!id || !canManageMembers.value) {
@@ -153,7 +158,7 @@ watch(
 <template>
   <section class="pending-admin page-shell">
     <div class="admin-toolbar">
-      <BackButton>← Back to clubs</BackButton>
+      <RouterLink :to="clubAdminTarget" class="back-link">← Back to club settings</RouterLink>
       <div class="toolbar-actions" v-if="club">
         <RouterLink :to="`/clubs/${club.id}`" class="ghost-btn">View public page</RouterLink>
         <RouterLink :to="`/clubs/${club.id}/admin`" class="ghost-btn">Club settings</RouterLink>
