@@ -562,7 +562,7 @@ const showHeroImage = (index: number) => {
 .badge {
   padding: 0.2rem 0.75rem;
   border-radius: 999px;
-  background: rgba(250, 204, 21, 0.15);
+  background: var(--mv-gold-soft);
   color: var(--mv-gold);
   font-weight: 600;
 }
