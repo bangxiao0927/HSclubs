@@ -84,13 +84,14 @@ const handleSkip = () => {
 <style scoped>
 .onboarding-page {
   min-height: 80vh;
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: clamp(2rem, 5vw, 4rem) var(--page-padding-inline);
-  background: var(--app-body-bg);
-  color: var(--mv-text);
+  padding: 2rem;
+  background: radial-gradient(circle at 20% 20%, rgba(253, 224, 71, 0.15), transparent 55%),
+    radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.2), transparent 60%),
+    #06070b;
+  color: #fefce8;
 }
 
 .onboarding-card {
@@ -98,10 +99,9 @@ const handleSkip = () => {
   flex-direction: column;
   gap: 1.25rem;
   padding: clamp(2rem, 4vw, 3rem);
-  border-radius: var(--mv-radius);
-  border: 1px solid var(--mv-border);
-  background: var(--mv-surface-hero-strong);
-  box-shadow: var(--mv-shadow-elevated);
+  border-radius: 36px;
+  border: 1px solid rgba(250, 204, 21, 0.2);
+  background: linear-gradient(120deg, rgba(250, 204, 21, 0.18), rgba(5, 5, 5, 0.95));
   max-width: 520px;
   width: 100%;
 }
@@ -109,18 +109,16 @@ const handleSkip = () => {
 .onboarding-card h1 {
   margin: 0;
   font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--mv-text);
 }
 
 .subtitle {
   margin: 0;
-  color: var(--mv-text-muted);
+  color: rgba(254, 252, 232, 0.75);
   line-height: 1.6;
 }
 
 .interest-note {
-  color: var(--mv-text-faint);
+  color: rgba(254, 252, 232, 0.6);
   font-size: 0.9rem;
   line-height: 1.6;
   margin: 0;
@@ -141,23 +139,17 @@ const handleSkip = () => {
 
 .onboarding-form label span em {
   font-style: normal;
-  color: var(--mv-status-danger);
+  color: #f87171;
 }
 
 .onboarding-form select {
   padding: 0.6rem 0.85rem;
   border-radius: 12px;
-  border: 1px solid var(--mv-border);
-  background: var(--mv-surface-card-strong);
-  color: var(--mv-text);
+  border: 1px solid rgba(254, 252, 232, 0.15);
+  background: rgba(10, 10, 20, 0.6);
+  color: #fefce8;
   font-size: 0.95rem;
   font-family: inherit;
-  outline: none;
-}
-
-.onboarding-form select:focus {
-  border-color: var(--mv-border-strong);
-  box-shadow: 0 0 0 3px var(--mv-gold-soft);
 }
 
 fieldset {
@@ -174,9 +166,9 @@ legend {
 .error-msg {
   padding: 0.6rem 1rem;
   border-radius: 12px;
-  background: var(--mv-surface-danger);
-  border: 1px solid color-mix(in srgb, var(--mv-status-danger) 45%, transparent);
-  color: var(--mv-status-danger);
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  color: #f87171;
   font-size: 0.9rem;
 }
 
@@ -185,50 +177,5 @@ legend {
   justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 0.5rem;
-}
-
-.ghost-btn,
-.primary-btn {
-  border-radius: 999px;
-  padding: 0.62rem 1.15rem;
-  border: 1px solid var(--mv-ghost-border);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
-}
-
-.ghost-btn {
-  background: transparent;
-  color: var(--mv-ghost-text);
-}
-
-.ghost-btn:hover {
-  background: var(--mv-surface-accent);
-  border-color: var(--mv-border-strong);
-}
-
-.primary-btn {
-  border-color: var(--mv-primary-bg);
-  background: var(--mv-primary-bg);
-  color: var(--mv-primary-text);
-  box-shadow: var(--mv-primary-shadow);
-}
-
-.primary-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-  box-shadow: none;
-}
-
-@media (max-width: 520px) {
-  .onboarding-actions {
-    flex-direction: column-reverse;
-  }
-
-  .ghost-btn,
-  .primary-btn {
-    width: 100%;
-  }
 }
 </style>

@@ -4,7 +4,6 @@ import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from '../stores/auth'
-import BackButton from '../components/BackButton.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -70,7 +69,7 @@ const handleProviderLogin = (providerId: string) => {
         </button>
         <p v-if="providers.length === 0" class="alert muted">No OAuth providers are configured yet.</p>
       </div>
-      <BackButton>Back to club catalog</BackButton>
+      <RouterLink to="/" class="back-link">Back to club catalog</RouterLink>
     </div>
   </div>
 </template>

@@ -11,7 +11,6 @@ import { clubCategoryOptions } from '../utils/clubCategories'
 import { buildApiUrl } from '../services/httpClient'
 import { clubImage } from '../utils/clubImages'
 import { userAvatar } from '../utils/avatarImages'
-import BackButton from '../components/BackButton.vue'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -38,12 +37,6 @@ const presidentSearchError = ref('')
 const presidentUpdating = ref<number | null>(null)
 const presidentActionError = ref('')
 
-const hasValidUserId = (userId: number | null | undefined): userId is number =>
-  typeof userId === 'number' && Number.isFinite(userId) && userId > 0
-
-const isPresidentUpdating = (userId: number | null | undefined) =>
-  hasValidUserId(userId) && presidentUpdating.value === userId
-
 const isOwner = computed(() => Boolean(currentUser.value?.isOwner))
 
 const handlePresidentSearch = async () => {
@@ -64,12 +57,8 @@ const handlePresidentSearch = async () => {
   }
 }
 
-const handleAssignPresident = async (userId: number | null | undefined) => {
+const handleAssignPresident = async (userId: number) => {
   if (!club.value) return
-  if (!hasValidUserId(userId)) {
-    presidentActionError.value = 'This user result is missing an account ID. Refresh the roster and try again.'
-    return
-  }
   presidentUpdating.value = userId
   presidentActionError.value = ''
   try {
@@ -340,7 +329,7 @@ watch(
 <template>
   <section class="club-admin page-shell">
     <div class="admin-toolbar">
-      <BackButton>← Back to clubs</BackButton>
+      <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
       <div class="toolbar-actions" v-if="!loading">
         <RouterLink
           v-if="club"
@@ -568,7 +557,7 @@ watch(
           <p v-if="presidentActionError" class="upload-error">{{ presidentActionError }}</p>
 
           <ul v-if="presidentSearchResults.length" class="member-list">
-            <li v-for="user in presidentSearchResults" :key="user.id ?? user.email" class="member-entry">
+            <li v-for="user in presidentSearchResults" :key="user.id" class="member-entry">
               <div class="member-info">
                 <p>{{ user.displayName || 'Unnamed' }}</p>
                 <small>{{ user.email }}</small>
@@ -576,10 +565,10 @@ watch(
               <button
                 type="button"
                 class="primary-btn small"
-                :disabled="presidentUpdating !== null || !hasValidUserId(user.id)"
+                :disabled="presidentUpdating === user.id"
                 @click="handleAssignPresident(user.id)"
               >
-                {{ isPresidentUpdating(user.id) ? 'Assigning…' : 'Assign as President' }}
+                {{ presidentUpdating === user.id ? 'Assigning…' : 'Assign as President' }}
               </button>
             </li>
           </ul>

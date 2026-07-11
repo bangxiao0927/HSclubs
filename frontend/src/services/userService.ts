@@ -46,7 +46,7 @@ export const fetchMyMembershipRequests = () =>
   request<ClubMembershipRequest[]>('/api/users/me/membership-requests')
 
 export interface UserSearchResult {
-  id: number | null
+  id: number
   email: string
   displayName: string
   avatarUrl: string | null

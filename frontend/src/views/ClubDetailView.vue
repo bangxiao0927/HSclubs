@@ -6,7 +6,6 @@ import { applyToClub, cancelMembershipRequest, fetchClubById, fetchClubs } from 
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
-import BackButton from '../components/BackButton.vue'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -122,18 +121,18 @@ watch(
 
 <template>
   <section v-if="loading" class="club-detail page-shell empty-state">
-    <BackButton>← Back to clubs</BackButton>
+    <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
     <p>Loading club details…</p>
   </section>
 
   <section v-else-if="error" class="club-detail page-shell empty-state">
-    <BackButton>← Back to clubs</BackButton>
+    <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
     <h1>Unable to load club</h1>
     <p>{{ error }}</p>
   </section>
 
   <section class="club-detail page-shell" v-else-if="club">
-    <BackButton>← Back to clubs</BackButton>
+    <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
 
     <header class="club-hero">
       <div class="hero-top">
@@ -260,7 +259,7 @@ watch(
   </section>
 
   <section v-else class="club-detail page-shell empty-state">
-    <BackButton>← Back to clubs</BackButton>
+    <RouterLink to="/" class="back-link">← Back to clubs</RouterLink>
     <h1>Club not found</h1>
     <p>The club you requested is unavailable. Pick another entry from the directory.</p>
   </section>

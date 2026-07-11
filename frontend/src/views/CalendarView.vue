@@ -554,6 +554,37 @@ function formatWeekDate(day: string) {
   color: var(--mv-gold);
 }
 
+:global(:root[data-theme='dark']) .calendar-column {
+  background: rgba(12, 12, 12, 0.92);
+}
+
+:global(:root[data-theme='dark']) .column-head {
+  background: rgba(250, 204, 21, 0.08);
+  border-bottom-color: rgba(250, 204, 21, 0.18);
+}
+
+:global(:root[data-theme='dark']) .event-card {
+  background: rgba(24, 24, 24, 0.96);
+  border-color: rgba(250, 204, 21, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 20px rgba(0, 0, 0, 0.28);
+}
+
+:global(:root[data-theme='dark']) .event-card:hover,
+:global(:root[data-theme='dark']) .event-card:focus-visible {
+  background: rgba(38, 38, 38, 0.98);
+  border-color: rgba(250, 204, 21, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 28px rgba(0, 0, 0, 0.34);
+}
+
+:global(:root[data-theme='dark']) .event-note {
+  background: rgba(8, 8, 8, 0.9);
+  border-color: rgba(250, 204, 21, 0.16);
+}
+
 .empty {
   color: var(--mv-text-dim);
   font-size: 0.9rem;

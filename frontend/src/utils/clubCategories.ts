@@ -21,7 +21,7 @@ export const clubCategoryOptions: ClubCategoryOption[] = [
     title: 'Creative Arts & Media',
     focus: 'Design · Film · Performance',
     icon: '🎨',
-    gradient: 'linear-gradient(135deg, #0f766e 0%, #38bdf8 100%)',
+    gradient: 'linear-gradient(135deg, #854d0e 0%, #facc15 100%)',
     description: 'Visual arts, music, film, theater, writing, and media clubs.',
   },
   {

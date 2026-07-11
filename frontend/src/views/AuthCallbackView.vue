@@ -45,13 +45,14 @@ onMounted(async () => {
 <style scoped>
 .callback-page {
   min-height: 80vh;
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: clamp(2rem, 5vw, 4rem) var(--page-padding-inline);
-  background: var(--app-body-bg);
-  color: var(--mv-text);
+  padding: 2rem;
+  background: radial-gradient(circle at 20% 20%, rgba(253, 224, 71, 0.15), transparent 55%),
+    radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.2), transparent 60%),
+    #06070b;
+  color: #fefce8;
 }
 
 .callback-card {
@@ -60,10 +61,9 @@ onMounted(async () => {
   align-items: center;
   gap: 1rem;
   padding: clamp(2rem, 4vw, 3rem);
-  border-radius: var(--mv-radius);
-  border: 1px solid var(--mv-border);
-  background: var(--mv-surface-hero-strong);
-  box-shadow: var(--mv-shadow-elevated);
+  border-radius: 36px;
+  border: 1px solid rgba(250, 204, 21, 0.2);
+  background: linear-gradient(120deg, rgba(250, 204, 21, 0.18), rgba(5, 5, 5, 0.95));
   max-width: 420px;
   text-align: center;
 }
@@ -72,8 +72,8 @@ onMounted(async () => {
   width: 3rem;
   height: 3rem;
   border-radius: 50%;
-  border: 3px solid var(--mv-surface-soft);
-  border-top-color: var(--mv-gold);
+  border: 3px solid rgba(254, 252, 232, 0.2);
+  border-top-color: #fde047;
   animation: spin 1s linear infinite;
 }
 
@@ -81,12 +81,11 @@ onMounted(async () => {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--mv-text);
 }
 
 .hint {
   margin: 0;
-  color: var(--mv-text-faint);
+  color: rgba(254, 252, 232, 0.75);
   line-height: 1.6;
 }
 
