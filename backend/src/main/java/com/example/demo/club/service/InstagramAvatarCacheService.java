@@ -257,11 +257,12 @@ public class InstagramAvatarCacheService {
         processBuilder.environment().put("PYTHONUNBUFFERED", "1");
         Process process = processBuilder.start();
         boolean finished = process.waitFor(fetchTimeoutMillis, TimeUnit.MILLISECONDS);
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
         if (!finished) {
             process.destroyForcibly();
+            process.waitFor(1, TimeUnit.SECONDS);
             throw new IOException("Instaloader timed out for " + safeHandle);
         }
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
         if (process.exitValue() != 0) {
             throw new IOException("Instaloader failed for " + safeHandle + ": " + abbreviate(output));
         }
