@@ -25,6 +25,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
@@ -74,6 +78,7 @@ public class InstagramAvatarCacheService {
     private final long fetchTimeoutMillis;
     private final long cacheTtlMillis;
     private final int maxRefreshPerRun;
+    private final ConcurrentMap<String, CompletableFuture<RefreshResult>> inFlightRefreshes;
 
     public InstagramAvatarCacheService(
         ClubMapper clubMapper,
@@ -100,6 +105,7 @@ public class InstagramAvatarCacheService {
         this.fetchTimeoutMillis = Math.max(1000, fetchTimeoutMillis);
         this.cacheTtlMillis = Math.max(TimeUnit.HOURS.toMillis(1), cacheTtlMillis);
         this.maxRefreshPerRun = Math.max(1, maxRefreshPerRun);
+        this.inFlightRefreshes = new ConcurrentHashMap<>();
         try {
             Files.createDirectories(this.instagramCacheDir);
         } catch (IOException e) {
@@ -117,8 +123,9 @@ public class InstagramAvatarCacheService {
             return ResolvedAvatar.fallback(fallbackSvg(safeHandle));
         }
         try {
-            CachedAvatar fetched = refreshAvatar(safeHandle);
-            return ResolvedAvatar.cached(fetched);
+            return refreshAvatarIfNeeded(safeHandle, false).avatar()
+                .map(ResolvedAvatar::cached)
+                .orElseGet(() -> ResolvedAvatar.fallback(fallbackSvg(safeHandle)));
         } catch (Exception ex) {
             LOGGER.debug("Unable to fetch Instagram avatar for {}", safeHandle, ex);
             return ResolvedAvatar.fallback(fallbackSvg(safeHandle));
@@ -134,17 +141,20 @@ public class InstagramAvatarCacheService {
             return;
         }
         Set<String> handles = instagramHandlesFromClubs(clubMapper.findAll());
+        int attempted = 0;
         int refreshed = 0;
         for (String handle : handles) {
-            if (refreshed >= maxRefreshPerRun) {
+            if (attempted >= maxRefreshPerRun) {
                 break;
             }
             if (hasFreshCachedAvatar(handle)) {
                 continue;
             }
+            attempted++;
             try {
-                refreshAvatar(handle);
-                refreshed++;
+                if (refreshAvatarIfNeeded(handle, true).refreshed()) {
+                    refreshed++;
+                }
             } catch (Exception ex) {
                 LOGGER.debug("Unable to prewarm Instagram avatar for {}", handle, ex);
             }
@@ -242,6 +252,57 @@ public class InstagramAvatarCacheService {
         CachedAvatar avatar = downloadAvatar(profilePicUrl);
         cacheAvatar(safeHandle, avatar);
         return avatar;
+    }
+
+    private RefreshResult refreshAvatarIfNeeded(String safeHandle, boolean requireFreshCache)
+        throws IOException, InterruptedException {
+        CompletableFuture<RefreshResult> future = new CompletableFuture<>();
+        CompletableFuture<RefreshResult> inFlight = inFlightRefreshes.putIfAbsent(safeHandle, future);
+        if (inFlight != null) {
+            return waitForInFlightRefresh(safeHandle, inFlight);
+        }
+        try {
+            Optional<CachedAvatar> cached = readCachedAvatar(safeHandle);
+            if (cached.isPresent() && (!requireFreshCache || hasFreshCachedAvatar(safeHandle))) {
+                RefreshResult result = new RefreshResult(cached, false);
+                future.complete(result);
+                return result;
+            }
+            RefreshResult result = new RefreshResult(Optional.of(refreshAvatar(safeHandle)), true);
+            future.complete(result);
+            return result;
+        } catch (IOException | InterruptedException | RuntimeException ex) {
+            future.completeExceptionally(ex);
+            throw ex;
+        } finally {
+            inFlightRefreshes.remove(safeHandle, future);
+        }
+    }
+
+    private RefreshResult waitForInFlightRefresh(String safeHandle, CompletableFuture<RefreshResult> inFlight)
+        throws IOException, InterruptedException {
+        try {
+            return inFlight.get();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw ex;
+        } catch (ExecutionException ex) {
+            Throwable cause = ex.getCause();
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            if (cause instanceof InterruptedException interruptedException) {
+                Thread.currentThread().interrupt();
+                throw interruptedException;
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IOException("Unable to join in-flight Instagram avatar refresh for " + safeHandle, cause);
+        }
     }
 
     private String fetchProfilePicUrl(String safeHandle) throws IOException, InterruptedException {
@@ -363,6 +424,8 @@ public class InstagramAvatarCacheService {
     }
 
     public record CachedAvatar(byte[] bytes, MediaType mediaType) {}
+
+    private record RefreshResult(Optional<CachedAvatar> avatar, boolean refreshed) {}
 
     public record ResolvedAvatar(byte[] bytes, MediaType mediaType, long maxAge, TimeUnit maxAgeUnit) {
         private static ResolvedAvatar cached(CachedAvatar avatar) {
