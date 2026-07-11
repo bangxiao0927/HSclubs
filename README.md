@@ -60,6 +60,7 @@ Backend:
 ```bash
 cd backend
 cp .env.example .env   # fill in DB_PASSWORD and Google OAuth credentials
+pip install -r requirements-instaloader.txt  # optional: enables Instagram avatar caching
 ./mvnw spring-boot:run
 ```
 
