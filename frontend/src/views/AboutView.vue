@@ -226,7 +226,7 @@ const activeCategory = computed(
 
 .panel-hero {
   padding: clamp(1.5rem, 4vw, 2.8rem);
-  color: #fefce8;
+  color: #f8fafc;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
