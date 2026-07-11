@@ -52,6 +52,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/clubs").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/clubs/calendar").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/clubs/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/avatars/instagram/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/summary").permitAll()
                 // Everything else under /api requires authentication
                 .requestMatchers("/api/**").authenticated()
@@ -122,6 +123,7 @@ public class SecurityConfig {
  *   GET  /api/clubs                 — club listing
  *   GET  /api/clubs/calendar        — weekly schedule
  *   GET  /api/clubs/{id}            — club detail (permissions applied optionally)
+ *   GET  /api/avatars/instagram/{handle} — cached public club avatar image
  *   GET  /api/summary               — aggregated stats for aggregator
  *
  * All other /api/** endpoints require authentication.

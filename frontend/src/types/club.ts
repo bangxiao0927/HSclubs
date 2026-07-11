@@ -28,6 +28,7 @@ export interface ClubMember {
   email: string
   avatarUrl: string | null
   roleName: string | null
+  joinedAt?: string | null
 }
 
 export interface ClubMembershipRequest {

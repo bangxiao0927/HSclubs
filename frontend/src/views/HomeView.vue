@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import SkeletonLoader from '../components/SkeletonLoader.vue'
-import { fetchClubs } from '../services/clubService'
+import { fetchClubCount, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { clubImage } from '../utils/clubImages'
 import { sampleClubs, schoolTemplate } from '../config/schoolTemplate'
@@ -16,6 +16,7 @@ const schoolDisplayName = computed(() => schoolTemplate.schoolName)
 const schoolShortName = computed(() => schoolTemplate.shortName)
 const usingPreviewData = ref(false)
 const currentHeroImageIndex = ref(0)
+const totalClubCount = ref(0)
 let heroInterval: number | undefined
 
 const page = ref(0)
@@ -27,12 +28,17 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    const newClubs = await fetchClubs({ page: 0, size: pageSize })
+    const [newClubs, clubCount] = await Promise.all([
+      fetchClubs({ force: true, page: 0, size: pageSize }),
+      fetchClubCount(),
+    ])
     clubs.value = newClubs
+    totalClubCount.value = clubCount
     hasMore.value = newClubs.length >= pageSize
     usingPreviewData.value = false
   } catch {
     clubs.value = sampleClubs
+    totalClubCount.value = sampleClubs.length
     hasMore.value = false
     usingPreviewData.value = true
   } finally {
@@ -73,7 +79,7 @@ const topClubs = computed(() =>
 const heroImages = computed(() => {
   const clubImages = topClubs.value
     .map((c) => clubImage(c))
-    .filter((url) => url && !url.includes('dicebear'))
+    .filter((url) => url && !url.startsWith('data:'))
   return clubImages.length >= 2
     ? clubImages.slice(0, 4)
     : ['/hsclubs1.jpg', '/hsclubs2.png', '/hsclubs3.png']
@@ -109,7 +115,7 @@ const showHeroImage = (index: number) => {
         <div class="hero-stats-inline">
           <div class="stat-card">
             <span class="stat-label">Active clubs</span>
-            <p class="stat-value">{{ clubs.length }}</p>
+            <p class="stat-value">{{ totalClubCount }}</p>
           </div>
           <div class="stat-card">
             <span class="stat-label">Template status</span>

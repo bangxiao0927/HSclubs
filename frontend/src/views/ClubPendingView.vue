@@ -10,6 +10,7 @@ import {
 import type { Club, ClubMembershipRequest } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
+import { userAvatar } from '../utils/avatarImages'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
@@ -209,7 +210,7 @@ watch(
             <li v-for="request in pendingRequests" :key="request.id" class="member-entry pending-entry">
               <div class="member-avatar">
                 <img
-                  :src="request.avatarUrl || 'https://api.dicebear.com/7.x/thumbs/svg?seed=' + encodeURIComponent(request.displayName || 'Member')"
+                  :src="userAvatar(request.avatarUrl, request.displayName || 'Member')"
                   :alt="request.displayName || 'Pending member'"
                 />
               </div>

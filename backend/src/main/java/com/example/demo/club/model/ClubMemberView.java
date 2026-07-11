@@ -1,5 +1,7 @@
 package com.example.demo.club.model;
 
+import java.time.LocalDateTime;
+
 /**
  * Projection used for exposing club members to management tooling.
  */
@@ -10,6 +12,7 @@ public class ClubMemberView {
     private String email;
     private String avatarUrl;
     private String roleName;
+    private LocalDateTime joinedAt;
 
     public Long getOauthUserId() {
         return oauthUserId;
@@ -49,5 +52,13 @@ public class ClubMemberView {
 
     public void setRoleName(String roleName) {
         this.roleName = roleName;
+    }
+
+    public LocalDateTime getJoinedAt() {
+        return joinedAt;
+    }
+
+    public void setJoinedAt(LocalDateTime joinedAt) {
+        this.joinedAt = joinedAt;
     }
 }

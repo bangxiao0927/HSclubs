@@ -8,6 +8,7 @@ import {
   logout as apiLogout,
 } from '../services/authService'
 import { buildApiUrl } from '../services/httpClient'
+import { localAvatar, userAvatar } from '../utils/avatarImages'
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<AuthUser | null>(null)
@@ -38,15 +39,16 @@ export const useAuthStore = defineStore('auth', () => {
 
   const buildFallbackAvatar = (user: AuthUser) => {
     const seed = user.displayName?.trim() || user.email || user.id || 'Member'
-    return `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(seed)}`
+    return localAvatar(seed)
   }
 
   const normalizeUser = (user: AuthUser | null): AuthUser | null => {
     if (!user) return null
     const trimmed = user.avatarUrl?.trim()
+    const seed = user.displayName?.trim() || user.email || user.id || 'Member'
     return {
       ...user,
-      avatarUrl: trimmed ? buildApiUrl(trimmed) : buildFallbackAvatar(user),
+      avatarUrl: trimmed ? userAvatar(trimmed, seed) : buildFallbackAvatar(user),
       // Support both isOwner (backward compat) and isPlatformOwner
       isOwner: user.isOwner ?? user.isPlatformOwner ?? false,
     }
