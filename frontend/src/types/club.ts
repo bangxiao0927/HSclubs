@@ -20,6 +20,8 @@ export interface Club {
   viewerIsMember?: boolean
   canManage?: boolean
   viewerHasPendingRequest?: boolean
+  createdAt?: string | null
+  updatedAt?: string | null
 }
 
 export interface ClubMember {

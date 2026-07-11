@@ -67,8 +67,8 @@ class InstagramAvatarCacheServiceTest {
 
         assertThat(avatar.mediaType().toString()).isEqualTo("image/svg+xml");
         assertThat(new String(avatar.bytes())).contains("MV");
-        assertThat(avatar.maxAge()).isEqualTo(10);
-        assertThat(avatar.maxAgeUnit()).isEqualTo(TimeUnit.MINUTES);
+        assertThat(avatar.maxAge()).isEqualTo(15);
+        assertThat(avatar.maxAgeUnit()).isEqualTo(TimeUnit.SECONDS);
     }
 
     @Test
@@ -89,7 +89,7 @@ class InstagramAvatarCacheServiceTest {
     @Test
     void resolveAvatarCoalescesConcurrentCacheMisses() throws Exception {
         byte[] bytes = new byte[] { 9, 8, 7 };
-        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/avatar.png", exchange -> {
             exchange.getResponseHeaders().add("Content-Type", "image/png");
             exchange.sendResponseHeaders(200, bytes.length);
@@ -97,14 +97,15 @@ class InstagramAvatarCacheServiceTest {
             exchange.close();
         });
         server.start();
+        int port = server.getAddress().getPort();
 
         Path invocations = tempDir.resolve("coalesced-invocations.txt");
         Files.writeString(invocations, "", StandardCharsets.UTF_8);
         Path script = tempDir.resolve("coalesced-instaloader.sh");
         Files.writeString(
             script,
-            "#!/bin/sh\nprintf 'x\\n' >> \"%s\"\nsleep 1\nprintf 'http://127.0.0.1:%d/avatar.png\\n'\n"
-                .formatted(invocations, server.getAddress().getPort()),
+            "#!/bin/sh\necho x >> \"%s\"\nsleep 1\necho \"http://127.0.0.1:%d/avatar.png\"\n"
+                .formatted(invocations, port),
             StandardCharsets.UTF_8
         );
         assertThat(script.toFile().setExecutable(true)).isTrue();
