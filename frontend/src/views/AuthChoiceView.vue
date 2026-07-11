@@ -22,13 +22,18 @@ const routeError = computed(() => {
   return typeof route.query.error === 'string' ? 'We could not complete your sign in. Please try again.' : ''
 })
 
+const redirectTarget = computed(() => {
+  const redirect = route.query.redirect
+  return typeof redirect === 'string' ? redirect : null
+})
+
 const handleProviderLogin = (providerId: string) => {
   if (!acceptedTerms.value) {
     termsError.value = 'Please accept the Terms of Use before continuing.'
     return
   }
   termsError.value = ''
-  authStore.beginLogin(providerId)
+  authStore.beginLogin(providerId, redirectTarget.value)
 }
 </script>
 

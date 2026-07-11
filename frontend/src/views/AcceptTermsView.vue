@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { buildApiUrl } from '../services/httpClient'
+import { normalizeAuthRedirect } from '../utils/authRedirect'
 
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const agreed = ref(false)
 const loading = ref(false)
 const error = ref('')
+
+const resolveRedirectTarget = () => normalizeAuthRedirect(route.query.redirect) ?? '/'
 
 const handleAccept = async () => {
   if (!agreed.value) return
@@ -23,7 +27,7 @@ const handleAccept = async () => {
       throw new Error('Failed to record acceptance')
     }
     await authStore.refreshUser()
-    router.push('/')
+    router.replace(resolveRedirectTarget())
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Something went wrong'
   } finally {

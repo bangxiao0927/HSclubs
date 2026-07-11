@@ -115,6 +115,15 @@ watch(isAuthenticated, (authenticated, previous) => {
   if (authenticated && !previous) {
     void authStore.refreshUser()
   }
+  if (!authenticated && previous && route.matched.some((record) => record.meta.requiresAuth)) {
+    void router.replace({
+      name: 'auth-choice',
+      query: {
+        intent: 'login',
+        redirect: route.fullPath,
+      },
+    })
+  }
 })
 
 watch(

@@ -9,6 +9,7 @@ import {
 } from '../services/authService'
 import { buildApiUrl } from '../services/httpClient'
 import { localAvatar, userAvatar } from '../utils/avatarImages'
+import { savePendingAuthRedirect } from '../utils/authRedirect'
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<AuthUser | null>(null)
@@ -74,13 +75,14 @@ export const useAuthStore = defineStore('auth', () => {
     await Promise.allSettled([ensureProvidersLoaded(), refreshUser()])
   }
 
-  const beginLogin = (providerId: string) => {
+  const beginLogin = (providerId: string, redirectTarget?: string | null) => {
     const sanitizedId = providerId?.trim()
     if (!sanitizedId) {
       providersError.value =
         'No OAuth provider was selected. Please refresh and try again.'
       return
     }
+    savePendingAuthRedirect(redirectTarget)
     const provider = providers.value.find((item) => item.id === sanitizedId)
     const authorizationPath =
       provider?.authorizationUrl ?? `/oauth2/authorization/${sanitizedId}`

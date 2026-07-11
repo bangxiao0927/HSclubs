@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import { useAuthStore } from '../stores/auth'
+import { normalizeAuthRedirect } from '../utils/authRedirect'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -34,26 +35,31 @@ const router = createRouter({
       path: '/clubs/:id/admin',
       name: 'club-admin',
       component: () => import('../views/ClubAdminView.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/clubs/:id/admin/pending',
       name: 'club-admin-pending',
       component: () => import('../views/ClubPendingView.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/admin',
       name: 'owner-clubs',
       component: () => import('../views/OwnerAdminView.vue'),
+      meta: { requiresAuth: true, requiresOwner: true },
     },
     {
       path: '/profile',
       name: 'profile',
       component: () => import('../views/ProfileView.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/settings',
       name: 'settings',
       component: () => import('../views/SettingsView.vue'),
+      meta: { requiresAuth: true },
     },
 
     {
@@ -67,6 +73,7 @@ const router = createRouter({
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('../views/OnboardingView.vue'),
+      meta: { requiresAuth: true },
     },
 
     // ---- Legal ----
@@ -84,6 +91,7 @@ const router = createRouter({
       path: '/accept-terms',
       name: 'accept-terms',
       component: () => import('../views/AcceptTermsView.vue'),
+      meta: { requiresAuth: true },
     },
 
     // ---- Auth routes ----
@@ -129,8 +137,17 @@ router.beforeEach(async (to) => {
     await authStore.refreshUser()
   }
 
-  if (to.name === 'accept-terms' && !authStore.isAuthenticated) {
-    return { name: 'auth-choice', query: { intent: 'login' } }
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
+  const requiresOwner = to.matched.some((record) => record.meta.requiresOwner)
+
+  if (requiresAuth && !authStore.isAuthenticated) {
+    return {
+      name: 'auth-choice',
+      query: {
+        intent: 'login',
+        redirect: to.fullPath,
+      },
+    }
   }
 
   if (
@@ -138,10 +155,14 @@ router.beforeEach(async (to) => {
     authStore.currentUser?.acceptedTerms === false &&
     !termsBypassRouteNames.has(String(to.name))
   ) {
-    return { name: 'accept-terms' }
+    return { name: 'accept-terms', query: { redirect: to.fullPath } }
   }
 
   if (to.name === 'accept-terms' && authStore.currentUser?.acceptedTerms === true) {
+    return normalizeAuthRedirect(to.query.redirect) ?? { name: 'home' }
+  }
+
+  if (requiresOwner && !authStore.currentUser?.isOwner) {
     return { name: 'home' }
   }
 
