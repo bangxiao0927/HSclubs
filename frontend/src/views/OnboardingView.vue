@@ -23,7 +23,12 @@ const yearOptions = computed(() => {
 })
 
 const canSave = computed(() => graduationYear.value !== null && graduationYear.value > 0)
-const resolveRedirectTarget = () => normalizeAuthRedirect(route.query.redirect) ?? '/profile'
+
+const resolveRedirectTarget = () => {
+  const redirect = normalizeAuthRedirect(route.query.redirect)
+  const redirectPath = redirect?.split(/[?#]/, 1)[0]
+  return redirect && redirectPath !== '/onboarding' ? redirect : '/profile'
+}
 
 const handleSave = async () => {
   if (!canSave.value) return
