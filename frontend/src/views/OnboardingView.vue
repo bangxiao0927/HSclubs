@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { updateGraduationYear } from '../services/userService'
+import { normalizeAuthRedirect } from '../utils/authRedirect'
 
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -21,6 +23,7 @@ const yearOptions = computed(() => {
 })
 
 const canSave = computed(() => graduationYear.value !== null && graduationYear.value > 0)
+const resolveRedirectTarget = () => normalizeAuthRedirect(route.query.redirect) ?? '/profile'
 
 const handleSave = async () => {
   if (!canSave.value) return
@@ -29,7 +32,7 @@ const handleSave = async () => {
   try {
     await updateGraduationYear(graduationYear.value!)
     await authStore.refreshUser()
-    router.replace({ path: '/profile' })
+    router.replace(resolveRedirectTarget())
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to save profile'
   } finally {
@@ -40,12 +43,12 @@ const handleSave = async () => {
 // Redirect already-onboarded users away from this page
 onMounted(() => {
   if (authStore.currentUser?.graduationYear != null) {
-    router.replace({ path: '/profile' })
+    router.replace(resolveRedirectTarget())
   }
 })
 
 const handleSkip = () => {
-  router.replace({ path: '/profile' })
+  router.replace(resolveRedirectTarget())
 }
 </script>
 
