@@ -45,14 +45,18 @@ const instagramHandle = (url?: string | null) => {
   }
 }
 
-const cachedInstagramAvatar = (url?: string | null) => {
-  const handle = instagramHandle(url)
-  return handle ? buildApiUrl(`/api/avatars/instagram/${encodeURIComponent(handle)}`) : null
+const cachedInstagramAvatar = (club: Club) => {
+  const handle = instagramHandle(club.instagramUrl)
+  if (!handle) {
+    return null
+  }
+  const version = encodeURIComponent(`${club.id}:${club.updatedAt ?? club.createdAt ?? club.instagramUrl ?? handle}`)
+  return buildApiUrl(`/api/avatars/instagram/${encodeURIComponent(handle)}?v=${version}`)
 }
 
 export const clubImage = (club: Club): string => {
   if (club.imageUrl) {
     return buildApiUrl(club.imageUrl)
   }
-  return cachedInstagramAvatar(club.instagramUrl) ?? localAvatar(club.name)
+  return cachedInstagramAvatar(club) ?? localAvatar(club.name)
 }

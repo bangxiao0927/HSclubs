@@ -433,7 +433,7 @@ public class InstagramAvatarCacheService {
         }
 
         private static ResolvedAvatar fallback(byte[] bytes) {
-            return new ResolvedAvatar(bytes, SVG_MEDIA_TYPE, 10, TimeUnit.MINUTES);
+            return new ResolvedAvatar(bytes, SVG_MEDIA_TYPE, 15, TimeUnit.SECONDS);
         }
     }
 }
