@@ -136,6 +136,47 @@ class InstagramAvatarCacheServiceTest {
     }
 
     @Test
+    void resolveAvatarFallsBackToInstagramWebProfileApiWhenInstaloaderFails() throws Exception {
+        byte[] bytes = new byte[] { (byte) 0xff, (byte) 0xd8, (byte) 0xff, 1, 2, 3 };
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/profile", exchange -> {
+            String body = """
+                {"data":{"user":{"profile_pic_url_hd":"http://127.0.0.1:%d/avatar.jpg"}}}
+                """.formatted(server.getAddress().getPort());
+            byte[] response = body.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.createContext("/avatar.jpg", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "image/jpg");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        Path script = tempDir.resolve("failing-instaloader.sh");
+        Files.writeString(script, "#!/bin/sh\nexit 1\n", StandardCharsets.UTF_8);
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = service(
+            true,
+            script.toString(),
+            "http://127.0.0.1:%d/profile?username=%%s".formatted(server.getAddress().getPort()),
+            4000
+        );
+
+        try {
+            InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
+
+            assertThat(avatar.bytes()).isEqualTo(bytes);
+            assertThat(avatar.mediaType()).isEqualTo(MediaType.IMAGE_JPEG);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void refreshClubInstagramAvatarsCapsFailedAttempts() throws IOException {
         Path invocations = tempDir.resolve("failed-prewarm-invocations.txt");
         Files.writeString(invocations, "", StandardCharsets.UTF_8);
@@ -153,6 +194,9 @@ class InstagramAvatarCacheServiceTest {
             script.toString(),
             "",
             "",
+            "",
+            "",
+            "http://127.0.0.1/unused?username=%s",
             1000,
             TimeUnit.DAYS.toMillis(30),
             2
@@ -163,11 +207,54 @@ class InstagramAvatarCacheServiceTest {
         assertThat(Files.readAllLines(invocations, StandardCharsets.UTF_8)).containsExactly("alpha", "beta");
     }
 
+    @Test
+    void resolveAvatarPassesBrowserCookieConfigurationToInstaloader() throws Exception {
+        Path argsFile = tempDir.resolve("instaloader-args.txt");
+        Path script = tempDir.resolve("capturing-instaloader.sh");
+        Files.writeString(
+            script,
+            "#!/bin/sh\necho \"$6\" > \"%s\"\necho \"$7\" >> \"%s\"\nexit 1\n".formatted(argsFile, argsFile),
+            StandardCharsets.UTF_8
+        );
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = new InstagramAvatarCacheService(
+            null,
+            tempDir.toString(),
+            true,
+            script.toString(),
+            "",
+            "",
+            "firefox",
+            "/tmp/cookies.sqlite",
+            "http://127.0.0.1/unused?username=%s",
+            1000,
+            TimeUnit.DAYS.toMillis(30),
+            10
+        );
+
+        InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
+
+        assertThat(avatar.mediaType().toString()).isEqualTo("image/svg+xml");
+        assertThat(Files.readAllLines(argsFile, StandardCharsets.UTF_8)).containsExactly(
+            "firefox",
+            "/tmp/cookies.sqlite"
+        );
+    }
+
     private InstagramAvatarCacheService service(boolean enabled) {
-        return service(enabled, "python3", 1000);
+        return service(enabled, "python3", "http://127.0.0.1/unused?username=%s", 1000);
     }
 
     private InstagramAvatarCacheService service(boolean enabled, String pythonCommand, long fetchTimeoutMillis) {
+        return service(enabled, pythonCommand, "http://127.0.0.1/unused?username=%s", fetchTimeoutMillis);
+    }
+
+    private InstagramAvatarCacheService service(
+        boolean enabled,
+        String pythonCommand,
+        String profileApiUrlTemplate,
+        long fetchTimeoutMillis
+    ) {
         return new InstagramAvatarCacheService(
             null,
             tempDir.toString(),
@@ -175,6 +262,9 @@ class InstagramAvatarCacheServiceTest {
             pythonCommand,
             "",
             "",
+            "",
+            "",
+            profileApiUrlTemplate,
             fetchTimeoutMillis,
             TimeUnit.DAYS.toMillis(30),
             10

@@ -39,5 +39,6 @@ frontend/node_modules
 frontend/dist/
 frontend/.eslintcache
 .env
+backend/uploads/
 
 CODET.md
