@@ -153,6 +153,8 @@ class InstagramAvatarCacheServiceTest {
             script.toString(),
             "",
             "",
+            "",
+            "",
             1000,
             TimeUnit.DAYS.toMillis(30),
             2
@@ -161,6 +163,39 @@ class InstagramAvatarCacheServiceTest {
         service.refreshClubInstagramAvatars();
 
         assertThat(Files.readAllLines(invocations, StandardCharsets.UTF_8)).containsExactly("alpha", "beta");
+    }
+
+    @Test
+    void resolveAvatarPassesBrowserCookieConfigurationToInstaloader() throws Exception {
+        Path argsFile = tempDir.resolve("instaloader-args.txt");
+        Path script = tempDir.resolve("capturing-instaloader.sh");
+        Files.writeString(
+            script,
+            "#!/bin/sh\necho \"$6\" > \"%s\"\necho \"$7\" >> \"%s\"\nexit 1\n".formatted(argsFile, argsFile),
+            StandardCharsets.UTF_8
+        );
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = new InstagramAvatarCacheService(
+            null,
+            tempDir.toString(),
+            true,
+            script.toString(),
+            "",
+            "",
+            "firefox",
+            "/tmp/cookies.sqlite",
+            1000,
+            TimeUnit.DAYS.toMillis(30),
+            10
+        );
+
+        InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
+
+        assertThat(avatar.mediaType().toString()).isEqualTo("image/svg+xml");
+        assertThat(Files.readAllLines(argsFile, StandardCharsets.UTF_8)).containsExactly(
+            "firefox",
+            "/tmp/cookies.sqlite"
+        );
     }
 
     private InstagramAvatarCacheService service(boolean enabled) {
@@ -173,6 +208,8 @@ class InstagramAvatarCacheServiceTest {
             tempDir.toString(),
             enabled,
             pythonCommand,
+            "",
+            "",
             "",
             "",
             fetchTimeoutMillis,

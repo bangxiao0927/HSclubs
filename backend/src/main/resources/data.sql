@@ -35,3 +35,11 @@ INSERT INTO clubs (id, name, alias_name, description, category, meeting_schedule
   (18, 'LatinX Club', 'LatinX Unidos', 'Promote Latin American culture and heritage. Host cultural celebrations, dance workshops, and community events.', 'Culture & Identity', 'Tuesdays at lunch', 'Room 118', 'latinx@mvhs.edu', 'Sra. Garcia', 27, '["Dia de los Muertos Celebration","Latin Dance Night"]'),
   (19, 'Anime & Manga Club', 'Otaku Circle', 'Watch and discuss anime, share manga recommendations, and explore Japanese pop culture. Host cosplay events.', 'Culture & Identity', 'Fridays at lunch', 'Room 230', 'anime@mvhs.edu', 'Mr. Tanaka', 35, '["Cosplay Contest","Anime Movie Marathon"]'),
   (20, 'Math Club', 'Mathletes', 'Explore advanced mathematics beyond the curriculum. Prepare for AMC, AIME, and other math competitions.', 'STEM & Innovation', 'Mondays after school', 'Room 405', 'mathclub@mvhs.edu', 'Dr. Zhang', 19, '["AMC 12 Qualifiers","Math Tutoring Program"]');
+
+INSERT INTO club_social_medias (club_id, social_type, link_name, link_url) VALUES
+  (1, 'instagram', 'Instagram', 'https://www.instagram.com/nasa/'),
+  (7, 'instagram', 'Instagram', 'https://www.instagram.com/github/'),
+  (9, 'instagram', 'Instagram', 'https://www.instagram.com/keyclubint/'),
+  (10, 'instagram', 'Instagram', 'https://www.instagram.com/instagram/'),
+  (11, 'instagram', 'Instagram', 'https://www.instagram.com/nasa/'),
+  (19, 'instagram', 'Instagram', 'https://www.instagram.com/crunchyroll/');

@@ -43,11 +43,14 @@ public class InstagramAvatarCacheService {
     private static final MediaType WEBP_MEDIA_TYPE = MediaType.valueOf("image/webp");
     private static final String INSTALOADER_SCRIPT = """
         import sys
+        from pathlib import Path
         import instaloader
 
         handle = sys.argv[1]
         session_user = sys.argv[2].strip() if len(sys.argv) > 2 else ""
         session_file = sys.argv[3].strip() if len(sys.argv) > 3 else ""
+        cookie_browser = sys.argv[4].strip().lower() if len(sys.argv) > 4 else ""
+        cookie_file = sys.argv[5].strip() if len(sys.argv) > 5 else ""
 
         loader = instaloader.Instaloader(
             download_pictures=False,
@@ -63,6 +66,63 @@ public class InstagramAvatarCacheService {
         )
         if session_user:
             loader.load_session_from_file(session_user, session_file or None)
+        elif cookie_browser:
+            def load_firefox_cookies():
+                import sqlite3
+                candidates = []
+                if cookie_file:
+                    candidates.append(Path(cookie_file).expanduser())
+                else:
+                    home = Path.home()
+                    candidates.extend(home.glob("Library/Application Support/Firefox/Profiles/*/cookies.sqlite"))
+                    candidates.extend(home.glob(".mozilla/firefox/*/cookies.sqlite"))
+                    candidates.extend(home.glob("AppData/Roaming/Mozilla/Firefox/Profiles/*/cookies.sqlite"))
+                cookies = {}
+                for candidate in sorted(set(candidates), key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True):
+                    if not candidate.is_file():
+                        continue
+                    connection = sqlite3.connect(candidate.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
+                    try:
+                        rows = connection.execute(
+                            "SELECT host, name, value FROM moz_cookies WHERE host LIKE ?",
+                            ("%instagram%",),
+                        ).fetchall()
+                    finally:
+                        connection.close()
+                    for _, name, value in rows:
+                        cookies[name] = value
+                    if cookies:
+                        break
+                return cookies
+
+            if cookie_browser == "firefox":
+                cookies = load_firefox_cookies()
+            else:
+                import browser_cookie3
+                supported_browsers = {
+                    "brave": browser_cookie3.brave,
+                    "chrome": browser_cookie3.chrome,
+                    "chromium": browser_cookie3.chromium,
+                    "edge": browser_cookie3.edge,
+                    "librewolf": browser_cookie3.librewolf,
+                    "opera": browser_cookie3.opera,
+                    "opera_gx": browser_cookie3.opera_gx,
+                    "safari": browser_cookie3.safari,
+                    "vivaldi": browser_cookie3.vivaldi,
+                }
+                if cookie_browser not in supported_browsers:
+                    raise RuntimeError("Unsupported browser for Instagram cookies: " + cookie_browser)
+                cookies = {}
+                for cookie in supported_browsers[cookie_browser](cookie_file=cookie_file or None):
+                    if "instagram" in cookie.domain:
+                        cookies[cookie.name] = cookie.value
+            if not cookies:
+                raise RuntimeError("No Instagram cookies found in " + cookie_browser)
+            loader.context.update_cookies(cookies)
+            username = loader.test_login()
+            if not username:
+                raise RuntimeError("Instagram cookies are present but not logged in")
+            loader.context.username = username
         profile = instaloader.Profile.from_username(loader.context, handle)
         url = profile.profile_pic_url or profile.get_profile_pic_url()
         print(url)
@@ -74,6 +134,8 @@ public class InstagramAvatarCacheService {
     private final String pythonCommand;
     private final String sessionUser;
     private final String sessionFile;
+    private final String cookieBrowser;
+    private final String cookieFile;
     private final boolean enabled;
     private final long fetchTimeoutMillis;
     private final long cacheTtlMillis;
@@ -87,6 +149,8 @@ public class InstagramAvatarCacheService {
         @Value("${app.avatar.instagram.python-command:python3}") String pythonCommand,
         @Value("${app.avatar.instagram.session-user:}") String sessionUser,
         @Value("${app.avatar.instagram.session-file:}") String sessionFile,
+        @Value("${app.avatar.instagram.cookie-browser:}") String cookieBrowser,
+        @Value("${app.avatar.instagram.cookie-file:}") String cookieFile,
         @Value("${app.avatar.instagram.fetch-timeout-ms:10000}") long fetchTimeoutMillis,
         @Value("${app.avatar.instagram.cache-ttl-ms:2592000000}") long cacheTtlMillis,
         @Value("${app.avatar.instagram.max-refresh-per-run:80}") int maxRefreshPerRun
@@ -102,6 +166,8 @@ public class InstagramAvatarCacheService {
         this.pythonCommand = pythonCommand;
         this.sessionUser = sessionUser == null ? "" : sessionUser.trim();
         this.sessionFile = sessionFile == null ? "" : sessionFile.trim();
+        this.cookieBrowser = cookieBrowser == null ? "" : cookieBrowser.trim();
+        this.cookieFile = cookieFile == null ? "" : cookieFile.trim();
         this.fetchTimeoutMillis = Math.max(1000, fetchTimeoutMillis);
         this.cacheTtlMillis = Math.max(TimeUnit.HOURS.toMillis(1), cacheTtlMillis);
         this.maxRefreshPerRun = Math.max(1, maxRefreshPerRun);
@@ -312,7 +378,9 @@ public class InstagramAvatarCacheService {
             INSTALOADER_SCRIPT,
             safeHandle,
             sessionUser,
-            sessionFile
+            sessionFile,
+            cookieBrowser,
+            cookieFile
         );
         processBuilder.redirectErrorStream(true);
         processBuilder.environment().put("PYTHONUNBUFFERED", "1");

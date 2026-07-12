@@ -64,7 +64,7 @@ pip install -r requirements-instaloader.txt  # optional: enables Instagram avata
 ./mvnw spring-boot:run
 ```
 
-Instagram may reject anonymous Instaloader requests with 403 responses. For reliable club avatar refreshes, create an Instaloader session with `instaloader --login your_username` and set `APP_INSTAGRAM_AVATAR_SESSION_USER` / `APP_INSTAGRAM_AVATAR_SESSION_FILE` in `backend/.env`.
+Instagram may reject anonymous Instaloader requests with 403 responses. For reliable club avatar refreshes, set `APP_INSTAGRAM_AVATAR_COOKIE_BROWSER=firefox` after logging into Instagram in Firefox, or create an Instaloader session with `instaloader --login your_username` and set `APP_INSTAGRAM_AVATAR_SESSION_USER` / `APP_INSTAGRAM_AVATAR_SESSION_FILE` in `backend/.env`. Other browsers can be used by installing `browser-cookie3` for the backend Python environment.
 
 Frontend:
 
