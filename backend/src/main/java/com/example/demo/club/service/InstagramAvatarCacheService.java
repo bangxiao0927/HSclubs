@@ -1,5 +1,7 @@
 package com.example.demo.club.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.demo.club.mapper.ClubMapper;
 import com.example.demo.club.model.Club;
 import org.slf4j.Logger;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -41,6 +44,11 @@ public class InstagramAvatarCacheService {
     private static final List<String> IMAGE_EXTENSIONS = List.of("png", "jpg", "jpeg", "webp", "gif");
     private static final MediaType SVG_MEDIA_TYPE = MediaType.valueOf("image/svg+xml");
     private static final MediaType WEBP_MEDIA_TYPE = MediaType.valueOf("image/webp");
+    private static final String INSTAGRAM_WEB_PROFILE_API =
+        "https://www.instagram.com/api/v1/users/web_profile_info/?username=%s";
+    private static final String BROWSER_USER_AGENT =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     private static final String INSTALOADER_SCRIPT = """
         import sys
         import instaloader
@@ -74,10 +82,12 @@ public class InstagramAvatarCacheService {
     private final String pythonCommand;
     private final String sessionUser;
     private final String sessionFile;
+    private final String profileApiUrlTemplate;
     private final boolean enabled;
     private final long fetchTimeoutMillis;
     private final long cacheTtlMillis;
     private final int maxRefreshPerRun;
+    private final ObjectMapper objectMapper;
     private final ConcurrentMap<String, CompletableFuture<RefreshResult>> inFlightRefreshes;
 
     public InstagramAvatarCacheService(
@@ -87,6 +97,7 @@ public class InstagramAvatarCacheService {
         @Value("${app.avatar.instagram.python-command:python3}") String pythonCommand,
         @Value("${app.avatar.instagram.session-user:}") String sessionUser,
         @Value("${app.avatar.instagram.session-file:}") String sessionFile,
+        @Value("${app.avatar.instagram.profile-api-url-template:" + INSTAGRAM_WEB_PROFILE_API + "}") String profileApiUrlTemplate,
         @Value("${app.avatar.instagram.fetch-timeout-ms:10000}") long fetchTimeoutMillis,
         @Value("${app.avatar.instagram.cache-ttl-ms:2592000000}") long cacheTtlMillis,
         @Value("${app.avatar.instagram.max-refresh-per-run:80}") int maxRefreshPerRun
@@ -102,9 +113,14 @@ public class InstagramAvatarCacheService {
         this.pythonCommand = pythonCommand;
         this.sessionUser = sessionUser == null ? "" : sessionUser.trim();
         this.sessionFile = sessionFile == null ? "" : sessionFile.trim();
+        this.profileApiUrlTemplate =
+            profileApiUrlTemplate == null || profileApiUrlTemplate.isBlank()
+                ? INSTAGRAM_WEB_PROFILE_API
+                : profileApiUrlTemplate.trim();
         this.fetchTimeoutMillis = Math.max(1000, fetchTimeoutMillis);
         this.cacheTtlMillis = Math.max(TimeUnit.HOURS.toMillis(1), cacheTtlMillis);
         this.maxRefreshPerRun = Math.max(1, maxRefreshPerRun);
+        this.objectMapper = new ObjectMapper();
         this.inFlightRefreshes = new ConcurrentHashMap<>();
         try {
             Files.createDirectories(this.instagramCacheDir);
@@ -306,6 +322,19 @@ public class InstagramAvatarCacheService {
     }
 
     private String fetchProfilePicUrl(String safeHandle) throws IOException, InterruptedException {
+        try {
+            return fetchProfilePicUrlWithInstaloader(safeHandle);
+        } catch (IOException instaloaderException) {
+            LOGGER.debug("Instaloader avatar lookup failed for {}; trying Instagram web profile API", safeHandle, instaloaderException);
+            Optional<String> webProfileUrl = fetchProfilePicUrlFromWebProfileApi(safeHandle);
+            if (webProfileUrl.isPresent()) {
+                return webProfileUrl.get();
+            }
+            throw instaloaderException;
+        }
+    }
+
+    private String fetchProfilePicUrlWithInstaloader(String safeHandle) throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder(
             pythonCommand,
             "-c",
@@ -331,6 +360,37 @@ public class InstagramAvatarCacheService {
             .orElseThrow(() -> new IOException("Instaloader did not return an avatar URL for " + safeHandle));
     }
 
+    private Optional<String> fetchProfilePicUrlFromWebProfileApi(String safeHandle) throws IOException, InterruptedException {
+        String encodedHandle = URLEncoder.encode(safeHandle, StandardCharsets.UTF_8);
+        URI uri = URI.create(profileApiUrlTemplate.formatted(encodedHandle));
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(uri)
+            .timeout(Duration.ofMillis(fetchTimeoutMillis))
+            .header("User-Agent", BROWSER_USER_AGENT)
+            .header("Accept", "application/json,text/plain,*/*")
+            .header("X-IG-App-ID", "936619743392459")
+            .header("Referer", "https://www.instagram.com/" + safeHandle + "/")
+            .GET()
+            .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            LOGGER.debug("Instagram web profile API returned {} for {}", response.statusCode(), safeHandle);
+            return Optional.empty();
+        }
+        JsonNode user = objectMapper.readTree(response.body()).path("data").path("user");
+        return firstHttpUrl(user, "profile_pic_url_hd", "profile_pic_url");
+    }
+
+    private Optional<String> firstHttpUrl(JsonNode node, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            String value = node.path(fieldName).asText("").trim();
+            if (value.startsWith("https://") || value.startsWith("http://")) {
+                return Optional.of(value);
+            }
+        }
+        return Optional.empty();
+    }
+
     private Optional<String> lastHttpUrl(String output) {
         String[] lines = output.split("\\R");
         for (int i = lines.length - 1; i >= 0; i--) {
@@ -350,7 +410,8 @@ public class InstagramAvatarCacheService {
         HttpRequest request = HttpRequest.newBuilder()
             .uri(uri)
             .timeout(Duration.ofMillis(fetchTimeoutMillis))
-            .header("User-Agent", "HSclubs Avatar Cache")
+            .header("User-Agent", BROWSER_USER_AGENT)
+            .header("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
             .GET()
             .build();
         HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
@@ -361,13 +422,64 @@ public class InstagramAvatarCacheService {
         if (bytes.length == 0 || bytes.length > MAX_AVATAR_BYTES) {
             throw new IOException("Avatar response size is invalid");
         }
-        MediaType mediaType = response.headers()
-            .firstValue("content-type")
-            .map((value) -> value.split(";")[0].trim().toLowerCase(Locale.ROOT))
-            .map(MediaType::valueOf)
-            .filter((value) -> value.getType().equals("image"))
-            .orElse(MediaType.IMAGE_JPEG);
+        MediaType mediaType = mediaTypeFromResponse(response, bytes);
         return new CachedAvatar(bytes, mediaType);
+    }
+
+    private MediaType mediaTypeFromResponse(HttpResponse<byte[]> response, byte[] bytes) {
+        Optional<MediaType> headerMediaType = response.headers()
+            .firstValue("content-type")
+            .flatMap(this::safeImageMediaType);
+        return headerMediaType.or(() -> mediaTypeFromMagicBytes(bytes)).orElse(MediaType.IMAGE_JPEG);
+    }
+
+    private Optional<MediaType> safeImageMediaType(String value) {
+        try {
+            MediaType mediaType = MediaType.valueOf(value.split(";")[0].trim().toLowerCase(Locale.ROOT));
+            if (!mediaType.getType().equals("image")) {
+                return Optional.empty();
+            }
+            if (Set.of("jpg", "jpeg", "pjpeg").contains(mediaType.getSubtype())) {
+                return Optional.of(MediaType.IMAGE_JPEG);
+            }
+            return Optional.of(mediaType);
+        } catch (IllegalArgumentException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<MediaType> mediaTypeFromMagicBytes(byte[] bytes) {
+        if (bytes.length >= 12
+            && bytes[0] == 'R'
+            && bytes[1] == 'I'
+            && bytes[2] == 'F'
+            && bytes[3] == 'F'
+            && bytes[8] == 'W'
+            && bytes[9] == 'E'
+            && bytes[10] == 'B'
+            && bytes[11] == 'P') {
+            return Optional.of(WEBP_MEDIA_TYPE);
+        }
+        if (bytes.length >= 4
+            && Byte.toUnsignedInt(bytes[0]) == 0x89
+            && bytes[1] == 'P'
+            && bytes[2] == 'N'
+            && bytes[3] == 'G') {
+            return Optional.of(MediaType.IMAGE_PNG);
+        }
+        if (bytes.length >= 3
+            && Byte.toUnsignedInt(bytes[0]) == 0xff
+            && Byte.toUnsignedInt(bytes[1]) == 0xd8
+            && Byte.toUnsignedInt(bytes[2]) == 0xff) {
+            return Optional.of(MediaType.IMAGE_JPEG);
+        }
+        if (bytes.length >= 6
+            && bytes[0] == 'G'
+            && bytes[1] == 'I'
+            && bytes[2] == 'F') {
+            return Optional.of(MediaType.IMAGE_GIF);
+        }
+        return Optional.empty();
     }
 
     private void cacheAvatar(String safeHandle, CachedAvatar avatar) throws IOException {
@@ -412,6 +524,9 @@ public class InstagramAvatarCacheService {
 
     private String extensionForMediaType(MediaType mediaType) {
         if (MediaType.IMAGE_JPEG.includes(mediaType)) {
+            return "jpg";
+        }
+        if (Set.of("jpg", "jpeg", "pjpeg").contains(mediaType.getSubtype())) {
             return "jpg";
         }
         if (MediaType.IMAGE_GIF.includes(mediaType)) {

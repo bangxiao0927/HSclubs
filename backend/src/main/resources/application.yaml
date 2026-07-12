@@ -23,6 +23,7 @@ app:
       python-command: ${APP_INSTAGRAM_AVATAR_PYTHON_COMMAND:python3}
       session-user: ${APP_INSTAGRAM_AVATAR_SESSION_USER:}
       session-file: ${APP_INSTAGRAM_AVATAR_SESSION_FILE:}
+      profile-api-url-template: ${APP_INSTAGRAM_AVATAR_PROFILE_API_URL_TEMPLATE:https://www.instagram.com/api/v1/users/web_profile_info/?username=%s}
       fetch-timeout-ms: ${APP_INSTAGRAM_AVATAR_FETCH_TIMEOUT_MS:10000}
       cache-ttl-ms: ${APP_INSTAGRAM_AVATAR_CACHE_TTL_MS:2592000000}
       max-refresh-per-run: ${APP_INSTAGRAM_AVATAR_MAX_REFRESH_PER_RUN:80}
