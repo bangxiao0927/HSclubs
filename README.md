@@ -60,11 +60,11 @@ Backend:
 ```bash
 cd backend
 cp .env.example .env   # fill in DB_PASSWORD and Google OAuth credentials
-pip install -r requirements-instaloader.txt  # optional: enables Instagram avatar caching
+pip install -r requirements-instaloader.txt  # optional: enables authenticated Instagram avatar caching
 ./mvnw spring-boot:run
 ```
 
-Instagram may reject anonymous Instaloader requests with 403 responses. For reliable club avatar refreshes, set `APP_INSTAGRAM_AVATAR_COOKIE_BROWSER=firefox` after logging into Instagram in Firefox, or create an Instaloader session with `instaloader --login your_username` and set `APP_INSTAGRAM_AVATAR_SESSION_USER` / `APP_INSTAGRAM_AVATAR_SESSION_FILE` in `backend/.env`. Other browsers can be used by installing `browser-cookie3` for the backend Python environment.
+Instaloader must use an authenticated Instagram session; anonymous Instaloader access is not supported because Instagram rejects it with `403 Forbidden`. Set `APP_INSTAGRAM_AVATAR_COOKIE_BROWSER=firefox` after logging into Instagram in Firefox, or create a saved session with `instaloader --login your_username` and set `APP_INSTAGRAM_AVATAR_SESSION_USER` / `APP_INSTAGRAM_AVATAR_SESSION_FILE` in `backend/.env`. Other browsers can be used by installing `browser-cookie3` for the backend Python environment.
 If Instaloader cannot resolve a profile picture, the backend also tries Instagram's web profile API before returning the short-lived SVG fallback.
 
 Frontend:
