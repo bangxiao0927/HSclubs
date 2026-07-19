@@ -18,9 +18,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashSet;
@@ -556,17 +558,35 @@ public class InstagramAvatarCacheService {
 
     private void cacheAvatar(String safeHandle, CachedAvatar avatar) throws IOException {
         String extension = extensionForMediaType(avatar.mediaType());
+        Path file = instagramCacheDir.resolve(safeHandle + "." + extension).normalize();
+        if (!file.startsWith(instagramCacheDir)) {
+            throw new IOException("Avatar cache path escaped cache directory");
+        }
+        Path temporaryFile = Files.createTempFile(instagramCacheDir, safeHandle + "-", ".tmp");
+        try {
+            Files.write(temporaryFile, avatar.bytes());
+            try {
+                Files.move(
+                    temporaryFile,
+                    file,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                );
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporaryFile, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporaryFile);
+        }
         for (String existingExtension : IMAGE_EXTENSIONS) {
+            if (existingExtension.equals(extension)) {
+                continue;
+            }
             Path oldFile = instagramCacheDir.resolve(safeHandle + "." + existingExtension).normalize();
             if (oldFile.startsWith(instagramCacheDir)) {
                 Files.deleteIfExists(oldFile);
             }
         }
-        Path file = instagramCacheDir.resolve(safeHandle + "." + extension).normalize();
-        if (!file.startsWith(instagramCacheDir)) {
-            throw new IOException("Avatar cache path escaped cache directory");
-        }
-        Files.write(file, avatar.bytes());
     }
 
     private byte[] fallbackSvg(String safeHandle) {
