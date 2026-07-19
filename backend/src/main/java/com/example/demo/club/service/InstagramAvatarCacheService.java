@@ -243,9 +243,12 @@ public class InstagramAvatarCacheService {
                 LOGGER.debug("Unable to prewarm Instagram avatar for {}", handle, ex);
             }
         }
-        if (refreshed > 0) {
-            LOGGER.info("Prewarmed {} Instagram club avatar(s)", refreshed);
-        }
+        LOGGER.info(
+            "Instagram avatar check complete: {} handle(s), {} attempted, {} refreshed",
+            handles.size(),
+            attempted,
+            refreshed
+        );
     }
 
     public String normalizeHandle(String handle) {
