@@ -636,7 +636,7 @@ public class InstagramAvatarCacheService {
 
     public record ResolvedAvatar(byte[] bytes, MediaType mediaType, long maxAge, TimeUnit maxAgeUnit) {
         private static ResolvedAvatar cached(CachedAvatar avatar) {
-            return new ResolvedAvatar(avatar.bytes(), avatar.mediaType(), 30, TimeUnit.DAYS);
+            return new ResolvedAvatar(avatar.bytes(), avatar.mediaType(), 60, TimeUnit.DAYS);
         }
 
         private static ResolvedAvatar fallback(byte[] bytes) {

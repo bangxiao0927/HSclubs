@@ -55,7 +55,7 @@ class InstagramAvatarCacheServiceTest {
 
         assertThat(avatar.bytes()).isEqualTo(bytes);
         assertThat(avatar.mediaType()).isEqualTo(MediaType.IMAGE_PNG);
-        assertThat(avatar.maxAge()).isEqualTo(30);
+        assertThat(avatar.maxAge()).isEqualTo(60);
         assertThat(avatar.maxAgeUnit()).isEqualTo(TimeUnit.DAYS);
     }
 
