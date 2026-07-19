@@ -488,7 +488,7 @@ public class InstagramAvatarCacheService {
             .uri(uri)
             .timeout(Duration.ofMillis(fetchTimeoutMillis))
             .header("User-Agent", BROWSER_USER_AGENT)
-            .header("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+            .header("Accept", "image/webp,image/png,image/jpeg,image/gif")
             .GET()
             .build();
         HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
