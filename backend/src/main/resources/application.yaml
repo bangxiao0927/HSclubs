@@ -29,7 +29,9 @@ app:
       fetch-timeout-ms: ${APP_INSTAGRAM_AVATAR_FETCH_TIMEOUT_MS:10000}
       # Refresh a cached club avatar after 60 days (approximately two months).
       cache-ttl-ms: ${APP_INSTAGRAM_AVATAR_CACHE_TTL_MS:5184000000}
-      max-refresh-per-run: ${APP_INSTAGRAM_AVATAR_MAX_REFRESH_PER_RUN:80}
+      # The official MVHS list currently has fewer than 120 Instagram profiles,
+      # so a fresh deployment can populate every local icon in its first pass.
+      max-refresh-per-run: ${APP_INSTAGRAM_AVATAR_MAX_REFRESH_PER_RUN:120}
       refresh-initial-delay-ms: ${APP_INSTAGRAM_AVATAR_REFRESH_INITIAL_DELAY_MS:30000}
       refresh-fixed-delay-ms: ${APP_INSTAGRAM_AVATAR_REFRESH_FIXED_DELAY_MS:43200000}
   summary:

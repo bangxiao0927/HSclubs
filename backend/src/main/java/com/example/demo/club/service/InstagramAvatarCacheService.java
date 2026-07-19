@@ -166,7 +166,7 @@ public class InstagramAvatarCacheService {
         @Value("${app.avatar.instagram.profile-api-url-template:" + INSTAGRAM_WEB_PROFILE_API + "}") String profileApiUrlTemplate,
         @Value("${app.avatar.instagram.fetch-timeout-ms:10000}") long fetchTimeoutMillis,
         @Value("${app.avatar.instagram.cache-ttl-ms:5184000000}") long cacheTtlMillis,
-        @Value("${app.avatar.instagram.max-refresh-per-run:80}") int maxRefreshPerRun
+        @Value("${app.avatar.instagram.max-refresh-per-run:120}") int maxRefreshPerRun
     ) {
         this.clubMapper = clubMapper;
         Path uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
