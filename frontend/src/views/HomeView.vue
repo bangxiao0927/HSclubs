@@ -132,10 +132,6 @@ const changeHeroImage = (offset: number) => {
             <span class="stat-label">Active clubs</span>
             <p class="stat-value">{{ totalClubCount }}</p>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">Template status</span>
-            <p class="stat-value">{{ usingPreviewData ? 'Preview' : 'Live' }}</p>
-          </div>
         </div>
       </div>
       <div class="hero-visual">
