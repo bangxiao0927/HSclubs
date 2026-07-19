@@ -8,12 +8,16 @@ type FetchClubsOptions = {
 }
 
 const CLUBS_CACHE_TTL_MS = 5 * 60 * 1000
+const ALL_CLUBS_PAGE_SIZE = 100
 
 let clubsCache: Club[] | null = null
 let clubsCacheKey = ''
 let clubsCacheExpiresAt = 0
 let clubsRequest: Promise<Club[]> | null = null
 let clubsRequestKey = ''
+let allClubsCache: Club[] | null = null
+let allClubsCacheExpiresAt = 0
+let allClubsRequest: Promise<Club[]> | null = null
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = buildApiUrl(path)
@@ -48,6 +52,9 @@ export const invalidateClubCache = () => {
   clubsCacheExpiresAt = 0
   clubsRequest = null
   clubsRequestKey = ''
+  allClubsCache = null
+  allClubsCacheExpiresAt = 0
+  allClubsRequest = null
 }
 
 const clubPath = (suffix: string, page?: number, size?: number) => {
@@ -86,6 +93,36 @@ export const fetchClubs = async (options: FetchClubsOptions = {}) => {
   }
 }
 
+export const fetchAllClubs = async (force = false) => {
+  const now = Date.now()
+  if (!force && allClubsCache && now < allClubsCacheExpiresAt) {
+    return cloneClubs(allClubsCache)
+  }
+  if (!force && allClubsRequest) {
+    return cloneClubs(await allClubsRequest)
+  }
+
+  allClubsRequest = (async () => {
+    const allClubs: Club[] = []
+    for (let page = 0; ; page++) {
+      const batch = await request<Club[]>(clubPath('', page, ALL_CLUBS_PAGE_SIZE))
+      allClubs.push(...batch)
+      if (batch.length < ALL_CLUBS_PAGE_SIZE) {
+        return allClubs
+      }
+    }
+  })()
+
+  try {
+    const allClubs = await allClubsRequest
+    allClubsCache = cloneClubs(allClubs)
+    allClubsCacheExpiresAt = Date.now() + CLUBS_CACHE_TTL_MS
+    return cloneClubs(allClubs)
+  } finally {
+    allClubsRequest = null
+  }
+}
+
 export const fetchClubCount = async () => {
   const response = await request<{ count: number }>(clubPath('/count'))
   return response.count
@@ -106,6 +143,12 @@ export const updateClub = async (
       String(club.id) === String(updatedClub.id) ? { ...club, ...updatedClub } : club,
     )
     setClubsCache(clubsCacheKey, nextClubs)
+  }
+  if (allClubsCache) {
+    allClubsCache = allClubsCache.map((club) =>
+      String(club.id) === String(updatedClub.id) ? { ...club, ...updatedClub } : club,
+    )
+    allClubsCacheExpiresAt = Date.now() + CLUBS_CACHE_TTL_MS
   }
   return updatedClub
 }

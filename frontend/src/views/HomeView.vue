@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import SkeletonLoader from '../components/SkeletonLoader.vue'
-import { fetchClubCount, fetchClubs } from '../services/clubService'
+import { fetchAllClubs, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { clubImage } from '../utils/clubImages'
 import { sampleClubs, schoolTemplate } from '../config/schoolTemplate'
@@ -44,15 +44,12 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    const [newClubs, clubCount] = await Promise.all([
-      fetchClubs({ force: true, page: 0, size: pageSize }),
-      fetchClubCount(),
-    ])
-    clubs.value = newClubs
-    totalClubCount.value = clubCount
-    hasMore.value = newClubs.length >= pageSize
+    const allClubs = await fetchAllClubs(true)
+    clubs.value = allClubs.slice(0, pageSize)
+    totalClubCount.value = allClubs.length
+    hasMore.value = allClubs.length > pageSize
     usingPreviewData.value = false
-    setHeroClubs(newClubs)
+    setHeroClubs(allClubs)
   } catch {
     clubs.value = sampleClubs
     totalClubCount.value = sampleClubs.length
