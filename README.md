@@ -66,6 +66,7 @@ pip install -r requirements-instaloader.txt  # optional: enables authenticated I
 
 Instaloader must use an authenticated Instagram session; anonymous Instaloader access is not supported because Instagram rejects it with `403 Forbidden`. Set `APP_INSTAGRAM_AVATAR_COOKIE_BROWSER=firefox` after logging into Instagram in Firefox, or create a saved session with `instaloader --login your_username` and set `APP_INSTAGRAM_AVATAR_SESSION_USER` / `APP_INSTAGRAM_AVATAR_SESSION_FILE` in `backend/.env`. Other browsers can be used by installing `browser-cookie3` for the backend Python environment.
 If Instaloader cannot resolve a profile picture, the backend also tries Instagram's web profile API before returning the short-lived SVG fallback.
+The backend preloads avatars for clubs with an `instagramUrl`, stores them under `backend/uploads/avatar-cache/instagram`, and refreshes cached files after 60 days. The scheduler checks twice daily, but it only contacts Instagram for missing or expired files. Keep the upload directory and Instaloader session file on persistent, private storage in production.
 
 Frontend:
 
