@@ -107,11 +107,15 @@ const startHeroInterval = () => {
   }
   heroInterval = window.setInterval(() => {
     currentHeroImageIndex.value = (currentHeroImageIndex.value + 1) % heroClubs.value.length
-  }, 3000)
+  }, 6000)
 }
 
-const showHeroImage = (index: number) => {
-  currentHeroImageIndex.value = index
+const changeHeroImage = (offset: number) => {
+  const count = heroClubs.value.length
+  if (count <= 1) {
+    return
+  }
+  currentHeroImageIndex.value = (currentHeroImageIndex.value + offset + count) % count
   startHeroInterval()
 }
 </script>
@@ -156,17 +160,23 @@ const showHeroImage = (index: number) => {
               Instagram club photos will appear here when available.
             </div>
           </transition>
-          <div v-if="heroClubs.length > 1" class="hero-dots" aria-label="Featured clubs">
+          <div v-if="heroClubs.length > 1" class="hero-navigation" aria-label="Featured clubs">
             <button
-              v-for="(club, index) in heroClubs"
-              :key="club.id"
-              class="hero-dot"
-              :class="{ active: index === currentHeroImageIndex }"
+              class="hero-arrow hero-arrow-previous"
               type="button"
-              :aria-label="`Show ${club.name}`"
-              :aria-pressed="index === currentHeroImageIndex"
-              @click="showHeroImage(index)"
-            />
+              aria-label="Show previous club"
+              @click="changeHeroImage(-1)"
+            >
+              &lsaquo;
+            </button>
+            <button
+              class="hero-arrow hero-arrow-next"
+              type="button"
+              aria-label="Show next club"
+              @click="changeHeroImage(1)"
+            >
+              &rsaquo;
+            </button>
           </div>
         </div>
       </div>
@@ -399,38 +409,38 @@ const showHeroImage = (index: number) => {
   min-width: 0;
 }
 
-.hero-dots {
+.hero-navigation {
   position: absolute;
-  left: 50%;
-  bottom: 1.85rem;
-  transform: translateX(-50%);
+  inset: 50% 1.6rem auto;
+  transform: translateY(-50%);
   z-index: 2;
   display: flex;
-  gap: 0.55rem;
-  padding: 0.45rem 0.7rem;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(8px);
+  justify-content: space-between;
+  pointer-events: none;
 }
 
-.hero-dot {
-  width: 0.72rem;
-  height: 0.72rem;
-  border: none;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.45);
+.hero-arrow {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.58);
+  color: white;
   cursor: pointer;
+  pointer-events: auto;
+  font-size: 2rem;
+  line-height: 1;
   transition:
     transform 0.2s ease,
     background 0.2s ease;
 }
 
-.hero-dot.active {
-  background: var(--mv-gold);
-  transform: scale(1.15);
+.hero-arrow:hover {
+  background: rgba(15, 23, 42, 0.82);
+  transform: scale(1.06);
 }
 
-.hero-dot:focus-visible {
+.hero-arrow:focus-visible {
   outline: 2px solid white;
   outline-offset: 2px;
 }
@@ -656,8 +666,13 @@ const showHeroImage = (index: number) => {
     height: 220px;
   }
 
-  .hero-dots {
-    bottom: 1.45rem;
+  .hero-navigation {
+    inset: 50% 1.25rem auto;
+  }
+
+  .hero-arrow {
+    width: 2.4rem;
+    height: 2.4rem;
   }
 }
 
