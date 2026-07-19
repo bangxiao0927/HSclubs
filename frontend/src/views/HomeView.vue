@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import SkeletonLoader from '../components/SkeletonLoader.vue'
 import { fetchClubCount, fetchClubs } from '../services/clubService'
@@ -16,6 +16,7 @@ const schoolDisplayName = computed(() => schoolTemplate.schoolName)
 const schoolShortName = computed(() => schoolTemplate.shortName)
 const usingPreviewData = ref(false)
 const currentHeroImageIndex = ref(0)
+const heroClubs = ref<Club[]>([])
 const totalClubCount = ref(0)
 let heroInterval: number | undefined
 
@@ -23,6 +24,21 @@ const page = ref(0)
 const pageSize = 50
 const hasMore = ref(true)
 const loadingMore = ref(false)
+
+const pickRandomInstagramClubs = (source: Club[], limit = 4) => {
+  const candidates = source.filter((club) => Boolean(club.instagramUrl?.trim()))
+  for (let index = candidates.length - 1; index > 0; index--) {
+    const randomIndex = Math.floor(Math.random() * (index + 1))
+    ;[candidates[index], candidates[randomIndex]] = [candidates[randomIndex]!, candidates[index]!]
+  }
+  return candidates.slice(0, limit)
+}
+
+const setHeroClubs = (source: Club[]) => {
+  heroClubs.value = pickRandomInstagramClubs(source)
+  currentHeroImageIndex.value = 0
+  startHeroInterval()
+}
 
 const loadClubs = async () => {
   loading.value = true
@@ -36,11 +52,13 @@ const loadClubs = async () => {
     totalClubCount.value = clubCount
     hasMore.value = newClubs.length >= pageSize
     usingPreviewData.value = false
+    setHeroClubs(newClubs)
   } catch {
     clubs.value = sampleClubs
     totalClubCount.value = sampleClubs.length
     hasMore.value = false
     usingPreviewData.value = true
+    setHeroClubs([])
   } finally {
     loading.value = false
   }
@@ -51,8 +69,7 @@ const loadMore = async () => {
   loadingMore.value = true
   page.value++
   try {
-    const moreClubs = await fetchClubs({page: page.value,
-      size: pageSize})
+    const moreClubs = await fetchClubs({ page: page.value, size: pageSize })
     clubs.value = [...clubs.value, ...moreClubs]
     hasMore.value = moreClubs.length >= pageSize
   } catch {
@@ -64,7 +81,6 @@ const loadMore = async () => {
 
 onMounted(() => {
   void loadClubs()
-  startHeroInterval()
 })
 
 onUnmounted(() => {
@@ -75,15 +91,7 @@ const topClubs = computed(() =>
   [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4),
 )
 
-// Hero images: prefer top club images, fall back to static defaults
-const heroImages = computed(() => {
-  const clubImages = topClubs.value
-    .map((c) => clubImage(c))
-    .filter((url) => url && !url.startsWith('data:'))
-  return clubImages.length >= 2
-    ? clubImages.slice(0, 4)
-    : ['/hsclubs1.jpg', '/hsclubs2.png', '/hsclubs3.png']
-})
+const activeHeroClub = computed(() => heroClubs.value[currentHeroImageIndex.value] ?? null)
 
 const stopHeroInterval = () => {
   if (heroInterval !== undefined) {
@@ -94,8 +102,11 @@ const stopHeroInterval = () => {
 
 const startHeroInterval = () => {
   stopHeroInterval()
+  if (heroClubs.value.length <= 1) {
+    return
+  }
   heroInterval = window.setInterval(() => {
-    currentHeroImageIndex.value = (currentHeroImageIndex.value + 1) % heroImages.value.length
+    currentHeroImageIndex.value = (currentHeroImageIndex.value + 1) % heroClubs.value.length
   }, 3000)
 }
 
@@ -126,22 +137,33 @@ const showHeroImage = (index: number) => {
       <div class="hero-visual">
         <div class="hero-image-frame">
           <transition name="hero-slide" mode="out-in">
-            <img
-              :key="heroImages[currentHeroImageIndex]"
-              class="hero-image hero-image-primary"
-              :src="heroImages[currentHeroImageIndex]"
-              alt=""
-              loading="eager"
-            />
+            <RouterLink
+              v-if="activeHeroClub"
+              :key="activeHeroClub.id"
+              class="hero-image-link"
+              :to="`/clubs/${activeHeroClub.id}`"
+              :aria-label="`View ${activeHeroClub.name}`"
+            >
+              <img
+                class="hero-image hero-image-primary"
+                :src="clubImage(activeHeroClub)"
+                :alt="`${activeHeroClub.name} avatar`"
+                loading="eager"
+              />
+              <span class="hero-club-label">{{ activeHeroClub.name }}</span>
+            </RouterLink>
+            <div v-else key="no-instagram-clubs" class="hero-image-empty">
+              Instagram club photos will appear here when available.
+            </div>
           </transition>
-          <div class="hero-dots" aria-label="Homepage images">
+          <div v-if="heroClubs.length > 1" class="hero-dots" aria-label="Featured clubs">
             <button
-              v-for="(image, index) in heroImages"
-              :key="image"
+              v-for="(club, index) in heroClubs"
+              :key="club.id"
               class="hero-dot"
               :class="{ active: index === currentHeroImageIndex }"
               type="button"
-              :aria-label="`Show image ${index + 1}`"
+              :aria-label="`Show ${club.name}`"
               :aria-pressed="index === currentHeroImageIndex"
               @click="showHeroImage(index)"
             />
@@ -160,7 +182,9 @@ const showHeroImage = (index: number) => {
       <div class="section-heading">
         <p class="section-label">Top enrollment</p>
         <h2>Highest membership clubs</h2>
-        <p class="section-subtitle">Use this area to highlight the most active clubs at your school.</p>
+        <p class="section-subtitle">
+          Use this area to highlight the most active clubs at your school.
+        </p>
       </div>
       <div v-if="topClubs.length" class="top-grid">
         <RouterLink
@@ -200,8 +224,8 @@ const showHeroImage = (index: number) => {
         <p class="section-label">Directory</p>
         <h2>All clubs</h2>
         <p class="section-subtitle">
-          Replace the sample clubs with your school data, then students can browse by name,
-          advisor, meeting time, or keyword.
+          Replace the sample clubs with your school data, then students can browse by name, advisor,
+          meeting time, or keyword.
         </p>
       </div>
       <div v-if="clubs.length" class="club-directory">
@@ -327,13 +351,48 @@ const showHeroImage = (index: number) => {
 }
 
 .hero-image {
-  position: absolute;
-  inset: 1rem;
-  width: calc(100% - 2rem);
-  height: calc(100% - 2rem);
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
   border-radius: 22px;
+}
+
+.hero-image-link {
+  position: absolute;
+  inset: 1rem;
+  display: block;
+  color: white;
+}
+
+.hero-image-link:focus-visible {
+  outline: 3px solid var(--mv-gold);
+  outline-offset: 3px;
+  border-radius: 22px;
+}
+
+.hero-club-label {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(8px);
+  font-weight: 700;
+  text-align: center;
+}
+
+.hero-image-empty {
+  position: absolute;
+  inset: 1rem;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  border-radius: 22px;
+  color: var(--mv-text-muted);
+  text-align: center;
 }
 
 .hero-image-primary {
