@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert the MVHS clubs CSV export into INSERT statements for the clubs table."""
+"""Convert the MVHS clubs CSV export into production and local seed SQL."""
 
 from __future__ import annotations
 
@@ -7,13 +7,24 @@ import csv
 import pathlib
 import re
 import sys
+import unicodedata
 from typing import List, Sequence
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CSV_FILENAME = "Official MVHS Clubs List 2025-2026 - Official list.csv"
 OUTPUT_FILENAME = "mvhs_clubs_seed.sql"
+LOCAL_OUTPUT_PATH = pathlib.Path("backend/src/main/resources/data.sql")
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+INSTAGRAM_HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9._]{1,64}$")
+INSTAGRAM_PLACEHOLDERS = {"n/a", "none", "none yet", "not established yet", "tbd"}
+LOCAL_USER_SEED = """-- Local-only users for authentication and membership testing.
+INSERT INTO oauth_users (uid, provider, provider_user_id, email, display_name, avatar_url, role) VALUES
+  (1, 'google', 'google-123', 'maya.chen@example.com', 'Maya Chen', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Maya', 'student'),
+  (2, 'google', 'google-456', 'leo.martinez@example.com', 'Leo Martinez', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Leo', 'student'),
+  (3, 'google', 'google-789', 'priya.singh@example.com', 'Priya Singh', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Priya', 'advisor'),
+  (4, 'google', 'google-321', 'apatel@mvhs.org', 'Dr. Patel', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Patel', 'staff');
+"""
 
 
 def clean(value: str | None) -> str | None:
@@ -56,7 +67,24 @@ def build_meeting_schedule(row: dict[str, str | None]) -> str | None:
     return " · ".join(parts) if parts else None
 
 
-def build_record(idx: int, row: dict[str, str | None]) -> dict[str, object]:
+def slugify(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", "-", normalized.lower()).strip("-") or "club"
+
+
+def instagram_url(raw: str | None) -> str | None:
+    value = clean(raw)
+    if not value or value.casefold() in INSTAGRAM_PLACEHOLDERS:
+        return None
+    handle = value.removeprefix("@").strip().rstrip("/")
+    if "instagram.com/" in handle.lower():
+        handle = handle.split("instagram.com/", 1)[1].split("/", 1)[0].split("?", 1)[0]
+    if not INSTAGRAM_HANDLE_PATTERN.fullmatch(handle):
+        return None
+    return f"https://www.instagram.com/{handle}/"
+
+
+def build_record(idx: int, row: dict[str, str | None], slug: str) -> dict[str, object]:
     name = clean(row.get("Club Name"))
     if not name:
         raise ValueError(f"Row {idx} is missing a club name")
@@ -72,6 +100,7 @@ def build_record(idx: int, row: dict[str, str | None]) -> dict[str, object]:
     return {
         "id": idx,
         "name": name,
+        "slug": slug,
         "alias_name": None,
         "description": description,
         "category": None,
@@ -81,8 +110,8 @@ def build_record(idx: int, row: dict[str, str | None]) -> dict[str, object]:
         "advisor": advisor,
         "image_url": None,
         "member_count": 0,
-        "achievements": "JSON_ARRAY()",
-        "school_id": 1,
+        "achievements": "[]",
+        "instagram_url": instagram_url(row.get("Instagram")),
     }
 
 
@@ -104,6 +133,7 @@ def records_to_sql(records: Sequence[dict[str, object]]) -> str:
     columns = [
         "id",
         "name",
+        "slug",
         "alias_name",
         "description",
         "category",
@@ -114,9 +144,8 @@ def records_to_sql(records: Sequence[dict[str, object]]) -> str:
         "image_url",
         "member_count",
         "achievements",
-        "school_id",
     ]
-    raw_columns = {"achievements"}
+    raw_columns: set[str] = set()
 
     values_sql = []
     for record in records:
@@ -129,6 +158,17 @@ def records_to_sql(records: Sequence[dict[str, object]]) -> str:
         "INSERT INTO clubs (" + ", ".join(columns) + ") VALUES",
         ",\n".join(values_sql) + ";",
     ]
+    social_rows = [
+        f"  ({record['id']}, 'instagram', 'Instagram', {sql_literal(record['instagram_url'], set(), 'instagram_url')})"
+        for record in records
+        if record.get("instagram_url")
+    ]
+    if social_rows:
+        lines.extend([
+            "",
+            "INSERT INTO club_social_medias (club_id, social_type, link_name, link_url) VALUES",
+            ",\n".join(social_rows) + ";",
+        ])
     return "\n".join(lines) + "\n"
 
 
@@ -141,6 +181,7 @@ def main() -> int:
         return 1
 
     records: List[dict[str, object]] = []
+    slug_counts: dict[str, int] = {}
     with csv_path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         idx = 0
@@ -150,13 +191,27 @@ def main() -> int:
                 continue
             idx += 1
             try:
-                records.append(build_record(idx, row))
+                name = clean(row.get("Club Name"))
+                if not name:
+                    raise ValueError(f"Row {idx} is missing a club name")
+                base_slug = slugify(name)
+                slug_counts[base_slug] = slug_counts.get(base_slug, 0) + 1
+                suffix = slug_counts[base_slug]
+                slug = base_slug if suffix == 1 else f"{base_slug}-{suffix}"
+                records.append(build_record(idx, row, slug))
             except ValueError as exc:
                 print(f"Skipping row {idx}: {exc}", file=sys.stderr)
 
     sql = records_to_sql(records)
     output_path.write_text(sql, encoding="utf-8")
-    print(f"Wrote {len(records)} club rows to {output_path}")
+    local_output_path = ROOT / LOCAL_OUTPUT_PATH
+    local_output_path.write_text(
+        "-- H2-compatible local seed using the official MVHS clubs list.\n\n" + LOCAL_USER_SEED + "\n" + sql,
+        encoding="utf-8",
+    )
+    instagram_count = sum(bool(record.get("instagram_url")) for record in records)
+    print(f"Wrote {len(records)} clubs and {instagram_count} Instagram profiles to {output_path}")
+    print(f"Wrote local seed to {local_output_path}")
     return 0
 
 
