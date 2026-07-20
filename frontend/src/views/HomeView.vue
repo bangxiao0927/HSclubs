@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import SkeletonLoader from '../components/SkeletonLoader.vue'
-import { fetchClubCount, fetchClubs } from '../services/clubService'
+import { fetchAllClubs, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { clubImage } from '../utils/clubImages'
 import { sampleClubs, schoolTemplate } from '../config/schoolTemplate'
@@ -16,6 +16,7 @@ const schoolDisplayName = computed(() => schoolTemplate.schoolName)
 const schoolShortName = computed(() => schoolTemplate.shortName)
 const usingPreviewData = ref(false)
 const currentHeroImageIndex = ref(0)
+const heroClubs = ref<Club[]>([])
 const totalClubCount = ref(0)
 let heroInterval: number | undefined
 
@@ -24,23 +25,37 @@ const pageSize = 50
 const hasMore = ref(true)
 const loadingMore = ref(false)
 
+const pickRandomInstagramClubs = (source: Club[], limit = 4) => {
+  const candidates = source.filter((club) => Boolean(club.instagramUrl?.trim()))
+  for (let index = candidates.length - 1; index > 0; index--) {
+    const randomIndex = Math.floor(Math.random() * (index + 1))
+    ;[candidates[index], candidates[randomIndex]] = [candidates[randomIndex]!, candidates[index]!]
+  }
+  return candidates.slice(0, limit)
+}
+
+const setHeroClubs = (source: Club[]) => {
+  heroClubs.value = pickRandomInstagramClubs(source)
+  currentHeroImageIndex.value = 0
+  startHeroInterval()
+}
+
 const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    const [newClubs, clubCount] = await Promise.all([
-      fetchClubs({ force: true, page: 0, size: pageSize }),
-      fetchClubCount(),
-    ])
-    clubs.value = newClubs
-    totalClubCount.value = clubCount
-    hasMore.value = newClubs.length >= pageSize
+    const allClubs = await fetchAllClubs(true)
+    clubs.value = allClubs.slice(0, pageSize)
+    totalClubCount.value = allClubs.length
+    hasMore.value = allClubs.length > pageSize
     usingPreviewData.value = false
+    setHeroClubs(allClubs)
   } catch {
     clubs.value = sampleClubs
     totalClubCount.value = sampleClubs.length
     hasMore.value = false
     usingPreviewData.value = true
+    setHeroClubs([])
   } finally {
     loading.value = false
   }
@@ -51,8 +66,7 @@ const loadMore = async () => {
   loadingMore.value = true
   page.value++
   try {
-    const moreClubs = await fetchClubs({page: page.value,
-      size: pageSize})
+    const moreClubs = await fetchClubs({ page: page.value, size: pageSize })
     clubs.value = [...clubs.value, ...moreClubs]
     hasMore.value = moreClubs.length >= pageSize
   } catch {
@@ -64,7 +78,6 @@ const loadMore = async () => {
 
 onMounted(() => {
   void loadClubs()
-  startHeroInterval()
 })
 
 onUnmounted(() => {
@@ -75,15 +88,7 @@ const topClubs = computed(() =>
   [...clubs.value].sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)).slice(0, 4),
 )
 
-// Hero images: prefer top club images, fall back to static defaults
-const heroImages = computed(() => {
-  const clubImages = topClubs.value
-    .map((c) => clubImage(c))
-    .filter((url) => url && !url.startsWith('data:'))
-  return clubImages.length >= 2
-    ? clubImages.slice(0, 4)
-    : ['/hsclubs1.jpg', '/hsclubs2.png', '/hsclubs3.png']
-})
+const activeHeroClub = computed(() => heroClubs.value[currentHeroImageIndex.value] ?? null)
 
 const stopHeroInterval = () => {
   if (heroInterval !== undefined) {
@@ -94,13 +99,20 @@ const stopHeroInterval = () => {
 
 const startHeroInterval = () => {
   stopHeroInterval()
+  if (heroClubs.value.length <= 1) {
+    return
+  }
   heroInterval = window.setInterval(() => {
-    currentHeroImageIndex.value = (currentHeroImageIndex.value + 1) % heroImages.value.length
-  }, 3000)
+    currentHeroImageIndex.value = (currentHeroImageIndex.value + 1) % heroClubs.value.length
+  }, 6000)
 }
 
-const showHeroImage = (index: number) => {
-  currentHeroImageIndex.value = index
+const changeHeroImage = (offset: number) => {
+  const count = heroClubs.value.length
+  if (count <= 1) {
+    return
+  }
+  currentHeroImageIndex.value = (currentHeroImageIndex.value + offset + count) % count
   startHeroInterval()
 }
 </script>
@@ -117,34 +129,47 @@ const showHeroImage = (index: number) => {
             <span class="stat-label">Active clubs</span>
             <p class="stat-value">{{ totalClubCount }}</p>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">Template status</span>
-            <p class="stat-value">{{ usingPreviewData ? 'Preview' : 'Live' }}</p>
-          </div>
         </div>
       </div>
       <div class="hero-visual">
         <div class="hero-image-frame">
           <transition name="hero-slide" mode="out-in">
-            <img
-              :key="heroImages[currentHeroImageIndex]"
-              class="hero-image hero-image-primary"
-              :src="heroImages[currentHeroImageIndex]"
-              alt=""
-              loading="eager"
-            />
+            <RouterLink
+              v-if="activeHeroClub"
+              :key="activeHeroClub.id"
+              class="hero-image-link"
+              :to="`/clubs/${activeHeroClub.id}`"
+              :aria-label="`View ${activeHeroClub.name}`"
+            >
+              <img
+                class="hero-image hero-image-primary"
+                :src="clubImage(activeHeroClub)"
+                :alt="`${activeHeroClub.name} avatar`"
+                loading="eager"
+              />
+              <span class="hero-club-label">{{ activeHeroClub.name }}</span>
+            </RouterLink>
+            <div v-else key="no-instagram-clubs" class="hero-image-empty">
+              Instagram club photos will appear here when available.
+            </div>
           </transition>
-          <div class="hero-dots" aria-label="Homepage images">
+          <div v-if="heroClubs.length > 1" class="hero-navigation" aria-label="Featured clubs">
             <button
-              v-for="(image, index) in heroImages"
-              :key="image"
-              class="hero-dot"
-              :class="{ active: index === currentHeroImageIndex }"
+              class="hero-arrow hero-arrow-previous"
               type="button"
-              :aria-label="`Show image ${index + 1}`"
-              :aria-pressed="index === currentHeroImageIndex"
-              @click="showHeroImage(index)"
-            />
+              aria-label="Show previous club"
+              @click="changeHeroImage(-1)"
+            >
+              &lsaquo;
+            </button>
+            <button
+              class="hero-arrow hero-arrow-next"
+              type="button"
+              aria-label="Show next club"
+              @click="changeHeroImage(1)"
+            >
+              &rsaquo;
+            </button>
           </div>
         </div>
       </div>
@@ -160,7 +185,9 @@ const showHeroImage = (index: number) => {
       <div class="section-heading">
         <p class="section-label">Top enrollment</p>
         <h2>Highest membership clubs</h2>
-        <p class="section-subtitle">Use this area to highlight the most active clubs at your school.</p>
+        <p class="section-subtitle">
+          Use this area to highlight the most active clubs at your school.
+        </p>
       </div>
       <div v-if="topClubs.length" class="top-grid">
         <RouterLink
@@ -200,8 +227,8 @@ const showHeroImage = (index: number) => {
         <p class="section-label">Directory</p>
         <h2>All clubs</h2>
         <p class="section-subtitle">
-          Replace the sample clubs with your school data, then students can browse by name,
-          advisor, meeting time, or keyword.
+          Replace the sample clubs with your school data, then students can browse by name, advisor,
+          meeting time, or keyword.
         </p>
       </div>
       <div v-if="clubs.length" class="club-directory">
@@ -327,51 +354,86 @@ const showHeroImage = (index: number) => {
 }
 
 .hero-image {
-  position: absolute;
-  inset: 1rem;
-  width: calc(100% - 2rem);
-  height: calc(100% - 2rem);
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
   border-radius: 22px;
+}
+
+.hero-image-link {
+  position: absolute;
+  inset: 1rem;
+  display: block;
+  color: white;
+}
+
+.hero-image-link:focus-visible {
+  outline: 3px solid var(--mv-gold);
+  outline-offset: 3px;
+  border-radius: 22px;
+}
+
+.hero-club-label {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(8px);
+  font-weight: 700;
+  text-align: center;
+}
+
+.hero-image-empty {
+  position: absolute;
+  inset: 1rem;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  border-radius: 22px;
+  color: var(--mv-text-muted);
+  text-align: center;
 }
 
 .hero-image-primary {
   min-width: 0;
 }
 
-.hero-dots {
+.hero-navigation {
   position: absolute;
-  left: 50%;
-  bottom: 1.85rem;
-  transform: translateX(-50%);
+  inset: 50% 1.6rem auto;
+  transform: translateY(-50%);
   z-index: 2;
   display: flex;
-  gap: 0.55rem;
-  padding: 0.45rem 0.7rem;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(8px);
+  justify-content: space-between;
+  pointer-events: none;
 }
 
-.hero-dot {
-  width: 0.72rem;
-  height: 0.72rem;
-  border: none;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.45);
+.hero-arrow {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.58);
+  color: white;
   cursor: pointer;
+  pointer-events: auto;
+  font-size: 2rem;
+  line-height: 1;
   transition:
     transform 0.2s ease,
     background 0.2s ease;
 }
 
-.hero-dot.active {
-  background: var(--mv-gold);
-  transform: scale(1.15);
+.hero-arrow:hover {
+  background: rgba(15, 23, 42, 0.82);
+  transform: scale(1.06);
 }
 
-.hero-dot:focus-visible {
+.hero-arrow:focus-visible {
   outline: 2px solid white;
   outline-offset: 2px;
 }
@@ -597,8 +659,13 @@ const showHeroImage = (index: number) => {
     height: 220px;
   }
 
-  .hero-dots {
-    bottom: 1.45rem;
+  .hero-navigation {
+    inset: 50% 1.25rem auto;
+  }
+
+  .hero-arrow {
+    width: 2.4rem;
+    height: 2.4rem;
   }
 }
 

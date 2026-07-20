@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
-import { fetchClubs } from '../services/clubService'
+import { fetchAllClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { clubCategoryOptions } from '../utils/clubCategories'
 import { clubImage } from '../utils/clubImages'
@@ -18,7 +18,7 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    clubs.value = await fetchClubs({})
+    clubs.value = await fetchAllClubs()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load clubs'
   } finally {

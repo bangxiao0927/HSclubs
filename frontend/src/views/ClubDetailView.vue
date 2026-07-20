@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
-import { applyToClub, cancelMembershipRequest, fetchClubById, fetchClubs } from '../services/clubService'
+import { applyToClub, cancelMembershipRequest, fetchAllClubs, fetchClubById } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
@@ -51,7 +51,7 @@ const loadClub = async (id: string) => {
   joinError.value = ''
   joinSuccess.value = ''
   try {
-    const [clubResponse, allClubs] = await Promise.all([fetchClubById(id), fetchClubs()])
+    const [clubResponse, allClubs] = await Promise.all([fetchClubById(id), fetchAllClubs()])
     club.value = clubResponse
     relatedClubs.value = allClubs.filter((item) => item.id !== clubResponse.id).slice(0, 3)
   } catch (err) {

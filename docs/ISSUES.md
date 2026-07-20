@@ -184,22 +184,11 @@ Relevant files:
 
 ## Issue #6: Fix Homepage Images to Use Database Instead of Hardcoded Paths
 
-**Status:** `open`
-**PR:** —
+**Status:** `completed`
+**PR:** Implemented on the Instagram avatar fallback branch.
 
-**Problem:**
-`HomeView.vue` line 92 hardcodes hero images:
-```typescript
-const heroImages = ['/hsclubs1.jpg', '/hsclubs2.png', '/hsclubs3.png']
-```
-This means every school deployment must manually provide these exact filenames in the public folder. Images should come from the database (e.g., school banner, club images) or be configurable.
-
-**Solution:**
-1. Use `currentSchool.bannerUrl` from the school store as the primary hero image.
-2. Fall back to top clubs' `imageUrl` values for the carousel if no school banner exists.
-3. As a last resort, keep one default placeholder image.
-4. Update `ClubController` (or a new endpoint) to return featured/hero data.
-5. Remove the hardcoded array and replace with reactive data from the API.
+**Resolution:**
+The homepage now randomly selects clubs that have an Instagram profile, displays their cached avatars, and links each hero image to the corresponding club detail page. The three hardcoded public images have been removed.
 
 **Expected Outcome:**
 - Hero images are driven by database content (school banner, club images).
