@@ -160,7 +160,7 @@ After=network.target mysql.service
 Type=simple
 User=hsclubs
 WorkingDirectory=/opt/hsclubs/backend
-ExecStart=/usr/bin/java -jar /opt/hsclubs/backend/backend-0.0.1-SNAPSHOT.jar
+ExecStart=/usr/bin/java -jar /opt/hsclubs/backend/target/demo-0.0.1-SNAPSHOT.jar
 Restart=on-failure
 RestartSec=5
 
@@ -176,6 +176,14 @@ sudo systemctl daemon-reload
 sudo systemctl enable hsclubs
 sudo systemctl start hsclubs
 sudo systemctl status hsclubs
+```
+
+The repository also includes `scripts/deploy-main.sh`, which builds both applications,
+installs or updates this persistent service, checks the backend, and then publishes the
+frontend. Its production defaults use the system service and the `hsclubs` user:
+
+```bash
+./scripts/deploy-main.sh
 ```
 
 ### Health check
@@ -231,7 +239,7 @@ server {
     server_name yourdomain.com;
 
     # Frontend static files
-    root /opt/hsclubs/frontend/dist;
+    root /var/www/hsclubs/frontend/dist;
     index index.html;
 
     # SPA fallback

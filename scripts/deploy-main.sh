@@ -8,9 +8,9 @@ GIT_REMOTE="${GIT_REMOTE:-origin}"
 FRONTEND_DIST_TARGET="${FRONTEND_DIST_TARGET:-/var/www/hsclubs/frontend/dist}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-hsclubs.service}"
 BACKEND_ENV_FILE="${BACKEND_ENV_FILE:-$APP_DIR/backend/.env}"
-BACKEND_LOG="${BACKEND_LOG:-$APP_DIR/backend/hsclubs.log}"
 BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-http://127.0.0.1:8080/api/clubs}"
-SYSTEMD_SCOPE="${SYSTEMD_SCOPE:-user}"
+BACKEND_RUN_USER="${BACKEND_RUN_USER:-hsclubs}"
+SYSTEMD_SCOPE="${SYSTEMD_SCOPE:-system}"
 RUN_BACKEND_TESTS="${RUN_BACKEND_TESTS:-0}"
 SKIP_GIT_PULL="${SKIP_GIT_PULL:-0}"
 
@@ -40,7 +40,7 @@ run() {
   "$@"
 }
 
-systemctl_cmd() {
+service_cmd() {
   if [[ "$SYSTEMD_SCOPE" == "user" ]]; then
     systemctl --user "$@"
   else
@@ -48,11 +48,15 @@ systemctl_cmd() {
   fi
 }
 
-systemd_run_cmd() {
+install_service_file() {
+  local source_file="$1"
+
   if [[ "$SYSTEMD_SCOPE" == "user" ]]; then
-    systemd-run --user "$@"
+    local user_unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+    run mkdir -p "$user_unit_dir"
+    run install -m 0644 "$source_file" "$user_unit_dir/$BACKEND_SERVICE"
   else
-    sudo systemd-run "$@"
+    run sudo install -m 0644 "$source_file" "/etc/systemd/system/$BACKEND_SERVICE"
   fi
 }
 
@@ -61,6 +65,8 @@ validate_configuration() {
   [[ -f "$APP_DIR/frontend/package-lock.json" ]] || die "Frontend package-lock.json is missing."
   [[ -x "$APP_DIR/backend/mvnw" ]] || die "backend/mvnw is missing or not executable."
   [[ -r "$BACKEND_ENV_FILE" ]] || die "Backend environment file is missing or unreadable: $BACKEND_ENV_FILE"
+  [[ "$BACKEND_SERVICE" != */* && "$BACKEND_SERVICE" == *.service ]] || \
+    die "BACKEND_SERVICE must be a systemd service name ending in .service."
   [[ "$SYSTEMD_SCOPE" == "user" || "$SYSTEMD_SCOPE" == "system" ]] || \
     die "SYSTEMD_SCOPE must be either 'user' or 'system'."
 }
@@ -84,9 +90,20 @@ update_source() {
 }
 
 latest_backend_jar() {
-  find "$APP_DIR/backend/target" -maxdepth 1 -type f -name '*.jar' \
-    ! -name 'original-*' ! -name '*-sources.jar' ! -name '*-javadoc.jar' \
-    | sort | tail -n 1
+  local jar_path=""
+  local candidate
+  local count=0
+
+  while IFS= read -r candidate; do
+    jar_path="$candidate"
+    count=$((count + 1))
+  done < <(
+    find "$APP_DIR/backend/target" -maxdepth 1 -type f -name '*.jar' \
+      ! -name 'original-*' ! -name '*-sources.jar' ! -name '*-javadoc.jar'
+  )
+
+  [[ "$count" -eq 1 ]] || die "Expected one runnable backend JAR from this build, found $count."
+  printf '%s\n' "$jar_path"
 }
 
 publish_frontend() {
@@ -109,43 +126,66 @@ publish_frontend() {
   run sudo rsync -a --delete "$source_dir" "$target_dir"
 }
 
-start_backend_service() {
+install_and_start_backend_service() {
   local jar_path="$1"
   local java_path
-  local load_state
+  local service_file
 
   java_path="$(command -v java)"
-  load_state="$(systemctl_cmd show "$BACKEND_SERVICE" --property=LoadState --value 2>/dev/null || true)"
+  service_file="$(mktemp)"
 
-  if [[ -n "$load_state" && "$load_state" != "not-found" ]]; then
-    run systemctl_cmd restart "$BACKEND_SERVICE"
-    return
+  {
+    printf '%s\n' \
+      '[Unit]' \
+      'Description=HSclubs Backend' \
+      'Wants=network-online.target' \
+      'After=network-online.target mysql.service' \
+      '' \
+      '[Service]' \
+      'Type=simple'
+    if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
+      printf 'User=%s\n' "$BACKEND_RUN_USER"
+    fi
+    printf '%s\n' \
+      "WorkingDirectory=$APP_DIR/backend" \
+      "EnvironmentFile=$BACKEND_ENV_FILE" \
+      "ExecStart=$java_path -jar $jar_path" \
+      'Restart=on-failure' \
+      'RestartSec=5' \
+      '' \
+      '[Install]'
+    if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
+      printf 'WantedBy=multi-user.target\n'
+    else
+      printf 'WantedBy=default.target\n'
+    fi
+  } > "$service_file"
+
+  if ! install_service_file "$service_file"; then
+    rm -f "$service_file"
+    die "Could not install the systemd service file."
   fi
+  rm -f "$service_file"
 
-  run systemd_run_cmd \
-    --unit="$BACKEND_SERVICE" \
-    --description="HSclubs Spring Boot backend" \
-    --property="WorkingDirectory=$APP_DIR/backend" \
-    --property="EnvironmentFile=$BACKEND_ENV_FILE" \
-    --property="Restart=on-failure" \
-    --property="RestartSec=5s" \
-    --property="StandardOutput=append:$BACKEND_LOG" \
-    --property="StandardError=append:$BACKEND_LOG" \
-    "$java_path" -jar "$jar_path"
+  run service_cmd daemon-reload
+  run service_cmd enable "$BACKEND_SERVICE"
+  run service_cmd restart "$BACKEND_SERVICE"
 }
 
 wait_for_backend() {
   local attempt
 
-  for attempt in {1..30}; do
-    if curl -fsS "$BACKEND_HEALTH_URL" >/dev/null; then
+  for attempt in {1..15}; do
+    if curl -fsS --connect-timeout 2 --max-time 2 "$BACKEND_HEALTH_URL" >/dev/null; then
       log "Backend health check passed: $BACKEND_HEALTH_URL"
       return
     fi
-    sleep 2
+    if [[ "$attempt" -lt 15 ]]; then
+      sleep 2
+    fi
   done
 
-  systemctl_cmd status "$BACKEND_SERVICE" --no-pager || true
+  service_cmd status "$BACKEND_SERVICE" --no-pager || true
   die "Backend health check failed after 60 seconds: $BACKEND_HEALTH_URL"
 }
 
@@ -156,7 +196,8 @@ main() {
   require_cmd java
   require_cmd curl
   require_cmd systemctl
-  require_cmd systemd-run
+  require_cmd install
+  require_cmd mktemp
   if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
     require_cmd sudo
   fi
@@ -167,27 +208,27 @@ main() {
 
   log "Building frontend"
   cd "$APP_DIR/frontend"
-  run npm ci
+  run npm ci --include=dev
   run npm run build
 
   log "Building backend"
   cd "$APP_DIR/backend"
   if [[ "$RUN_BACKEND_TESTS" == "1" ]]; then
-    run ./mvnw package
+    run ./mvnw clean package
   else
-    run ./mvnw package -DskipTests
+    run ./mvnw clean package -DskipTests
   fi
 
   local jar_path
   jar_path="$(latest_backend_jar)"
   [[ -n "$jar_path" ]] || die "Could not find the backend JAR in backend/target."
 
+  log "Installing and restarting backend with $jar_path"
+  install_and_start_backend_service "$jar_path"
+  wait_for_backend
+
   log "Publishing frontend to $FRONTEND_DIST_TARGET"
   publish_frontend
-
-  log "Restarting backend with $jar_path"
-  start_backend_service "$jar_path"
-  wait_for_backend
 
   log "Deployment complete"
 }
