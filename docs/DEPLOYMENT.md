@@ -28,6 +28,7 @@
 | MySQL | 8.0+ | Database |
 | Node.js | 20+ | Frontend build |
 | npm | 10+ | Frontend dependencies |
+| Python | 3.10+ with `venv` and `pip` | Instaloader avatar cache |
 | Nginx | 1.24+ | Reverse proxy (production) |
 | Google Cloud Project | — | OAuth2 credentials |
 | Domain | — | HTTPS + OAuth redirect |
@@ -71,40 +72,65 @@ FRONTEND_ORIGIN=http://localhost:4173
 
 ### Instaloader avatar cache
 
-The backend uses a separate Python virtual environment for Instaloader. Set it
-up once on the host that runs the backend:
+The Linux initializer creates a private Python virtual environment, installs
+Instaloader and browser-cookie support, and can update the backend environment
+file. Install the operating-system packages first:
+
+```bash
+# Ubuntu, Debian, Linux Mint, or Pop!_OS
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip
+
+# Fedora, RHEL, Rocky Linux, AlmaLinux, or CentOS Stream
+sudo dnf install -y python3 python3-pip
+
+# Arch Linux or Manjaro
+sudo pacman -S --needed python python-pip
+
+# openSUSE or SLES
+sudo zypper install python3 python3-pip python3-virtualenv
+```
+
+Initialize the environment and write the absolute Python command to
+`backend/.env`:
 
 ```bash
 cd /opt/hsclubs
-./scripts/setup-instaloader.sh
+./scripts/setup-instaloader.sh --configure-env
+./scripts/setup-instaloader.sh --configure-env --check
 ```
 
-Add the following to `/opt/hsclubs/backend/.env`:
+The script is idempotent. It skips package installation when the virtual
+environment already matches `backend/requirements-instaloader.txt`. Use
+`PYTHON_BIN`, `INSTALOADER_VENV_DIR`, or `BACKEND_ENV_FILE` to override its
+defaults.
+
+Instaloader requires authentication. For a headless systemd host, create the
+session as the same account that runs the backend so the service can read it:
 
 ```bash
-APP_INSTAGRAM_AVATAR_CACHE_ENABLED=true
-APP_INSTAGRAM_AVATAR_PYTHON_COMMAND=/opt/hsclubs/backend/.venv/bin/python
+sudo install -d -m 0700 -o hsclubs -g hsclubs /opt/hsclubs/backend/.instaloader
+sudo -u hsclubs /opt/hsclubs/backend/.venv/bin/instaloader \
+  --sessionfile /opt/hsclubs/backend/.instaloader/session-your_instagram_username \
+  --login your_instagram_username
+sudo chmod 0600 /opt/hsclubs/backend/.instaloader/session-your_instagram_username
 ```
 
-Instaloader must use an authenticated Instagram source. A saved session is the
-most suitable option for a headless production host:
-
-```bash
-/opt/hsclubs/backend/.venv/bin/instaloader --login your_instagram_username
-```
-
-Copy the resulting session file to private persistent storage and configure it
-in `backend/.env`:
+Add the session identity and explicit file path to `backend/.env`:
 
 ```bash
 APP_INSTAGRAM_AVATAR_SESSION_USER=your_instagram_username
 APP_INSTAGRAM_AVATAR_SESSION_FILE=/opt/hsclubs/backend/.instaloader/session-your_instagram_username
 ```
 
+For local Linux development, browser cookies are also supported with
+`APP_INSTAGRAM_AVATAR_COOKIE_BROWSER=firefox` (or `chrome`, `edge`,
+`brave`, and the other supported browser values). A saved session is preferred
+on servers because browser profiles usually do not exist there.
+
 Do not commit session files or browser cookies. The repository ignores
-`backend/.venv/` and `backend/.instaloader/` for this reason. If the session is
-not configured, Instaloader requests may be rejected by Instagram and the
-backend will use its web-profile fallback or a generated placeholder.
+`backend/.venv/` and `backend/.instaloader/`. If authentication is missing or
+expired, the backend uses its web-profile fallback or a generated placeholder.
 
 ### Frontend (`frontend/.env` or `.env.production`)
 
@@ -215,13 +241,20 @@ sudo systemctl start hsclubs
 sudo systemctl status hsclubs
 ```
 
-The repository also includes `scripts/deploy-main.sh`, which builds both applications,
-installs or updates this persistent service, checks the backend, and then publishes the
-frontend. Its production defaults use the system service and the `hsclubs` user:
+The repository also includes `scripts/deploy-main.sh`, which initializes Instaloader when
+the avatar cache is enabled, builds both applications, installs or updates the persistent
+service, checks the backend, and then publishes the frontend. Its production defaults use
+the system service and the `hsclubs` user:
 
 ```bash
 ./scripts/deploy-main.sh
+
+# Skip Python initialization only when Instaloader is managed separately.
+SETUP_INSTALOADER=0 ./scripts/deploy-main.sh
 ```
+
+The deploy script respects `APP_INSTAGRAM_AVATAR_CACHE_ENABLED=false` and skips
+Instaloader initialization when the cache is disabled.
 
 ### Health check
 
@@ -377,7 +410,7 @@ The `/api/auth/providers` endpoint auto-discovers all configured providers.
 
 - [ ] MySQL database created with `utf8mb4` charset
 - [ ] `backend/.env` configured with real credentials
-- [ ] Instaloader virtualenv installed if Instagram avatar caching is enabled
+- [ ] `./scripts/setup-instaloader.sh --configure-env --check` passes
 - [ ] Authenticated Instaloader session stored on private persistent storage
 - [ ] `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set
 - [ ] `APP_OWNER_EMAILS` populated (comma-separated)
@@ -413,6 +446,19 @@ sudo journalctl -u hsclubs -n 50 --no-pager
 # - Port 8080 in use: lsof -i :8080
 # - Google OAuth misconfig: check GOOGLE_CLIENT_ID
 ```
+
+### Instaloader check fails
+
+```bash
+./scripts/setup-instaloader.sh --configure-env --check
+sudo -u hsclubs /opt/hsclubs/backend/.venv/bin/python -c 'import instaloader, browser_cookie3'
+sudo journalctl -u hsclubs -n 100 --no-pager
+```
+
+If Python cannot create the virtual environment, install the distribution
+packages listed in the Instaloader section. If imports work but avatars still
+fall back to placeholders, recreate the saved session and verify that the
+`hsclubs` service account can read the configured session file.
 
 ### CORS errors in browser
 

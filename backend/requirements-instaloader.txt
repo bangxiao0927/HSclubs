@@ -1,1 +1,2 @@
 instaloader>=4.15,<5
+browser-cookie3>=0.20,<1
