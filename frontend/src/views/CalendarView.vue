@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 
-import { fetchClubs, fetchCalendar, type CalendarEvent } from '../services/clubService'
-import type { Club } from '../types/club'
+import { fetchCalendar, type CalendarEvent } from '../services/clubService'
+import { clubImage } from '../utils/clubImages'
 
 type DailyEvent = {
   id: number
   title: string
-  category: string
-  cadence: string
-  timeLabel: string
-  scheduleNote: string | null
+  avatarUrl: string
   location: string | null
-  advisor: string | null
 }
 
 const calendarDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -104,12 +100,16 @@ function buildScheduleFromEvents(events: CalendarEvent[]) {
     const entry: DailyEvent = {
       id: event.clubId,
       title: event.clubName,
-      category: event.category,
-      cadence: parsed.cadence,
-      timeLabel: parsed.timeLabel,
-      scheduleNote: event.scheduleNote ?? null,
+      avatarUrl: clubImage({
+        id: event.clubId,
+        name: event.clubName,
+        imageUrl: event.imageUrl,
+        instagramUrl: event.instagramUrl,
+        createdAt: event.createdAt,
+        updatedAt: event.updatedAt,
+      }),
       location: event.location ?? null,
-      advisor: event.advisor ?? null}
+    }
 
     const bucket = schedule[parsed.day] ?? []
     bucket.push(entry)
@@ -123,45 +123,14 @@ function buildScheduleFromEvents(events: CalendarEvent[]) {
   return schedule
 }
 
-function buildSchedule(clubs: Club[]) {
-  const schedule = createEmptySchedule()
-  clubs.forEach((club) => {
-    const parsed = parseMeetingSchedule(club.meetingSchedule)
-    if (!parsed) return
-    const meetingDate = getWeekDate(parsed.day)
-    if (!meetingDate || !occursOnDate(parsed, meetingDate)) return
-
-    const entry: DailyEvent = {
-      id: club.id,
-      title: club.name,
-      category: club.category,
-      cadence: parsed.cadence,
-      timeLabel: parsed.timeLabel,
-      scheduleNote: club.scheduleNote ?? null,
-      location: club.location ?? null,
-      advisor: club.advisor ?? null}
-
-    const bucket = schedule[parsed.day] ?? []
-    bucket.push(entry)
-    schedule[parsed.day] = bucket
-  })
-
-  Object.values(schedule).forEach((events) => {
-    events.sort((a, b) => a.title.localeCompare(b.title))
-  })
-
-  return schedule
-}
-
-function parseMeetingSchedule(meetingSchedule: string | null): { day: string; cadence: string; timeLabel: string } | null {
+function parseMeetingSchedule(meetingSchedule: string | null): { day: string; cadence: string } | null {
   if (!meetingSchedule) return null
   const day = extractDay(meetingSchedule)
   if (!day) return null
 
   const parts = meetingSchedule.split('\u00b7').map((part) => part.trim()).filter(Boolean)
   const cadence = parts[1] ?? 'Weekly'
-  const timeLabel = parts[2] ?? parts[1] ?? 'See club details'
-  return { day, cadence, timeLabel }
+  return { day, cadence }
 }
 
 function extractDay(value: string) {
@@ -191,7 +160,7 @@ function extractDay(value: string) {
 }
 
 function occursOnDate(
-  schedule: { cadence: string; timeLabel: string },
+  schedule: { cadence: string },
   date: Date,
 ) {
   const cadence = schedule.cadence.toLowerCase()
@@ -300,18 +269,15 @@ function formatWeekDate(day: string) {
                 :key="event.id"
                 class="event-card"
                 :to="`/clubs/${event.id}`"
+                :aria-label="`${event.title}, ${event.location || 'Location TBD'}`"
               >
-                <div class="event-title-row">
-                  <h3>{{ event.title }}</h3>
-                  <span class="event-badge">{{ event.category }}</span>
-                </div>
-                <p class="event-detail">{{ event.timeLabel }}</p>
-                <p v-if="event.scheduleNote" class="event-note">{{ event.scheduleNote }}</p>
-                <div class="event-meta">
-                  <p class="event-location">{{ event.location || 'Location TBD' }}</p>
-                  <p class="event-cadence">{{ event.cadence }}</p>
-                  <p v-if="event.advisor" class="event-advisor">{{ event.advisor }}</p>
-                </div>
+                <img
+                  class="event-avatar"
+                  :src="event.avatarUrl"
+                  :alt="`${event.title} avatar`"
+                  loading="lazy"
+                />
+                <p class="event-location">{{ event.location || 'Location TBD' }}</p>
               </RouterLink>
             </template>
             <p v-else class="empty">No meetings scheduled</p>
@@ -468,11 +434,11 @@ function formatWeekDate(day: string) {
 
 .event-card {
   background: var(--mv-surface-soft);
-  padding: 1rem 1.25rem;
+  padding: 0.8rem;
   border-radius: 18px;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.75rem;
   color: inherit;
   text-decoration: none;
   border: 1px solid var(--mv-border);
@@ -493,65 +459,21 @@ function formatWeekDate(day: string) {
   outline-offset: 4px;
 }
 
-.event-title-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.event-title-row h3 {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.35;
-}
-
-.event-badge {
-  font-size: 0.75rem;
-  padding: 0.15rem 0.6rem;
-  border-radius: 999px;
-  background: var(--mv-surface-accent);
-  color: var(--mv-gold);
-}
-
-.event-detail,
-.event-note,
-.event-location,
-.event-advisor {
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.event-detail {
-  color: var(--mv-text-soft);
-}
-
-.event-note {
-  padding: 0.55rem 0.7rem;
-  border-radius: 12px;
-  background: var(--mv-surface-card);
+.event-avatar {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 16px;
   border: 1px solid var(--mv-border);
-  color: var(--mv-text-soft);
-  white-space: pre-wrap;
+  background: var(--mv-surface-accent);
+  object-fit: cover;
 }
 
-.event-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.event-location,
-.event-cadence,
-.event-advisor {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
+.event-location {
+  margin: 0;
   color: var(--mv-text-faint);
-}
-
-.event-cadence {
-  color: var(--mv-gold);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .empty {
@@ -626,12 +548,10 @@ function formatWeekDate(day: string) {
     padding: 0.75rem;
   }
 
-  .event-title-row h3 {
-    font-size: 0.9rem;
-  }
-
-  .event-detail {
-    font-size: 0.85rem;
+  .event-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
   }
 }
 </style>

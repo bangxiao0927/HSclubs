@@ -265,6 +265,10 @@ public class ClubController {
             event.put("scheduleNote", club.getScheduleNote());
             event.put("location", club.getLocation());
             event.put("advisor", club.getAdvisor());
+            event.put("imageUrl", club.getImageUrl());
+            event.put("instagramUrl", club.getInstagramUrl());
+            event.put("createdAt", club.getCreatedAt());
+            event.put("updatedAt", club.getUpdatedAt());
             events.add(event);
         }
         return events;

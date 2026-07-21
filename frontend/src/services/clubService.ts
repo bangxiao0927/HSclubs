@@ -198,6 +198,10 @@ export interface CalendarEvent {
   scheduleNote: string | null
   location: string | null
   advisor: string | null
+  imageUrl: string | null
+  instagramUrl: string | null
+  createdAt: string | null
+  updatedAt: string | null
 }
 
 export const fetchCalendar = () =>

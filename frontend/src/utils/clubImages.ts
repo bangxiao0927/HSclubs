@@ -2,6 +2,9 @@ import type { Club } from '../types/club'
 import { buildApiUrl } from '../services/httpClient'
 import { localAvatar } from './avatarImages'
 
+type ClubImageSource = Pick<Club, 'id' | 'name' | 'imageUrl'> &
+  Partial<Pick<Club, 'instagramUrl' | 'createdAt' | 'updatedAt'>>
+
 const instagramHandle = (url?: string | null) => {
   if (!url) {
     return null
@@ -45,7 +48,7 @@ const instagramHandle = (url?: string | null) => {
   }
 }
 
-const cachedInstagramAvatar = (club: Club) => {
+const cachedInstagramAvatar = (club: ClubImageSource) => {
   const handle = instagramHandle(club.instagramUrl)
   if (!handle) {
     return null
@@ -54,7 +57,7 @@ const cachedInstagramAvatar = (club: Club) => {
   return buildApiUrl(`/api/avatars/instagram/${encodeURIComponent(handle)}?v=${version}`)
 }
 
-export const clubImage = (club: Club): string => {
+export const clubImage = (club: ClubImageSource): string => {
   if (club.imageUrl) {
     return buildApiUrl(club.imageUrl)
   }
