@@ -69,6 +69,43 @@ FRONTEND_ORIGIN=http://localhost:4173
 # APP_AUTHORIZATION_REQUEST_BASE_URI=/api/auth/authorize
 ```
 
+### Instaloader avatar cache
+
+The backend uses a separate Python virtual environment for Instaloader. Set it
+up once on the host that runs the backend:
+
+```bash
+cd /opt/hsclubs
+./scripts/setup-instaloader.sh
+```
+
+Add the following to `/opt/hsclubs/backend/.env`:
+
+```bash
+APP_INSTAGRAM_AVATAR_CACHE_ENABLED=true
+APP_INSTAGRAM_AVATAR_PYTHON_COMMAND=/opt/hsclubs/backend/.venv/bin/python
+```
+
+Instaloader must use an authenticated Instagram source. A saved session is the
+most suitable option for a headless production host:
+
+```bash
+/opt/hsclubs/backend/.venv/bin/instaloader --login your_instagram_username
+```
+
+Copy the resulting session file to private persistent storage and configure it
+in `backend/.env`:
+
+```bash
+APP_INSTAGRAM_AVATAR_SESSION_USER=your_instagram_username
+APP_INSTAGRAM_AVATAR_SESSION_FILE=/opt/hsclubs/backend/.instaloader/session-your_instagram_username
+```
+
+Do not commit session files or browser cookies. The repository ignores
+`backend/.venv/` and `backend/.instaloader/` for this reason. If the session is
+not configured, Instaloader requests may be rejected by Instagram and the
+backend will use its web-profile fallback or a generated placeholder.
+
 ### Frontend (`frontend/.env` or `.env.production`)
 
 ```bash
@@ -340,6 +377,8 @@ The `/api/auth/providers` endpoint auto-discovers all configured providers.
 
 - [ ] MySQL database created with `utf8mb4` charset
 - [ ] `backend/.env` configured with real credentials
+- [ ] Instaloader virtualenv installed if Instagram avatar caching is enabled
+- [ ] Authenticated Instaloader session stored on private persistent storage
 - [ ] `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set
 - [ ] `APP_OWNER_EMAILS` populated (comma-separated)
 - [ ] `FRONTEND_ORIGIN` matches production URL
