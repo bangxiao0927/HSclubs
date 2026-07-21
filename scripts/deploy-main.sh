@@ -78,20 +78,34 @@ read_env_value() {
   local key="$1"
 
   awk -v key="$key" '
-    index($0, key "=") == 1 {
-      sub("^[^=]*=", "")
-      sub("\r$", "")
-      print tolower($0)
-      exit
+    {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      separator = index(line, "=")
+      if (separator == 0) {
+        next
+      }
+      candidate = substr(line, 1, separator - 1)
+      sub(/[[:space:]]*$/, "", candidate)
+      if (candidate == key) {
+        value = substr(line, separator + 1)
+        sub(/^[[:space:]]*/, "", value)
+        sub(/[[:space:]]*$/, "", value)
+        print value
+        exit
+      }
     }
   ' "$BACKEND_ENV_FILE"
 }
 
 initialize_instaloader() {
   local cache_enabled
+  local configured_python
+  local expected_python
 
   cache_enabled="$(read_env_value APP_INSTAGRAM_AVATAR_CACHE_ENABLED)"
   cache_enabled="${cache_enabled:-true}"
+  cache_enabled="$(printf '%s\n' "$cache_enabled" | awk '{print tolower($0)}')"
   case "$cache_enabled" in
     false|0|no|off)
       log "Skipping Instaloader setup because the Instagram avatar cache is disabled."
@@ -106,6 +120,16 @@ initialize_instaloader() {
 
   [[ -x "$APP_DIR/scripts/setup-instaloader.sh" ]] || \
     die "Instaloader setup script is missing or not executable."
+
+  expected_python="${INSTALOADER_VENV_DIR:-$APP_DIR/backend/.venv}/bin/python"
+  configured_python="$(read_env_value APP_INSTAGRAM_AVATAR_PYTHON_COMMAND)"
+  if [[ "$configured_python" == "$expected_python" ]]; then
+    run "$APP_DIR/scripts/setup-instaloader.sh" --env-file "$BACKEND_ENV_FILE"
+    return
+  fi
+
+  [[ -w "$BACKEND_ENV_FILE" ]] || \
+    die "Backend environment file must be writable to configure Instaloader: $BACKEND_ENV_FILE"
   run "$APP_DIR/scripts/setup-instaloader.sh" --configure-env --env-file "$BACKEND_ENV_FILE"
 }
 

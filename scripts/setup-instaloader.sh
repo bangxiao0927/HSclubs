@@ -65,11 +65,22 @@ read_env_value() {
 
   [[ -r "$file" ]] || return 1
   awk -v key="$key" '
-    index($0, key "=") == 1 {
-      sub("^[^=]*=", "")
-      sub("\r$", "")
-      print
-      exit
+    {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      separator = index(line, "=")
+      if (separator == 0) {
+        next
+      }
+      candidate = substr(line, 1, separator - 1)
+      sub(/[[:space:]]*$/, "", candidate)
+      if (candidate == key) {
+        value = substr(line, separator + 1)
+        sub(/^[[:space:]]*/, "", value)
+        sub(/[[:space:]]*$/, "", value)
+        print value
+        exit
+      }
     }
   ' "$file"
 }
@@ -89,14 +100,21 @@ upsert_env_value() {
   temp_file="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
   if ! awk -v key="$key" -v value="$value" '
     BEGIN { updated = 0 }
-    index($0, key "=") == 1 {
-      if (!updated) {
-        print key "=" value
-        updated = 1
+    {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      separator = index(line, "=")
+      candidate = separator == 0 ? "" : substr(line, 1, separator - 1)
+      sub(/[[:space:]]*$/, "", candidate)
+      if (candidate == key) {
+        if (!updated) {
+          print key "=" value
+          updated = 1
+        }
+        next
       }
-      next
+      print
     }
-    { print }
     END {
       if (!updated) {
         print key "=" value
