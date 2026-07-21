@@ -261,6 +261,7 @@ public class ClubService {
             throw new IllegalArgumentException("Invalid category");
         }
         club.setCategory(normalizedCategory);
+        club.setLocation(ClubLocationNormalizer.normalize(club.getLocation()));
         if (club.getAchievements() == null) {
             club.setAchievements(Collections.emptyList());
         }

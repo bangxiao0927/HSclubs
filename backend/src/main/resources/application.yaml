@@ -8,6 +8,8 @@ server:
         max-age: 7d  # Persist JSESSIONID across browser restarts
 
 app:
+  club-location-repair:
+    enabled: ${APP_CLUB_LOCATION_REPAIR_ENABLED:true}
   security:
     frontend-origin: ${FRONTEND_ORIGIN}
     allowed-origins:

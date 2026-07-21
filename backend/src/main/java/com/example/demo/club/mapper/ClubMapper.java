@@ -14,6 +14,8 @@ public interface ClubMapper {
 
     List<Club> findAll();
 
+    List<Club> findAllLocations();
+
     Club findById(@Param("id") Long id);
 
     List<Club> findAllPaginated(@Param("offset") int offset,
@@ -34,6 +36,8 @@ public interface ClubMapper {
     int insert(Club club);
 
     int update(Club club);
+
+    int updateLocation(@Param("id") Long id, @Param("location") String location);
 
     int delete(@Param("id") Long id);
 

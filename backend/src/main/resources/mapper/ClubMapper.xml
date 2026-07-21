@@ -107,6 +107,11 @@
         WHERE <include refid="ActiveClause" />
     </select>
 
+    <select id="findAllLocations" resultType="com.example.demo.club.model.Club">
+        SELECT id, location
+        FROM clubs
+    </select>
+
     <insert id="insert" parameterType="com.example.demo.club.model.Club"
             useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         INSERT INTO clubs (name, slug, alias_name, description, category,
@@ -141,6 +146,13 @@
             visibility = #{visibility},
             approved_at = #{approvedAt},
             approved_by_oauth_user_id = #{approvedByOauthUserId},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateLocation">
+        UPDATE clubs
+        SET location = #{location},
             updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id}
     </update>

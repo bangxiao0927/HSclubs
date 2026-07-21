@@ -18,6 +18,8 @@ LOCAL_OUTPUT_PATH = pathlib.Path("backend/src/main/resources/data.sql")
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 INSTAGRAM_HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9._]{1,64}$")
 INSTAGRAM_PLACEHOLDERS = {"n/a", "none", "none yet", "not established yet", "tbd"}
+ROOM_PREFIX_PATTERN = re.compile(r"^room\s+(.+)$", re.IGNORECASE)
+ROOM_NUMBER_PATTERN = re.compile(r"^(?:[A-Za-z]\d+|\d+)(?:\b.*)?$")
 LOCAL_USER_SEED = """-- Local-only users for authentication and membership testing.
 INSERT INTO oauth_users (uid, provider, provider_user_id, email, display_name, avatar_url, role) VALUES
   (1, 'google', 'google-123', 'maya.chen@example.com', 'Maya Chen', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Maya', 'student'),
@@ -44,6 +46,20 @@ def clean(value: str | None) -> str | None:
     if not value:
         return None
     return re.sub(r"\s+", " ", value)
+
+
+def normalize_location(raw: str | None) -> str | None:
+    """Prefix room-number locations while preserving named campus locations."""
+
+    value = clean(raw)
+    if not value:
+        return None
+    prefixed_room = ROOM_PREFIX_PATTERN.fullmatch(value)
+    if prefixed_room:
+        return f"Room {prefixed_room.group(1).strip()}"
+    if ROOM_NUMBER_PATTERN.fullmatch(value):
+        return f"Room {value}"
+    return value
 
 
 def extract_emails(raw: str | None) -> str | None:
@@ -102,7 +118,7 @@ def build_record(idx: int, row: dict[str, str | None], slug: str) -> dict[str, o
     advisor_email = extract_emails(row.get("Club Advisor Email"))
     president_email = extract_emails(row.get("Club President Email"))
     contact_email = president_email or advisor_email
-    location = clean(row.get("Meeting Room Number"))
+    location = normalize_location(row.get("Meeting Room Number"))
     meeting_schedule = build_meeting_schedule(row)
 
     return {
