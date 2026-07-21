@@ -98,10 +98,36 @@ read_env_value() {
   ' "$BACKEND_ENV_FILE"
 }
 
+resolve_absolute_path() {
+  local path="$1"
+  local directory
+  local basename
+
+  [[ "$path" = /* ]] || path="$APP_DIR/$path"
+  directory="$(dirname "$path")"
+  basename="$(basename "$path")"
+
+  if [[ -d "$directory" ]]; then
+    printf '%s/%s\n' "$(cd "$directory" && pwd -P)" "$basename"
+    return
+  fi
+
+  local normalized_parent
+  local current="$path"
+  local suffix=""
+  while [[ ! -d "$current" ]]; do
+    suffix="/$(basename "$current")$suffix"
+    current="$(dirname "$current")"
+  done
+  normalized_parent="$(cd "$current" && pwd -P)"
+  printf '%s%s\n' "$normalized_parent" "$suffix"
+}
+
 initialize_instaloader() {
   local cache_enabled
   local configured_python
   local expected_python
+  local venv_dir
 
   cache_enabled="$(read_env_value APP_INSTAGRAM_AVATAR_CACHE_ENABLED)"
   cache_enabled="${cache_enabled:-true}"
@@ -121,7 +147,8 @@ initialize_instaloader() {
   [[ -x "$APP_DIR/scripts/setup-instaloader.sh" ]] || \
     die "Instaloader setup script is missing or not executable."
 
-  expected_python="${INSTALOADER_VENV_DIR:-$APP_DIR/backend/.venv}/bin/python"
+  venv_dir="$(resolve_absolute_path "${INSTALOADER_VENV_DIR:-$APP_DIR/backend/.venv}")"
+  expected_python="$venv_dir/bin/python"
   configured_python="$(read_env_value APP_INSTAGRAM_AVATAR_PYTHON_COMMAND)"
   if [[ "$configured_python" == "$expected_python" ]]; then
     run "$APP_DIR/scripts/setup-instaloader.sh" --env-file "$BACKEND_ENV_FILE"

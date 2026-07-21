@@ -3,12 +3,39 @@ set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-VENV_DIR="${INSTALOADER_VENV_DIR:-$APP_DIR/backend/.venv}"
 ENV_FILE="${BACKEND_ENV_FILE:-$APP_DIR/backend/.env}"
 REQUIREMENTS_FILE="$APP_DIR/backend/requirements-instaloader.txt"
-REQUIREMENTS_MARKER="$VENV_DIR/.hsclubs-instaloader-requirements"
 CONFIGURE_ENV=0
 CHECK_ONLY=0
+
+resolve_absolute_path() {
+  local path="$1"
+  local directory
+  local basename
+
+  [[ "$path" = /* ]] || path="$APP_DIR/$path"
+  directory="$(dirname "$path")"
+  basename="$(basename "$path")"
+
+  if [[ ! -d "$directory" ]]; then
+    local normalized_parent
+    local current="$directory"
+    local suffix=""
+
+    while [[ ! -d "$current" ]]; do
+      suffix="/$(basename "$current")$suffix"
+      current="$(dirname "$current")"
+    done
+    normalized_parent="$(cd "$current" && pwd -P)"
+    printf '%s%s/%s\n' "$normalized_parent" "$suffix" "$basename"
+    return
+  fi
+
+  printf '%s/%s\n' "$(cd "$directory" && pwd -P)" "$basename"
+}
+
+VENV_DIR="$(resolve_absolute_path "${INSTALOADER_VENV_DIR:-$APP_DIR/backend/.venv}")"
+REQUIREMENTS_MARKER="$VENV_DIR/.hsclubs-instaloader-requirements"
 
 log() {
   printf '\n[Instaloader setup] %s\n' "$*"
@@ -129,6 +156,7 @@ upsert_env_value() {
 }
 
 check_installation() {
+  local cache_enabled=""
   local configured_python=""
   local failed=0
 
@@ -154,6 +182,18 @@ check_installation() {
         "$ENV_FILE" "$VENV_DIR/bin/python" >&2
       failed=1
     fi
+
+    cache_enabled="$(read_env_value APP_INSTAGRAM_AVATAR_CACHE_ENABLED "$ENV_FILE" || true)"
+    cache_enabled="$(printf '%s\n' "$cache_enabled" | awk '{print tolower($0)}')"
+    case "$cache_enabled" in
+      true|1|yes|on)
+        ;;
+      *)
+        printf 'ERROR: %s does not enable APP_INSTAGRAM_AVATAR_CACHE_ENABLED\n' \
+          "$ENV_FILE" >&2
+        failed=1
+        ;;
+    esac
   fi
 
   [[ "$failed" == "0" ]] || return 1
