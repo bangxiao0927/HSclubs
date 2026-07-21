@@ -13,6 +13,7 @@ BACKEND_RUN_USER="${BACKEND_RUN_USER:-hsclubs}"
 SYSTEMD_SCOPE="${SYSTEMD_SCOPE:-system}"
 RUN_BACKEND_TESTS="${RUN_BACKEND_TESTS:-0}"
 SKIP_GIT_PULL="${SKIP_GIT_PULL:-0}"
+SETUP_INSTALOADER="${SETUP_INSTALOADER:-1}"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -69,6 +70,94 @@ validate_configuration() {
     die "BACKEND_SERVICE must be a systemd service name ending in .service."
   [[ "$SYSTEMD_SCOPE" == "user" || "$SYSTEMD_SCOPE" == "system" ]] || \
     die "SYSTEMD_SCOPE must be either 'user' or 'system'."
+  [[ "$SETUP_INSTALOADER" == "0" || "$SETUP_INSTALOADER" == "1" ]] || \
+    die "SETUP_INSTALOADER must be either '0' or '1'."
+}
+
+read_env_value() {
+  local key="$1"
+
+  awk -v key="$key" '
+    {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      separator = index(line, "=")
+      if (separator == 0) {
+        next
+      }
+      candidate = substr(line, 1, separator - 1)
+      sub(/[[:space:]]*$/, "", candidate)
+      if (candidate == key) {
+        value = substr(line, separator + 1)
+        sub(/^[[:space:]]*/, "", value)
+        sub(/[[:space:]]*$/, "", value)
+        print value
+        exit
+      }
+    }
+  ' "$BACKEND_ENV_FILE"
+}
+
+resolve_absolute_path() {
+  local path="$1"
+  local directory
+  local basename
+
+  [[ "$path" = /* ]] || path="$APP_DIR/$path"
+  directory="$(dirname "$path")"
+  basename="$(basename "$path")"
+
+  if [[ -d "$directory" ]]; then
+    printf '%s/%s\n' "$(cd "$directory" && pwd -P)" "$basename"
+    return
+  fi
+
+  local normalized_parent
+  local current="$path"
+  local suffix=""
+  while [[ ! -d "$current" ]]; do
+    suffix="/$(basename "$current")$suffix"
+    current="$(dirname "$current")"
+  done
+  normalized_parent="$(cd "$current" && pwd -P)"
+  printf '%s%s\n' "$normalized_parent" "$suffix"
+}
+
+initialize_instaloader() {
+  local cache_enabled
+  local configured_python
+  local expected_python
+  local venv_dir
+
+  cache_enabled="$(read_env_value APP_INSTAGRAM_AVATAR_CACHE_ENABLED)"
+  cache_enabled="${cache_enabled:-true}"
+  cache_enabled="$(printf '%s\n' "$cache_enabled" | awk '{print tolower($0)}')"
+  case "$cache_enabled" in
+    false|0|no|off)
+      log "Skipping Instaloader setup because the Instagram avatar cache is disabled."
+      return
+      ;;
+  esac
+
+  if [[ "$SETUP_INSTALOADER" == "0" ]]; then
+    log "Skipping Instaloader setup because SETUP_INSTALOADER=0"
+    return
+  fi
+
+  [[ -x "$APP_DIR/scripts/setup-instaloader.sh" ]] || \
+    die "Instaloader setup script is missing or not executable."
+
+  venv_dir="$(resolve_absolute_path "${INSTALOADER_VENV_DIR:-$APP_DIR/backend/.venv}")"
+  expected_python="$venv_dir/bin/python"
+  configured_python="$(read_env_value APP_INSTAGRAM_AVATAR_PYTHON_COMMAND)"
+  if [[ "$configured_python" == "$expected_python" ]]; then
+    run "$APP_DIR/scripts/setup-instaloader.sh" --env-file "$BACKEND_ENV_FILE"
+    return
+  fi
+
+  [[ -w "$BACKEND_ENV_FILE" ]] || \
+    die "Backend environment file must be writable to configure Instaloader: $BACKEND_ENV_FILE"
+  run "$APP_DIR/scripts/setup-instaloader.sh" --configure-env --env-file "$BACKEND_ENV_FILE"
 }
 
 ensure_clean_worktree() {
@@ -205,6 +294,7 @@ main() {
   validate_configuration
   cd "$APP_DIR"
   update_source
+  initialize_instaloader
 
   log "Building frontend"
   cd "$APP_DIR/frontend"

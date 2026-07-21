@@ -60,11 +60,12 @@ Backend:
 ```bash
 cd backend
 cp .env.example .env   # fill in DB_PASSWORD and Google OAuth credentials
-pip install -r requirements-instaloader.txt  # optional: enables authenticated Instagram avatar caching
+../scripts/setup-instaloader.sh --configure-env  # Linux: install and configure Instaloader
+../scripts/setup-instaloader.sh --configure-env --check
 ./mvnw spring-boot:run
 ```
 
-Instaloader must use an authenticated Instagram session; anonymous Instaloader access is not supported because Instagram rejects it with `403 Forbidden`. Set `APP_INSTAGRAM_AVATAR_COOKIE_BROWSER=firefox` after logging into Instagram in Firefox, or create a saved session with `instaloader --login your_username` and set `APP_INSTAGRAM_AVATAR_SESSION_USER` / `APP_INSTAGRAM_AVATAR_SESSION_FILE` in `backend/.env`. Other browsers can be used by installing `browser-cookie3` for the backend Python environment.
+Instaloader must use an authenticated Instagram session; anonymous access is not supported because Instagram rejects it with `403 Forbidden`. On a headless Linux server, create a saved session as the backend service user and set `APP_INSTAGRAM_AVATAR_SESSION_USER` / `APP_INSTAGRAM_AVATAR_SESSION_FILE` in `backend/.env`. Browser-cookie support is installed for local Linux development. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#instaloader-avatar-cache) for distribution-specific prerequisites and session commands.
 If Instaloader cannot resolve a profile picture, the backend also tries Instagram's web profile API before returning the short-lived SVG fallback.
 The backend preloads avatars for clubs with an `instagramUrl`, stores them under `backend/uploads/avatar-cache/instagram`, and refreshes cached files after 60 days. The scheduler checks twice daily, but it only contacts Instagram for missing or expired files. Keep the upload directory and Instaloader session file on persistent, private storage in production.
 

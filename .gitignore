@@ -40,5 +40,7 @@ frontend/dist/
 frontend/.eslintcache
 .env
 backend/uploads/
+backend/.venv/
+backend/.instaloader/
 
 CODET.md
