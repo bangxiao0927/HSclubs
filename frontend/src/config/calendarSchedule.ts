@@ -1,5 +1,6 @@
 const DEFAULT_LUNCH_START = 11 * 60 + 30
 const DEFAULT_LUNCH_END = 13 * 60 + 30
+const DEFAULT_AFTER_SCHOOL_START = 15 * 60 + 10
 const DEFAULT_AFTER_SCHOOL_END = 18 * 60
 
 const parseTime = (value: string | undefined, fallback: number) => {
@@ -17,16 +18,23 @@ const requestedLunchStart = parseTime(
   DEFAULT_LUNCH_START,
 )
 const requestedLunchEnd = parseTime(import.meta.env.VITE_CALENDAR_LUNCH_END, DEFAULT_LUNCH_END)
+const requestedAfterSchoolStart = parseTime(
+  import.meta.env.VITE_CALENDAR_AFTER_SCHOOL_START,
+  DEFAULT_AFTER_SCHOOL_START,
+)
 const requestedAfterSchoolEnd = parseTime(
   import.meta.env.VITE_CALENDAR_AFTER_SCHOOL_END,
   DEFAULT_AFTER_SCHOOL_END,
 )
 const hasValidSequence =
-  requestedLunchStart < requestedLunchEnd && requestedLunchEnd < requestedAfterSchoolEnd
+  requestedLunchStart < requestedLunchEnd &&
+  requestedLunchEnd < requestedAfterSchoolStart &&
+  requestedAfterSchoolStart < requestedAfterSchoolEnd
 
 export const calendarSchedule = {
   lunchStart: hasValidSequence ? requestedLunchStart : DEFAULT_LUNCH_START,
   lunchEnd: hasValidSequence ? requestedLunchEnd : DEFAULT_LUNCH_END,
+  afterSchoolStart: hasValidSequence ? requestedAfterSchoolStart : DEFAULT_AFTER_SCHOOL_START,
   afterSchoolEnd: hasValidSequence ? requestedAfterSchoolEnd : DEFAULT_AFTER_SCHOOL_END,
 }
 

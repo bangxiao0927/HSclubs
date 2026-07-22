@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { calendarSchedule, formatScheduleTime } from '../config/calendarSchedule'
@@ -28,13 +28,14 @@ const meetingPeriods: Array<{ key: MeetingPeriod; label: string; time: string }>
   {
     key: 'afterSchool',
     label: 'After School',
-    time: `${formatScheduleTime(calendarSchedule.lunchEnd)} - ${formatScheduleTime(calendarSchedule.afterSchoolEnd)}`,
+    time: `${formatScheduleTime(calendarSchedule.afterSchoolStart)} - ${formatScheduleTime(calendarSchedule.afterSchoolEnd)}`,
   },
 ]
 
 const now = ref(new Date())
 const loading = ref(true)
 const error = ref('')
+const calendarEvents = ref<CalendarEvent[]>([])
 const weeklySchedule = ref<WeeklySchedule>(createEmptySchedule())
 let clockTimer: ReturnType<typeof setInterval> | undefined
 
@@ -88,7 +89,7 @@ const currentTimeLabel = computed(() =>
 
 const currentTimeMarker = computed(() => {
   const minutes = now.value.getHours() * 60 + now.value.getMinutes()
-  const { lunchStart, lunchEnd, afterSchoolEnd } = calendarSchedule
+  const { lunchStart, lunchEnd, afterSchoolStart, afterSchoolEnd } = calendarSchedule
 
   if (minutes >= lunchStart && minutes <= lunchEnd) {
     return {
@@ -97,14 +98,22 @@ const currentTimeMarker = computed(() => {
     }
   }
 
-  if (minutes < lunchEnd || minutes > afterSchoolEnd) {
+  if (minutes < afterSchoolStart || minutes > afterSchoolEnd) {
     return null
   }
 
   return {
     period: 'afterSchool' as MeetingPeriod,
-    offset: clampPercentage(((minutes - lunchEnd) / (afterSchoolEnd - lunchEnd)) * 100),
+    offset: clampPercentage(
+      ((minutes - afterSchoolStart) / (afterSchoolEnd - afterSchoolStart)) * 100,
+    ),
   }
+})
+
+const displayedWeekKey = computed(() => getWeekDate('Mon').toDateString())
+
+watch(displayedWeekKey, () => {
+  weeklySchedule.value = buildScheduleFromEvents(calendarEvents.value)
 })
 
 onMounted(async () => {
@@ -116,6 +125,7 @@ onMounted(async () => {
   error.value = ''
   try {
     const events = await fetchCalendar()
+    calendarEvents.value = events
     weeklySchedule.value = buildScheduleFromEvents(events)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load schedule'
