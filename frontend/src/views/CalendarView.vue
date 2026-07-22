@@ -157,7 +157,8 @@ function buildScheduleFromEvents(events: CalendarEvent[]) {
 
     parsed.days.forEach((day) => {
       const meetingDate = getWeekDate(day)
-      if (!meetingDate || !occursOnDate(parsed.cadence, meetingDate)) return
+      const cadence = cadenceForDay(parsed.cadence, day)
+      if (!meetingDate || !occursOnDate(cadence, meetingDate)) return
 
       parsed.periods.forEach((period) => {
         schedule[day]?.[period].push({ ...entry })
@@ -246,6 +247,14 @@ function occursOnDate(cadenceLabel: string, date: Date) {
     return isLastOccurrenceOfWeekday(date)
   }
   return true
+}
+
+function cadenceForDay(cadenceLabel: string, day: string) {
+  const fullDayName = getWeekDate(day).toLocaleDateString('en-US', { weekday: 'long' })
+  const daySpecificCadence = cadenceLabel.match(
+    new RegExp(`${fullDayName} meetings? are (biweekly|weekly)`, 'i'),
+  )
+  return daySpecificCadence?.[1] ?? cadenceLabel
 }
 
 function getIsoWeek(date: Date) {

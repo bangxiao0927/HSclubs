@@ -47,7 +47,6 @@ CLUB_CATEGORY_BY_NAME = {
     "DERM (Dermatology Educational Research Mission) Club": "STEM & Innovation",
     "Drama Llamas": "Creative Arts & Media",
     "Dream Volunteers": "Service & Leadership",
-    "MVHS Drivers Association": "Service & Leadership",
     "Dungeons and Dragons": "Competition & Strategy",
     "Economics Club": "Service & Leadership",
     "Esports Club": "Competition & Strategy",
@@ -159,6 +158,15 @@ def clean(value: str | None) -> str | None:
     return re.sub(r"\s+", " ", value)
 
 
+def category_for(name: str) -> str:
+    """Return the production category or fail before writing an incomplete seed."""
+
+    category = CLUB_CATEGORY_BY_NAME.get(name)
+    if category is None:
+        raise RuntimeError(f"Club {name!r} is missing from CLUB_CATEGORY_BY_NAME")
+    return category
+
+
 def normalize_location(raw: str | None) -> str | None:
     """Prefix room-number locations while preserving named campus locations."""
 
@@ -238,7 +246,7 @@ def build_record(idx: int, row: dict[str, str | None], slug: str) -> dict[str, o
         "slug": slug,
         "alias_name": None,
         "description": description,
-        "category": CLUB_CATEGORY_BY_NAME[name],
+        "category": category_for(name),
         "meeting_schedule": meeting_schedule,
         "location": location,
         "contact_email": contact_email,
