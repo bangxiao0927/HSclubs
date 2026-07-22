@@ -62,7 +62,13 @@ export function occursOnDate(cadenceLabel: string, date: Date) {
   if (cadence.includes('last week of the month')) return isLastOccurrenceOfWeekday(date)
 
   // Without an occurrence week, monthly entries cannot be placed honestly on a weekly calendar.
-  if (cadence.includes('monthly') || cadence.includes('once a month')) return false
+  if (
+    cadence.includes('monthly') ||
+    cadence.includes('once a month') ||
+    /\b\d+\s+weeks?\s+per\s+month\b/.test(cadence)
+  ) {
+    return false
+  }
   return true
 }
 
