@@ -9,10 +9,15 @@ FRONTEND_DIST_TARGET="${FRONTEND_DIST_TARGET:-/var/www/hsclubs/frontend/dist}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-hsclubs.service}"
 BACKEND_ENV_FILE="${BACKEND_ENV_FILE:-$APP_DIR/backend/.env}"
 BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-http://127.0.0.1:8080/api/clubs}"
-# Run the service as the account performing the deployment unless an existing
-# service account is explicitly configured. A hard-coded account leaves the
-# generated unit in a 217/USER restart loop on hosts where it was never created.
-BACKEND_RUN_USER="${BACKEND_RUN_USER:-$(id -un)}"
+# Preserve the documented service account on configured hosts, but keep fresh
+# deployments working when that account has not been created.
+if [[ -z "${BACKEND_RUN_USER:-}" ]]; then
+  if id hsclubs >/dev/null 2>&1; then
+    BACKEND_RUN_USER="hsclubs"
+  else
+    BACKEND_RUN_USER="$(id -un)"
+  fi
+fi
 SYSTEMD_SCOPE="${SYSTEMD_SCOPE:-system}"
 RUN_BACKEND_TESTS="${RUN_BACKEND_TESTS:-0}"
 SKIP_GIT_PULL="${SKIP_GIT_PULL:-0}"
