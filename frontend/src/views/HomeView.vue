@@ -222,8 +222,7 @@ const changeHeroImage = (offset: number) => {
         <p class="section-label">Directory</p>
         <h2>All clubs</h2>
         <p class="section-subtitle">
-          Replace the sample clubs with your school data, then students can browse by name, advisor,
-          meeting time, or keyword.
+          Browse clubs by name, advisor, meeting time, or keyword.
         </p>
       </div>
       <div v-if="clubs.length" class="club-directory">
