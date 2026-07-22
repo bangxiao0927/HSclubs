@@ -4,9 +4,8 @@ import { RouterLink } from 'vue-router'
 
 import { calendarSchedule, formatScheduleTime } from '../config/calendarSchedule'
 import { fetchCalendar, type CalendarEvent } from '../services/clubService'
+import { occursOnDate, parseMeetingSchedule, type MeetingPeriod } from '../utils/calendarMeetings'
 import { clubImage } from '../utils/clubImages'
-
-type MeetingPeriod = 'lunch' | 'afterSchool'
 
 type DailyEvent = {
   id: number
@@ -185,104 +184,12 @@ function buildScheduleFromEvents(events: CalendarEvent[]) {
   return schedule
 }
 
-function parseMeetingSchedule(
-  meetingSchedule: string | null,
-): { days: string[]; cadence: string; periods: MeetingPeriod[] } | null {
-  if (!meetingSchedule) return null
-
-  const parts = meetingSchedule
-    .split('\u00b7')
-    .map((part) => part.trim())
-    .filter(Boolean)
-  const days = extractDays(parts[0] ?? '')
-  if (!days.length) return null
-
-  const cadence = parts[1] ?? 'Weekly'
-  const timeLabel = parts.slice(2).join(' ').toLowerCase()
-  const periods: MeetingPeriod[] = []
-  if (timeLabel.includes('lunch') || !timeLabel.includes('after')) periods.push('lunch')
-  if (timeLabel.includes('after')) periods.push('afterSchool')
-
-  return { days, cadence, periods }
-}
-
-function extractDays(value: string) {
-  const dayTokens: Record<string, string> = {
-    mon: 'Mon',
-    monday: 'Mon',
-    tue: 'Tue',
-    tues: 'Tue',
-    tuesday: 'Tue',
-    wed: 'Wed',
-    weds: 'Wed',
-    wednesday: 'Wed',
-    thu: 'Thu',
-    thur: 'Thu',
-    thurs: 'Thu',
-    thursday: 'Thu',
-    fri: 'Fri',
-    friday: 'Fri',
-    sat: 'Sat',
-    saturday: 'Sat',
-    sun: 'Sun',
-    sunday: 'Sun',
-  }
-  const matches = value
-    .toLowerCase()
-    .matchAll(
-      /(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)/g,
-    )
-
-  return [
-    ...new Set(Array.from(matches, (match) => dayTokens[match[1] as keyof typeof dayTokens])),
-  ].filter((day): day is string => Boolean(day))
-}
-
-function occursOnDate(cadenceLabel: string, date: Date) {
-  const cadence = cadenceLabel.toLowerCase()
-
-  if (cadence.includes('biweekly')) {
-    return getIsoWeek(date) % 2 === 0
-  }
-  if (cadence.includes('weekly')) {
-    return true
-  }
-  if (cadence.includes('first and last week of the month')) {
-    return isFirstOccurrenceOfWeekday(date) || isLastOccurrenceOfWeekday(date)
-  }
-  if (cadence.includes('first week of the month')) {
-    return isFirstOccurrenceOfWeekday(date)
-  }
-  if (cadence.includes('last week of the month')) {
-    return isLastOccurrenceOfWeekday(date)
-  }
-  return true
-}
-
 function cadenceForDay(cadenceLabel: string, day: string) {
   const fullDayName = getWeekDate(day).toLocaleDateString('en-US', { weekday: 'long' })
   const daySpecificCadence = cadenceLabel.match(
     new RegExp(`${fullDayName} meetings? are (biweekly|weekly)`, 'i'),
   )
   return daySpecificCadence?.[1] ?? cadenceLabel
-}
-
-function getIsoWeek(date: Date) {
-  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-  const dayNum = utcDate.getUTCDay() || 7
-  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNum)
-  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1))
-  return Math.ceil(((utcDate.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
-}
-
-function isFirstOccurrenceOfWeekday(date: Date) {
-  return date.getDate() <= 7
-}
-
-function isLastOccurrenceOfWeekday(date: Date) {
-  const nextWeek = new Date(date)
-  nextWeek.setDate(date.getDate() + 7)
-  return nextWeek.getMonth() !== date.getMonth()
 }
 
 function getWeekDate(day: string) {
