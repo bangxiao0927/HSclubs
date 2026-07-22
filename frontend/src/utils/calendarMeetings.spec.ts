@@ -30,9 +30,12 @@ describe('parseMeetingSchedule', () => {
 describe('occursOnDate', () => {
   const meetingDate = new Date(2026, 6, 7)
 
-  it.each(['Monthly', 'Once a month'])('does not expand %s entries into every week', (cadence) => {
-    expect(occursOnDate(cadence, meetingDate)).toBe(false)
-  })
+  it.each(['Monthly', 'Once a month', 'Once a week, 3 weeks per month'])(
+    'does not expand %s entries into every week',
+    (cadence) => {
+      expect(occursOnDate(cadence, meetingDate)).toBe(false)
+    },
+  )
 
   it('continues to display weekly entries', () => {
     expect(occursOnDate('Weekly', meetingDate)).toBe(true)
