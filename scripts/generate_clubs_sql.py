@@ -20,6 +20,116 @@ INSTAGRAM_HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9._]{1,64}$")
 INSTAGRAM_PLACEHOLDERS = {"n/a", "none", "none yet", "not established yet", "tbd"}
 ROOM_PREFIX_PATTERN = re.compile(r"^room\s+(.+)$", re.IGNORECASE)
 ROOM_NUMBER_PATTERN = re.compile(r"^(?:[A-Za-z]\d+|\d+)(?:\b.*)?$")
+# Keep local and redeployed seed data aligned with the production assignments.
+CLUB_CATEGORY_BY_NAME = {
+    "6th Man": "Wellness & Athletics",
+    "Aerospace & Aviation": "STEM & Innovation",
+    "Analytics Club": "STEM & Innovation",
+    "AAH (Animal Assisted Happiness)": "Wellness & Athletics",
+    "Animal Welfare Club": "Service & Leadership",
+    "Artificial Intelligence Club": "STEM & Innovation",
+    "Asian Pacific Union": "Culture & Identity",
+    "Badminton Club": "Wellness & Athletics",
+    "Barkada Club": "Culture & Identity",
+    "Biology Club": "STEM & Innovation",
+    "Black Student Union": "Culture & Identity",
+    "Bring Change to Mind Club": "Wellness & Athletics",
+    "Cancer Awareness and Research Club": "Service & Leadership",
+    "CASC (California Association of Student Councils) Club": "Service & Leadership",
+    "Chemistry Club": "STEM & Innovation",
+    "Chess Club": "Competition & Strategy",
+    "Children's Health Advocacy": "Service & Leadership",
+    "Chinese Culture Club": "Culture & Identity",
+    "Computer Science Club": "STEM & Innovation",
+    "Connected Through Cultures": "Culture & Identity",
+    "Crochet Club": "Creative Arts & Media",
+    "Dance-a-Gram": "Creative Arts & Media",
+    "DERM (Dermatology Educational Research Mission) Club": "STEM & Innovation",
+    "Drama Llamas": "Creative Arts & Media",
+    "Dream Volunteers": "Service & Leadership",
+    "Dungeons and Dragons": "Competition & Strategy",
+    "Economics Club": "Service & Leadership",
+    "Esports Club": "Competition & Strategy",
+    "F=ma Club": "Competition & Strategy",
+    "Fellowship of Christian Athletes": "Service & Leadership",
+    "Fentanyl & Substance Awareness Club": "Service & Leadership",
+    "Film Club": "Creative Arts & Media",
+    "Foreign Linguistics Club": "Service & Leadership",
+    "French Club": "Service & Leadership",
+    "French Honors Society": "Service & Leadership",
+    "Future Founders": "Service & Leadership",
+    "Gender Sexuality Alliance": "Service & Leadership",
+    "Girls Who Code Club": "Service & Leadership",
+    "Guitar Culture Club": "Service & Leadership",
+    "Ignition Club": "Service & Leadership",
+    "INARA": "Service & Leadership",
+    "Information Security Club": "STEM & Innovation",
+    "Japanese Culture Club": "Service & Leadership",
+    "Japanese National Honor Society": "Service & Leadership",
+    "Jewish Student Union (JSU)": "Service & Leadership",
+    "Juggling Club": "Service & Leadership",
+    "K-Pop Dance Club": "Service & Leadership",
+    "Korean Culture Club": "Culture & Identity",
+    "Latino Student Union": "Service & Leadership",
+    "Leo Club": "Service & Leadership",
+    "M1820 Christian Club": "Service & Leadership",
+    "Magic the Gathering Club": "Competition & Strategy",
+    "Marine Biology and Ocean Club": "STEM & Innovation",
+    "Math Club": "STEM & Innovation",
+    "MEChA": "Culture & Identity",
+    "MeToo": "Service & Leadership",
+    "Mock Trial": "Service & Leadership",
+    "Model UN": "Service & Leadership",
+    "Mountain View Los Altos Speech & Debate": "Competition & Strategy",
+    "Mountain View Science Olympiad": "STEM & Innovation",
+    "Music Outreach Club": "Service & Leadership",
+    "Muslim Student Association": "Service & Leadership",
+    "MV Greenteam": "Service & Leadership",
+    "MVHS Drivers Association": "Service & Leadership",
+    "MVHS Jazz and Composition Club": "Service & Leadership",
+    "MVHS Makers With A Mission": "STEM & Innovation",
+    "MVHS Pokémon Club": "Service & Leadership",
+    "MVHS Red Cross Club": "Service & Leadership",
+    "MVHS UNICEF": "Service & Leadership",
+    "MVHS Women in STEM": "Service & Leadership",
+    "National Art Honors Society": "Service & Leadership",
+    "Native American Student Union": "Service & Leadership",
+    "Owed Soap Initiative": "Service & Leadership",
+    "Persian Culture Club": "Service & Leadership",
+    "Personal Finance Club": "Service & Leadership",
+    "Physics and Astronomy Club": "Service & Leadership",
+    "Pitch & Prototype": "Service & Leadership",
+    "Poetry Club": "Creative Arts & Media",
+    "Psychology Club": "Wellness & Athletics",
+    "Puzzle Club": "Competition & Strategy",
+    "Rock Climbing Club": "Wellness & Athletics",
+    "RL Game Club": "Service & Leadership",
+    "SLAM Magazine": "Service & Leadership",
+    "Slavic Student Union": "Service & Leadership",
+    "South Asian Student Union": "Culture & Identity",
+    "Spartan Buddies": "Service & Leadership",
+    "Spartan Equity Partners": "Competition & Strategy",
+    "Stationery Club": "Service & Leadership",
+    "STEAM Club": "STEM & Innovation",
+    "Student Athlete Service Club": "Wellness & Athletics",
+    "Taiwanese American Student Association": "Culture & Identity",
+    "Technology Public Policy Club": "Service & Leadership",
+    "TEDxMVHS": "Service & Leadership",
+    "Theatre Club": "Service & Leadership",
+    "The MVHS AIAS Architecture Club": "STEM & Innovation",
+    "The Pediatrics Club": "STEM & Innovation",
+    "The Star Wars Club": "Service & Leadership",
+    "Ukrainian Culture Club": "Service & Leadership",
+    "Unhoused Awareness": "Service & Leadership",
+    "Vietnamese Student Association (VSA)": "Culture & Identity",
+    "Women Athlete's Club": "Service & Leadership",
+    "Women's Empowerment Club": "Service & Leadership",
+    "Write for Blue": "Service & Leadership",
+    "Youth Hunger Initiative": "Service & Leadership",
+    "Yearbook Club": "Creative Arts & Media",
+}
+
+
 LOCAL_USER_SEED = """-- Local-only users for authentication and membership testing.
 INSERT INTO oauth_users (uid, provider, provider_user_id, email, display_name, avatar_url, role) VALUES
   (1, 'google', 'google-123', 'maya.chen@example.com', 'Maya Chen', 'https://api.dicebear.com/7.x/thumbs/svg?seed=Maya', 'student'),
@@ -46,6 +156,15 @@ def clean(value: str | None) -> str | None:
     if not value:
         return None
     return re.sub(r"\s+", " ", value)
+
+
+def category_for(name: str) -> str:
+    """Return the production category or fail before writing an incomplete seed."""
+
+    category = CLUB_CATEGORY_BY_NAME.get(name)
+    if category is None:
+        raise RuntimeError(f"Club {name!r} is missing from CLUB_CATEGORY_BY_NAME")
+    return category
 
 
 def normalize_location(raw: str | None) -> str | None:
@@ -127,7 +246,7 @@ def build_record(idx: int, row: dict[str, str | None], slug: str) -> dict[str, o
         "slug": slug,
         "alias_name": None,
         "description": description,
-        "category": None,
+        "category": category_for(name),
         "meeting_schedule": meeting_schedule,
         "location": location,
         "contact_email": contact_email,

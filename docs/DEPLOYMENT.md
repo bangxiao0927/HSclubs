@@ -22,16 +22,16 @@
 
 ## Prerequisites
 
-| Component | Minimum Version | Purpose |
-|-----------|----------------|---------|
-| Java | 17+ | Backend runtime |
-| MySQL | 8.0+ | Database |
-| Node.js | 20+ | Frontend build |
-| npm | 10+ | Frontend dependencies |
-| Python | 3.10+ with `venv` and `pip` | Instaloader avatar cache |
-| Nginx | 1.24+ | Reverse proxy (production) |
-| Google Cloud Project | — | OAuth2 credentials |
-| Domain | — | HTTPS + OAuth redirect |
+| Component            | Minimum Version             | Purpose                    |
+| -------------------- | --------------------------- | -------------------------- |
+| Java                 | 17+                         | Backend runtime            |
+| MySQL                | 8.0+                        | Database                   |
+| Node.js              | 20+                         | Frontend build             |
+| npm                  | 10+                         | Frontend dependencies      |
+| Python               | 3.10+ with `venv` and `pip` | Instaloader avatar cache   |
+| Nginx                | 1.24+                       | Reverse proxy (production) |
+| Google Cloud Project | —                           | OAuth2 credentials         |
+| Domain               | —                           | HTTPS + OAuth redirect     |
 
 ---
 
@@ -140,7 +140,15 @@ VITE_API_BASE_URL=http://localhost:8080
 
 # For production builds, set to your backend URL:
 # VITE_API_BASE_URL=https://api.yourdomain.com
+
+# Calendar schedule in 24-hour HH:mm format:
+VITE_CALENDAR_LUNCH_START=11:30
+VITE_CALENDAR_LUNCH_END=13:30
+VITE_CALENDAR_AFTER_SCHOOL_START=15:10
+VITE_CALENDAR_AFTER_SCHOOL_END=18:00
 ```
+
+Vite embeds these values during `npm run build`. Rebuild and republish the frontend after changing them.
 
 ---
 
@@ -268,11 +276,11 @@ curl http://localhost:8080/api/auth/providers
 
 ### Sizing guidelines
 
-| School count | RAM | CPU |
-|-------------|-----|-----|
-| 1–10 | 512 MB | 1 vCPU |
-| 10–50 | 1 GB | 2 vCPU |
-| 50+ | 2 GB+ | 2–4 vCPU |
+| School count | RAM    | CPU      |
+| ------------ | ------ | -------- |
+| 1–10         | 512 MB | 1 vCPU   |
+| 10–50        | 1 GB   | 2 vCPU   |
+| 50+          | 2 GB+  | 2–4 vCPU |
 
 ---
 
@@ -467,10 +475,9 @@ Ensure `FRONTEND_ORIGIN` matches the actual frontend URL exactly (protocol + hos
 ### OAuth redirect mismatch
 
 Google OAuth redirect URIs must match exactly:
+
 - Dev: `http://localhost:8080/api/auth/google/callback`
 - Prod: `https://yourdomain.com/api/auth/google/callback`
-
-
 
 ### Invitation link not working
 

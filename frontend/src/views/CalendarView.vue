@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
+import { calendarSchedule, formatScheduleTime } from '../config/calendarSchedule'
 import { fetchCalendar, type CalendarEvent } from '../services/clubService'
+import { occursOnDate, parseMeetingSchedule, type MeetingPeriod } from '../utils/calendarMeetings'
 import { clubImage } from '../utils/clubImages'
 
 type DailyEvent = {
@@ -12,38 +14,58 @@ type DailyEvent = {
   location: string | null
 }
 
-const calendarDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const today = new Date()
+type DaySchedule = Record<MeetingPeriod, DailyEvent[]>
+type WeeklySchedule = Record<string, DaySchedule>
 
+const calendarDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const meetingPeriods: Array<{ key: MeetingPeriod; label: string; time: string }> = [
+  {
+    key: 'lunch',
+    label: 'Lunch',
+    time: `${formatScheduleTime(calendarSchedule.lunchStart)} - ${formatScheduleTime(calendarSchedule.lunchEnd)}`,
+  },
+  {
+    key: 'afterSchool',
+    label: 'After School',
+    time: `${formatScheduleTime(calendarSchedule.afterSchoolStart)} - ${formatScheduleTime(calendarSchedule.afterSchoolEnd)}`,
+  },
+]
+
+const now = ref(new Date())
 const loading = ref(true)
 const error = ref('')
-
-const dailySchedule = ref<Record<string, DailyEvent[]>>(createEmptySchedule())
+const calendarEvents = ref<CalendarEvent[]>([])
+const weeklySchedule = ref<WeeklySchedule>(createEmptySchedule())
+let clockTimer: ReturnType<typeof setInterval> | undefined
 
 const weekDates = computed(() => {
-  const current = new Date(today)
+  const current = new Date(now.value)
   const jsDay = current.getDay()
   const diffToMonday = jsDay === 0 ? -6 : 1 - jsDay
   const monday = new Date(current)
   monday.setDate(current.getDate() + diffToMonday)
 
-  return calendarDays.reduce((acc, day, index) => {
-    const date = new Date(monday)
-    date.setDate(monday.getDate() + index)
-    acc[day] = date
-    return acc
-  }, {} as Record<string, Date>)
+  return calendarDays.reduce(
+    (acc, day, index) => {
+      const date = new Date(monday)
+      date.setDate(monday.getDate() + index)
+      acc[day] = date
+      return acc
+    },
+    {} as Record<string, Date>,
+  )
 })
 
 const todayLabel = computed(() =>
   new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
     month: 'long',
-    day: 'numeric'}).format(today),
+    day: 'numeric',
+  }).format(now.value),
 )
 
 const todayShortLabel = computed(() =>
-  new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(today),
+  new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(now.value),
 )
 
 const weekRangeLabel = computed(() => {
@@ -57,24 +79,53 @@ const weekRangeLabel = computed(() => {
   return `${start.toLocaleString('en-US', { month: 'short' })} ${start.getDate()} - ${end.toLocaleString('en-US', { month: 'short' })} ${end.getDate()}`
 })
 
-const totalMeetings = computed(() =>
-  calendarDays.reduce((sum, day) => sum + (dailySchedule.value[day]?.length ?? 0), 0),
+const currentTimeLabel = computed(() =>
+  new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(now.value),
 )
 
-const activeDays = computed(
-  () => calendarDays.filter((day) => (dailySchedule.value[day]?.length ?? 0) > 0).length,
-)
+const currentTimeMarker = computed(() => {
+  const minutes = now.value.getHours() * 60 + now.value.getMinutes()
+  const { lunchStart, lunchEnd, afterSchoolStart, afterSchoolEnd } = calendarSchedule
 
-const todayBucket = computed(() => {
-  return dailySchedule.value[todayShortLabel.value] ?? []
+  if (minutes >= lunchStart && minutes <= lunchEnd) {
+    return {
+      period: 'lunch' as MeetingPeriod,
+      offset: clampPercentage(((minutes - lunchStart) / (lunchEnd - lunchStart)) * 100),
+    }
+  }
+
+  if (minutes < afterSchoolStart || minutes > afterSchoolEnd) {
+    return null
+  }
+
+  return {
+    period: 'afterSchool' as MeetingPeriod,
+    offset: clampPercentage(
+      ((minutes - afterSchoolStart) / (afterSchoolEnd - afterSchoolStart)) * 100,
+    ),
+  }
+})
+
+const displayedWeekKey = computed(() => getWeekDate('Mon').toDateString())
+
+watch(displayedWeekKey, () => {
+  weeklySchedule.value = buildScheduleFromEvents(calendarEvents.value)
 })
 
 onMounted(async () => {
+  clockTimer = setInterval(() => {
+    now.value = new Date()
+  }, 60_000)
+
   loading.value = true
   error.value = ''
   try {
     const events = await fetchCalendar()
-    dailySchedule.value = buildScheduleFromEvents(events)
+    calendarEvents.value = events
+    weeklySchedule.value = buildScheduleFromEvents(events)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load schedule'
   } finally {
@@ -82,11 +133,15 @@ onMounted(async () => {
   }
 })
 
-function createEmptySchedule() {
-  return calendarDays.reduce((acc, day) => {
-    acc[day] = []
-    return acc
-  }, {} as Record<string, DailyEvent[]>)
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
+})
+
+function createEmptySchedule(): WeeklySchedule {
+  return calendarDays.reduce((schedule, day) => {
+    schedule[day] = { lunch: [], afterSchool: [] }
+    return schedule
+  }, {} as WeeklySchedule)
 }
 
 function buildScheduleFromEvents(events: CalendarEvent[]) {
@@ -94,8 +149,6 @@ function buildScheduleFromEvents(events: CalendarEvent[]) {
   events.forEach((event) => {
     const parsed = parseMeetingSchedule(event.meetingSchedule)
     if (!parsed) return
-    const meetingDate = getWeekDate(parsed.day)
-    if (!meetingDate || !occursOnDate(parsed, meetingDate)) return
 
     const entry: DailyEvent = {
       id: event.clubId,
@@ -111,107 +164,44 @@ function buildScheduleFromEvents(events: CalendarEvent[]) {
       location: event.location ?? null,
     }
 
-    const bucket = schedule[parsed.day] ?? []
-    bucket.push(entry)
-    schedule[parsed.day] = bucket
+    parsed.days.forEach((day) => {
+      const meetingDate = getWeekDate(day)
+      const cadence = cadenceForDay(parsed.cadence, day)
+      if (!meetingDate || !occursOnDate(cadence, meetingDate)) return
+
+      parsed.periods.forEach((period) => {
+        schedule[day]?.[period].push({ ...entry })
+      })
+    })
   })
 
-  Object.values(schedule).forEach((events) => {
-    events.sort((a, b) => a.title.localeCompare(b.title))
+  Object.values(schedule).forEach((day) => {
+    meetingPeriods.forEach(({ key }) => {
+      day[key].sort((a, b) => a.title.localeCompare(b.title))
+    })
   })
 
   return schedule
 }
 
-function parseMeetingSchedule(meetingSchedule: string | null): { day: string; cadence: string } | null {
-  if (!meetingSchedule) return null
-  const day = extractDay(meetingSchedule)
-  if (!day) return null
-
-  const parts = meetingSchedule.split('\u00b7').map((part) => part.trim()).filter(Boolean)
-  const cadence = parts[1] ?? 'Weekly'
-  return { day, cadence }
-}
-
-function extractDay(value: string) {
-  const dayTokens: Record<string, string> = {
-    mon: 'Mon',
-    monday: 'Mon',
-    tue: 'Tue',
-    tues: 'Tue',
-    tuesday: 'Tue',
-    wed: 'Wed',
-    weds: 'Wed',
-    wednesday: 'Wed',
-    thu: 'Thu',
-    thur: 'Thu',
-    thurs: 'Thu',
-    thursday: 'Thu',
-    fri: 'Fri',
-    friday: 'Fri',
-    sat: 'Sat',
-    saturday: 'Sat',
-    sun: 'Sun',
-    sunday: 'Sun'}
-
-  const match = value.toLowerCase().match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)/)
-  if (!match) return null
-  return dayTokens[match[1] as keyof typeof dayTokens] ?? null
-}
-
-function occursOnDate(
-  schedule: { cadence: string },
-  date: Date,
-) {
-  const cadence = schedule.cadence.toLowerCase()
-
-  if (cadence.includes('biweekly')) {
-    return getIsoWeek(date) % 2 === 0
-  }
-
-  if (cadence.includes('weekly')) {
-    return true
-  }
-
-  if (cadence.includes('first and last week of the month')) {
-    return isFirstOccurrenceOfWeekday(date) || isLastOccurrenceOfWeekday(date)
-  }
-
-  if (cadence.includes('first week of the month')) {
-    return isFirstOccurrenceOfWeekday(date)
-  }
-
-  if (cadence.includes('last week of the month')) {
-    return isLastOccurrenceOfWeekday(date)
-  }
-
-  return true
-}
-
-function getIsoWeek(date: Date) {
-  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-  const dayNum = utcDate.getUTCDay() || 7
-  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNum)
-  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1))
-  return Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-}
-
-function isFirstOccurrenceOfWeekday(date: Date) {
-  return date.getDate() <= 7
-}
-
-function isLastOccurrenceOfWeekday(date: Date) {
-  const nextWeek = new Date(date)
-  nextWeek.setDate(date.getDate() + 7)
-  return nextWeek.getMonth() !== date.getMonth()
+function cadenceForDay(cadenceLabel: string, day: string) {
+  const fullDayName = getWeekDate(day).toLocaleDateString('en-US', { weekday: 'long' })
+  const daySpecificCadence = cadenceLabel.match(
+    new RegExp(`${fullDayName} meetings? are (biweekly|weekly)`, 'i'),
+  )
+  return daySpecificCadence?.[1] ?? cadenceLabel
 }
 
 function getWeekDate(day: string) {
-  return weekDates.value[day] ?? today
+  return weekDates.value[day] ?? now.value
 }
 
 function formatWeekDate(day: string) {
-  return getWeekDate(day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return getWeekDate(day).getDate()
+}
+
+function clampPercentage(value: number) {
+  return Math.min(100, Math.max(0, value))
 }
 </script>
 
@@ -220,67 +210,80 @@ function formatWeekDate(day: string) {
     <section class="calendar-wrapper page-shell">
       <div class="calendar-heading">
         <div>
-          <p class="section-label">Live meeting map</p>
+          <p class="section-label">Weekly club schedule</p>
           <h1 class="calendar-title">Calendar</h1>
-          <p class="calendar-subtitle">Week of {{ weekRangeLabel }}. Parsed from each club's submitted cadence and lunch schedule.</p>
+          <p class="calendar-subtitle">
+            {{ weekRangeLabel }} · Lunch and after-school meetings in one weekly view.
+          </p>
         </div>
         <p class="calendar-total">{{ todayLabel }}</p>
-      </div>
-
-      <div class="calendar-summary">
-        <article class="summary-card">
-          <span class="summary-label">Today</span>
-          <strong>{{ todayShortLabel }}</strong>
-          <p>{{ todayBucket.length }} meeting{{ todayBucket.length === 1 ? '' : 's' }} scheduled today.</p>
-        </article>
-        <article class="summary-card">
-          <span class="summary-label">Active days</span>
-          <strong>{{ activeDays }}</strong>
-          <p>Days this week with at least one club meeting.</p>
-        </article>
-        <article class="summary-card">
-          <span class="summary-label">This week</span>
-          <strong>{{ totalMeetings }}</strong>
-          <p>Meetings after applying weekly and biweekly cadence rules.</p>
-        </article>
       </div>
 
       <section v-if="loading" class="status-banner">Loading schedule...</section>
       <section v-else-if="error" class="status-banner error">{{ error }}</section>
 
-      <div v-else class="calendar-grid">
-        <div
-          v-for="day in calendarDays"
-          :key="day"
-          class="calendar-column"
-          :class="{ active: Boolean(dailySchedule[day]?.length) }"
-        >
-          <div class="column-head">
-            <div class="column-day">
-              <span class="day-dot" />
-              <span>{{ day }}</span>
+      <div v-else class="calendar-scroll">
+        <div class="weekly-calendar">
+          <div class="week-grid week-header">
+            <div class="time-axis-heading">
+              <span>Local time</span>
+              <strong>{{ currentTimeLabel }}</strong>
             </div>
-            <small>{{ formatWeekDate(day) }}</small>
+            <div
+              v-for="day in calendarDays"
+              :key="day"
+              class="day-heading"
+              :class="{ today: day === todayShortLabel }"
+            >
+              <span class="day-name">{{ day }}</span>
+              <span class="day-date">{{ formatWeekDate(day) }}</span>
+            </div>
           </div>
-          <div class="column-body">
-            <template v-if="dailySchedule[day]?.length">
-              <RouterLink
-                v-for="event in dailySchedule[day]"
-                :key="event.id"
-                class="event-card"
-                :to="`/clubs/${event.id}`"
-                :aria-label="`${event.title}, ${event.location || 'Location TBD'}`"
+
+          <div v-for="period in meetingPeriods" :key="period.key" class="week-grid period-row">
+            <div class="period-label">
+              <strong>{{ period.label }}</strong>
+              <span>{{ period.time }}</span>
+            </div>
+
+            <section
+              v-for="day in calendarDays"
+              :key="day"
+              class="calendar-cell"
+              :class="{ 'current-day': day === todayShortLabel }"
+            >
+              <div
+                v-if="
+                  currentTimeMarker &&
+                  day === todayShortLabel &&
+                  period.key === currentTimeMarker.period
+                "
+                class="current-time-line"
+                :style="{ '--current-time-offset': `${currentTimeMarker.offset}%` }"
+                aria-hidden="true"
               >
-                <img
-                  class="event-avatar"
-                  :src="event.avatarUrl"
-                  :alt="`${event.title} avatar`"
-                  loading="lazy"
-                />
-                <p class="event-location">{{ event.location || 'Location TBD' }}</p>
-              </RouterLink>
-            </template>
-            <p v-else class="empty">No meetings scheduled</p>
+                <span>{{ currentTimeLabel }}</span>
+              </div>
+
+              <div v-if="weeklySchedule[day]?.[period.key].length" class="event-stack">
+                <RouterLink
+                  v-for="event in weeklySchedule[day]?.[period.key]"
+                  :key="event.id"
+                  class="event-card"
+                  :to="`/clubs/${event.id}`"
+                  :aria-label="`${event.title}, ${event.location || 'Location TBD'}`"
+                >
+                  <img
+                    class="event-avatar"
+                    :src="event.avatarUrl"
+                    :alt="`${event.title} avatar`"
+                    loading="lazy"
+                  />
+                  <p class="event-location">{{ event.location || 'Location TBD' }}</p>
+                </RouterLink>
+              </div>
+              <p v-else class="empty">No meetings</p>
+            </section>
           </div>
         </div>
       </div>
@@ -290,12 +293,9 @@ function formatWeekDate(day: string) {
 
 <style scoped>
 .calendar-page {
-  background: transparent;
-  color: var(--mv-text);
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
   padding-block: clamp(2rem, 4vw, 4rem);
+  color: var(--mv-text);
 }
 
 .page-shell {
@@ -310,181 +310,267 @@ function formatWeekDate(day: string) {
   gap: 1.5rem;
 }
 
-.calendar-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
-}
-
-.summary-card {
-  border-radius: 22px;
-  border: 1px solid var(--mv-border);
-  background: var(--mv-surface-card);
-  padding: 1rem 1.1rem;
-  box-shadow: var(--mv-shadow-card);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.summary-card strong {
-  font-size: 1.7rem;
-  color: var(--mv-gold);
-}
-
-.summary-card p {
-  margin: 0;
-  color: var(--mv-text-faint);
-  font-size: 0.9rem;
-}
-
-.summary-label {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.76rem;
-  color: var(--mv-text-dim);
-}
-
 .calendar-heading {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
-  align-items: flex-end;
   flex-wrap: wrap;
 }
 
 .calendar-title {
-  font-size: clamp(2rem, 5vw, 2.8rem);
   margin-bottom: 0.25rem;
+  font-size: clamp(2rem, 5vw, 2.8rem);
 }
 
 .calendar-subtitle {
+  max-width: 620px;
   color: var(--mv-text-faint);
-  max-width: 540px;
 }
 
 .calendar-total {
-  font-weight: 600;
-  color: var(--mv-gold);
   padding: 0.55rem 0.9rem;
+  border: 1px solid var(--mv-border);
   border-radius: 999px;
-  border: 1px solid var(--mv-border);
   background: var(--mv-surface-soft);
-}
-
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-}
-
-.calendar-column {
-  border-radius: 24px;
-  border: 1px solid var(--mv-border);
-  background: var(--mv-surface-card);
-  display: flex;
-  flex-direction: column;
-  box-shadow: var(--mv-shadow-card);
-  transition: transform 0.2s ease, border-color 0.2s ease;
-}
-
-.calendar-column.active {
-  border-color: var(--mv-border-strong);
-}
-
-.calendar-column:hover {
-  transform: translateY(-2px);
-}
-
-.column-head {
-  padding: 1.1rem 1.25rem;
-  border-bottom: 1px solid var(--mv-border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  color: var(--mv-gold);
   font-weight: 600;
-  background: var(--mv-surface-soft);
 }
 
-.column-day {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
+.calendar-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--mv-border);
+  border-radius: 24px;
+  background: var(--mv-surface-card);
+  box-shadow: var(--mv-shadow-card);
+  scrollbar-color: var(--mv-border-strong) transparent;
 }
 
-.day-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--mv-gold);
-  box-shadow: 0 0 0 4px var(--mv-gold-soft);
+.weekly-calendar {
+  min-width: 1120px;
 }
 
-.column-head small {
-  color: var(--mv-text-dim);
-  font-weight: 500;
+.week-grid {
+  display: grid;
+  grid-template-columns: 120px repeat(7, minmax(140px, 1fr));
 }
 
-.column-body {
+.week-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  border-bottom: 1px solid var(--mv-border-strong);
+  background: var(--mv-surface-card);
+}
+
+.time-axis-heading,
+.period-label {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--mv-surface-card);
+}
+
+.time-axis-heading {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 1.1rem 1.25rem 1.5rem;
+  justify-content: center;
+  gap: 0.2rem;
+  min-height: 88px;
+  padding: 0.85rem;
+  color: var(--mv-text-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.time-axis-heading strong {
+  color: var(--mv-text-soft);
+  font-size: 0.82rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.day-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 88px;
+  padding: 0.75rem;
+  border-left: 1px solid var(--mv-border);
+}
+
+.day-heading.today {
+  background: var(--mv-surface-accent);
+  color: var(--mv-gold);
+}
+
+.day-name {
+  color: var(--mv-text-faint);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.day-date {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.day-heading.today .day-date {
+  background: var(--mv-gold);
+  color: var(--mv-surface-card);
+}
+
+.period-row + .period-row {
+  border-top: 1px solid var(--mv-border-strong);
+}
+
+.period-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 0.85rem;
+  border-right: 1px solid var(--mv-border);
+}
+
+.period-label strong {
+  font-size: 0.9rem;
+}
+
+.period-label span {
+  color: var(--mv-text-dim);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.calendar-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 180px;
+  padding: 0.65rem;
+  border-left: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+}
+
+.week-header + .period-row .calendar-cell {
+  min-height: 420px;
+}
+
+.calendar-cell.current-day {
+  background: color-mix(in srgb, var(--mv-surface-accent) 45%, var(--mv-surface-card));
+}
+
+.event-stack {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .event-card {
-  background: var(--mv-surface-soft);
-  padding: 0.8rem;
-  border-radius: 18px;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.45rem;
+  border: 1px solid var(--mv-border);
+  border-radius: 13px;
+  background: var(--mv-surface-soft);
   color: inherit;
   text-decoration: none;
-  border: 1px solid var(--mv-border);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    transform 150ms ease;
 }
 
 .event-card:hover,
 .event-card:focus-visible {
+  z-index: 2;
   border-color: var(--mv-border-strong);
   background: var(--mv-surface-accent);
   transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
 }
 
 .event-card:focus-visible {
   outline: 2px solid var(--mv-gold);
-  outline-offset: 4px;
+  outline-offset: 2px;
 }
 
 .event-avatar {
-  width: 56px;
-  height: 56px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
-  border-radius: 16px;
   border: 1px solid var(--mv-border);
+  border-radius: 11px;
   background: var(--mv-surface-accent);
   object-fit: cover;
 }
 
 .event-location {
+  min-width: 0;
   margin: 0;
-  color: var(--mv-text-faint);
-  font-size: 0.9rem;
   overflow-wrap: anywhere;
+  color: var(--mv-text-faint);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.current-time-line {
+  position: absolute;
+  top: var(--current-time-offset);
+  right: 0;
+  left: 0;
+  z-index: 3;
+  height: 2px;
+  background: #ef4444;
+  pointer-events: none;
+}
+
+.current-time-line::before {
+  position: absolute;
+  top: 50%;
+  left: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #ef4444;
+  content: '';
+  transform: translateY(-50%);
+}
+
+.current-time-line span {
+  position: absolute;
+  top: 0;
+  right: 0.3rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0 0 6px 6px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 700;
+  transform: translateY(-1px);
 }
 
 .empty {
+  margin: 0;
   color: var(--mv-text-dim);
-  font-size: 0.9rem;
+  font-size: 0.78rem;
 }
 
 .status-banner {
   padding: 0.85rem 1.25rem;
-  border-radius: 16px;
   border: 1px solid var(--mv-border-strong);
+  border-radius: 16px;
   background: var(--mv-surface-accent);
   color: var(--mv-text-soft);
 }
@@ -496,62 +582,46 @@ function formatWeekDate(day: string) {
 }
 
 .section-label {
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 0.75rem;
   color: var(--mv-text-dim);
-}
-
-@media (max-width: 640px) {
-  .calendar-heading {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .calendar-grid {
-    grid-template-columns: 1fr;
-  }
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 @media (max-width: 720px) {
-  .calendar-summary {
-    grid-template-columns: 1fr;
-  }
-
-  .summary-card {
-    flex-direction: row;
-    align-items: center;
-    gap: 1rem;
-    justify-content: space-between;
-    flex-wrap: wrap;
-  }
-
-  .summary-card p {
-    font-size: 0.8rem;
-  }
-
-  .summary-card strong {
-    font-size: 1.3rem;
+  .calendar-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .calendar-subtitle {
     max-width: 100%;
   }
+
+  .weekly-calendar {
+    min-width: 980px;
+  }
+
+  .week-grid {
+    grid-template-columns: 96px repeat(7, minmax(126px, 1fr));
+  }
+
+  .time-axis-heading,
+  .period-label {
+    padding-inline: 0.65rem;
+  }
 }
 
 @media (max-width: 480px) {
   .calendar-title {
-    font-size: 1.6rem;
+    font-size: 1.8rem;
   }
 
-  .event-card {
-    padding: 0.75rem;
-  }
-
-  .event-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
+  .calendar-scroll {
+    margin-inline: calc(var(--page-padding-inline) * -1);
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
   }
 }
 </style>
