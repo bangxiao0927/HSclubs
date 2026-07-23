@@ -280,6 +280,12 @@ BACKEND_RUN_USER=your-service-user ./scripts/deploy-main.sh
 SETUP_INSTALOADER=0 ./scripts/deploy-main.sh
 ```
 
+Do not run the entire script with `sudo` or from a root login. It exits before
+fetching or building in that case, preventing root-owned source, virtual
+environment, and build artifacts. Run it directly from the intended non-root
+deployment account and enter sudo credentials only when the script requests
+them.
+
 The deploy script respects `APP_INSTAGRAM_AVATAR_CACHE_ENABLED=false` and skips
 Instaloader initialization when the cache is disabled.
 

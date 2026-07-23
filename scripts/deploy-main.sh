@@ -26,6 +26,19 @@ die() {
   exit 1
 }
 
+validate_deployment_user() {
+  if [[ "$(id -u)" != "0" ]]; then
+    return
+  fi
+
+  if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+    die "Do not run deploy-main.sh with sudo. Run it directly as $SUDO_USER; " \
+      "the script elevates only the steps that require it."
+  fi
+  die "Do not run deploy-main.sh as root. Use a non-root deployment account; " \
+    "the script elevates only the steps that require it."
+}
+
 on_error() {
   local exit_code=$?
   printf '\nERROR: Deployment failed at line %s (exit code %s).\n' "$1" "$exit_code" >&2
@@ -345,6 +358,8 @@ wait_for_backend() {
 }
 
 main() {
+  validate_deployment_user
+
   require_cmd git
   require_cmd npm
   require_cmd rsync
