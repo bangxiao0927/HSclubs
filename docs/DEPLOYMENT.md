@@ -286,6 +286,11 @@ environment, and build artifacts. Run it directly from the intended non-root
 deployment account and enter sudo credentials only when the script requests
 them.
 
+After building the backend and before replacing or restarting the unit, the
+deploy script verifies that the final service account can enter the working
+directory, read the environment file and JAR, execute Java, and write to or
+create the configured upload directory.
+
 The deploy script respects `APP_INSTAGRAM_AVATAR_CACHE_ENABLED=false` and skips
 Instaloader initialization when the cache is disabled.
 
@@ -492,7 +497,7 @@ sudo journalctl -u hsclubs -n 100 --no-pager
 If Python cannot create the virtual environment, install the distribution
 packages listed in the Instaloader section. If imports work but avatars still
 fall back to placeholders, recreate the saved session and verify that the
-the configured backend service account can read the configured session file.
+configured backend service account can read the configured session file.
 
 ### CORS errors in browser
 

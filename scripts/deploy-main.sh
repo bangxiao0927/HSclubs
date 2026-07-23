@@ -56,6 +56,14 @@ run() {
   "$@"
 }
 
+backend_service_user() {
+  if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
+    printf '%s\n' "$BACKEND_RUN_USER"
+  else
+    id -un
+  fi
+}
+
 run_as_backend_user() {
   if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
     sudo -H -u "$BACKEND_RUN_USER" -- "$@"
@@ -212,11 +220,7 @@ validate_instaloader_session() {
   configured_python="$(read_env_value APP_INSTAGRAM_AVATAR_PYTHON_COMMAND)"
   configured_python="${configured_python:-python3}"
   session_file="$(read_env_value APP_INSTAGRAM_AVATAR_SESSION_FILE)"
-  if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
-    service_user="$BACKEND_RUN_USER"
-  else
-    service_user="$(id -un)"
-  fi
+  service_user="$(backend_service_user)"
 
   log "Validating the Instaloader session as backend user $service_user"
   if ! run_as_backend_user "$configured_python" -c "
@@ -237,6 +241,52 @@ except Exception as error:
   fi
 
   log "Instaloader session validation passed for backend user $service_user"
+}
+
+validate_backend_runtime_access() {
+  local jar_path="$1"
+  local java_path
+  local parent_dir
+  local service_user
+  local upload_dir
+
+  java_path="$(command -v java)"
+  service_user="$(backend_service_user)"
+  upload_dir="$(read_env_value APP_UPLOAD_DIR)"
+  upload_dir="${upload_dir:-uploads}"
+  if [[ "$upload_dir" != /* ]]; then
+    upload_dir="$APP_DIR/backend/$upload_dir"
+  fi
+  upload_dir="$(resolve_absolute_path "$upload_dir")"
+
+  log "Validating backend runtime access as user $service_user"
+  run_as_backend_user test -x "$APP_DIR/backend" || \
+    die "Backend user $service_user cannot enter the working directory: $APP_DIR/backend"
+  run_as_backend_user test -r "$BACKEND_ENV_FILE" || \
+    die "Backend user $service_user cannot read the environment file: $BACKEND_ENV_FILE"
+  run_as_backend_user test -x "$java_path" || \
+    die "Backend user $service_user cannot execute Java: $java_path"
+  run_as_backend_user test -r "$jar_path" || \
+    die "Backend user $service_user cannot read the backend JAR: $jar_path"
+
+  if [[ -e "$upload_dir" ]]; then
+    [[ -d "$upload_dir" ]] || die "Configured upload path is not a directory: $upload_dir"
+    run_as_backend_user test -w "$upload_dir" && \
+      run_as_backend_user test -x "$upload_dir" || \
+      die "Backend user $service_user cannot write to the upload directory: $upload_dir"
+  else
+    parent_dir="$upload_dir"
+    while [[ ! -e "$parent_dir" ]]; do
+      parent_dir="$(dirname "$parent_dir")"
+    done
+    [[ -d "$parent_dir" ]] || \
+      die "Upload directory parent is not a directory: $parent_dir"
+    run_as_backend_user test -w "$parent_dir" && \
+      run_as_backend_user test -x "$parent_dir" || \
+      die "Backend user $service_user cannot create the upload directory under: $parent_dir"
+  fi
+
+  log "Backend runtime access validation passed for user $service_user"
 }
 
 ensure_clean_worktree() {
@@ -394,6 +444,7 @@ main() {
   local jar_path
   jar_path="$(latest_backend_jar)"
   [[ -n "$jar_path" ]] || die "Could not find the backend JAR in backend/target."
+  validate_backend_runtime_access "$jar_path"
 
   log "Installing and restarting backend with $jar_path"
   install_and_start_backend_service "$jar_path"
