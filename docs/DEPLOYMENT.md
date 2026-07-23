@@ -130,6 +130,12 @@ as the same non-root account that invokes `deploy-main.sh`. If
 session as that account instead and use its home directory in
 `APP_INSTAGRAM_AVATAR_SESSION_FILE`.
 
+When a session user is configured, `deploy-main.sh` asks Instaloader to load the
+session as the final backend service account before building or restarting the
+service. Deployment stops if that account cannot traverse the session path,
+read the file, or parse its contents. If no explicit session file is configured,
+the check uses Instaloader's default session location for the service account.
+
 For local Linux development, browser cookies are also supported with
 `APP_INSTAGRAM_AVATAR_COOKIE_BROWSER=firefox` (or `chrome`, `edge`,
 `brave`, and the other supported browser values). A saved session is preferred

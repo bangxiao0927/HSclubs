@@ -43,6 +43,14 @@ run() {
   "$@"
 }
 
+run_as_backend_user() {
+  if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
+    sudo -H -u "$BACKEND_RUN_USER" -- "$@"
+  else
+    "$@"
+  fi
+}
+
 service_cmd() {
   if [[ "$SYSTEMD_SCOPE" == "user" ]]; then
     systemctl --user "$@"
@@ -164,6 +172,58 @@ initialize_instaloader() {
   [[ -w "$BACKEND_ENV_FILE" ]] || \
     die "Backend environment file must be writable to configure Instaloader: $BACKEND_ENV_FILE"
   run "$APP_DIR/scripts/setup-instaloader.sh" --configure-env --env-file "$BACKEND_ENV_FILE"
+}
+
+validate_instaloader_session() {
+  local cache_enabled
+  local configured_python
+  local service_user
+  local session_file
+  local session_user
+
+  cache_enabled="$(read_env_value APP_INSTAGRAM_AVATAR_CACHE_ENABLED)"
+  cache_enabled="${cache_enabled:-true}"
+  cache_enabled="$(printf '%s\n' "$cache_enabled" | awk '{print tolower($0)}')"
+  case "$cache_enabled" in
+    false|0|no|off)
+      return
+      ;;
+  esac
+
+  session_user="$(read_env_value APP_INSTAGRAM_AVATAR_SESSION_USER)"
+  if [[ -z "$session_user" ]]; then
+    log "Skipping Instaloader session validation because no session user is configured."
+    return
+  fi
+
+  configured_python="$(read_env_value APP_INSTAGRAM_AVATAR_PYTHON_COMMAND)"
+  configured_python="${configured_python:-python3}"
+  session_file="$(read_env_value APP_INSTAGRAM_AVATAR_SESSION_FILE)"
+  if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
+    service_user="$BACKEND_RUN_USER"
+  else
+    service_user="$(id -un)"
+  fi
+
+  log "Validating the Instaloader session as backend user $service_user"
+  if ! run_as_backend_user "$configured_python" -c "
+import sys
+import instaloader
+
+try:
+    loader = instaloader.Instaloader(quiet=True)
+    loader.load_session_from_file(sys.argv[1], sys.argv[2] or None)
+except Exception as error:
+    print(type(error).__name__, error, file=sys.stderr)
+    raise SystemExit(1)
+" "$session_user" "$session_file" >/dev/null; then
+    if [[ -n "$session_file" ]]; then
+      die "Configured Instaloader session cannot be loaded by backend user $service_user: $session_file"
+    fi
+    die "Default Instaloader session for $session_user cannot be loaded by backend user $service_user."
+  fi
+
+  log "Instaloader session validation passed for backend user $service_user"
 }
 
 ensure_clean_worktree() {
@@ -301,6 +361,7 @@ main() {
   cd "$APP_DIR"
   update_source
   initialize_instaloader
+  validate_instaloader_session
 
   log "Building frontend"
   cd "$APP_DIR/frontend"
