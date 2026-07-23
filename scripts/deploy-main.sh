@@ -105,6 +105,7 @@ read_env_value() {
   local key="$1"
 
   awk -v key="$key" '
+    BEGIN { found = 0 }
     {
       line = $0
       sub(/^[[:space:]]*/, "", line)
@@ -118,8 +119,12 @@ read_env_value() {
         value = substr(line, separator + 1)
         sub(/^[[:space:]]*/, "", value)
         sub(/[[:space:]]*$/, "", value)
+        found = 1
+      }
+    }
+    END {
+      if (found) {
         print value
-        exit
       }
     }
   ' "$BACKEND_ENV_FILE"
