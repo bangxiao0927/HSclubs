@@ -105,6 +105,11 @@ environment already matches `backend/requirements-instaloader.txt`. Use
 `PYTHON_BIN`, `INSTALOADER_VENV_DIR`, or `BACKEND_ENV_FILE` to override its
 defaults.
 
+Environment values read by the deployment scripts may be unquoted or enclosed
+in one matching pair of single or double quotes. Complex embedded quoting and
+backslash escapes are rejected instead of being interpreted differently from
+systemd.
+
 Instaloader requires authentication. For a headless systemd host, create the
 session as the same account that runs the backend so the service can read it:
 
@@ -265,16 +270,22 @@ sudo systemctl status hsclubs
 The repository also includes `scripts/deploy-main.sh`, which initializes Instaloader when
 the avatar cache is enabled, builds both applications, installs or updates the persistent
 service, checks the backend, and then publishes the frontend. Its production defaults use
-the system service and the non-root account that invokes the deploy script. Run the script
-directly from that account; it uses `sudo` internally for privileged installation steps.
-Set `BACKEND_RUN_USER` only when the backend should use a different, existing service
-account:
+the system service and, for a fresh installation, the non-root account that invokes the
+deploy script. If the service already exists, deployment preserves its configured `User=`
+unless `BACKEND_RUN_USER` is explicitly set. Run the script directly from the deployment
+account; it uses `sudo` internally for privileged installation steps. Set
+`BACKEND_RUN_USER` only when the backend should use a different, existing account or when
+intentionally migrating an existing service:
 
 ```bash
 ./scripts/deploy-main.sh
 
 # Explicitly use a separate service account.
 BACKEND_RUN_USER=your-service-user ./scripts/deploy-main.sh
+
+# Explicitly migrate an existing service to the deployment account after
+# granting that account access to uploads, sessions, and other runtime files.
+BACKEND_RUN_USER="$(id -un)" ./scripts/deploy-main.sh
 
 # Skip Python initialization only when Instaloader is managed separately.
 SETUP_INSTALOADER=0 ./scripts/deploy-main.sh
@@ -288,8 +299,11 @@ them.
 
 After building the backend and before replacing or restarting the unit, the
 deploy script verifies that the final service account can enter the working
-directory, read the environment file and JAR, execute Java, and write to or
-create the configured upload directory.
+directory, read the JAR, execute Java and the configured Instaloader runtime,
+and write to or create the configured upload directory. For a system service,
+systemd reads the environment file before changing to the configured service
+account, so the file only needs to be readable by the deployment account and
+system manager.
 
 The deploy script respects `APP_INSTAGRAM_AVATAR_CACHE_ENABLED=false` and skips
 Instaloader initialization when the cache is disabled.

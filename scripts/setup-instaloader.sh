@@ -92,7 +92,12 @@ read_env_value() {
 
   [[ -r "$file" ]] || return 1
   awk -v key="$key" '
-    BEGIN { found = 0 }
+    BEGIN {
+      found = 0
+      single_quote = sprintf("%c", 39)
+      double_quote = sprintf("%c", 34)
+      backslash = sprintf("%c", 92)
+    }
     {
       line = $0
       sub(/^[[:space:]]*/, "", line)
@@ -111,6 +116,18 @@ read_env_value() {
     }
     END {
       if (found) {
+        first = substr(value, 1, 1)
+        last = substr(value, length(value), 1)
+        if ((first == single_quote || first == double_quote) && first == last && length(value) >= 2) {
+          value = substr(value, 2, length(value) - 2)
+          if (index(value, first) || index(value, backslash)) {
+            printf "ERROR: Unsupported quoting or escaping for %s in %s.\n", key, FILENAME > "/dev/stderr"
+            exit 2
+          }
+        } else if (index(value, single_quote) || index(value, double_quote) || index(value, backslash)) {
+          printf "ERROR: Unsupported quoting or escaping for %s in %s.\n", key, FILENAME > "/dev/stderr"
+          exit 2
+        }
         print value
       }
     }

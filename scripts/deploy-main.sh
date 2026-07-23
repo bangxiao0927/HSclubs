@@ -10,7 +10,11 @@ BACKEND_SERVICE="${BACKEND_SERVICE:-hsclubs.service}"
 BACKEND_ENV_FILE="${BACKEND_ENV_FILE:-$APP_DIR/backend/.env}"
 BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-http://127.0.0.1:8080/api/clubs}"
 # Run the service as the account performing the deployment unless an explicit
-# service account is configured.
+# service account is configured or an existing unit already selects one.
+BACKEND_RUN_USER_EXPLICIT=0
+if [[ -n "${BACKEND_RUN_USER:-}" ]]; then
+  BACKEND_RUN_USER_EXPLICIT=1
+fi
 BACKEND_RUN_USER="${BACKEND_RUN_USER:-$(id -un)}"
 SYSTEMD_SCOPE="${SYSTEMD_SCOPE:-system}"
 RUN_BACKEND_TESTS="${RUN_BACKEND_TESTS:-0}"
@@ -54,6 +58,20 @@ require_cmd() {
 run() {
   log "$*"
   "$@"
+}
+
+resolve_backend_run_user() {
+  local existing_user
+
+  if [[ "$SYSTEMD_SCOPE" != "system" || "$BACKEND_RUN_USER_EXPLICIT" == "1" ]]; then
+    return
+  fi
+
+  existing_user="$(systemctl show "$BACKEND_SERVICE" --property=User --value 2>/dev/null || true)"
+  if [[ -n "$existing_user" ]]; then
+    BACKEND_RUN_USER="$existing_user"
+    log "Preserving backend user from the existing $BACKEND_SERVICE unit: $BACKEND_RUN_USER"
+  fi
 }
 
 backend_service_user() {
@@ -113,7 +131,12 @@ read_env_value() {
   local key="$1"
 
   awk -v key="$key" '
-    BEGIN { found = 0 }
+    BEGIN {
+      found = 0
+      single_quote = sprintf("%c", 39)
+      double_quote = sprintf("%c", 34)
+      backslash = sprintf("%c", 92)
+    }
     {
       line = $0
       sub(/^[[:space:]]*/, "", line)
@@ -132,6 +155,18 @@ read_env_value() {
     }
     END {
       if (found) {
+        first = substr(value, 1, 1)
+        last = substr(value, length(value), 1)
+        if ((first == single_quote || first == double_quote) && first == last && length(value) >= 2) {
+          value = substr(value, 2, length(value) - 2)
+          if (index(value, first) || index(value, backslash)) {
+            printf "ERROR: Unsupported quoting or escaping for %s in %s.\n", key, FILENAME > "/dev/stderr"
+            exit 2
+          }
+        } else if (index(value, single_quote) || index(value, double_quote) || index(value, backslash)) {
+          printf "ERROR: Unsupported quoting or escaping for %s in %s.\n", key, FILENAME > "/dev/stderr"
+          exit 2
+        }
         print value
       }
     }
@@ -216,16 +251,22 @@ validate_instaloader_session() {
       ;;
   esac
 
+  configured_python="$(read_env_value APP_INSTAGRAM_AVATAR_PYTHON_COMMAND)"
+  configured_python="${configured_python:-python3}"
+  service_user="$(backend_service_user)"
+
+  log "Validating the Instaloader runtime as backend user $service_user"
+  if ! run_as_backend_user "$configured_python" -c 'import instaloader, browser_cookie3'; then
+    die "Backend user $service_user cannot execute the configured Instaloader runtime: $configured_python"
+  fi
+
   session_user="$(read_env_value APP_INSTAGRAM_AVATAR_SESSION_USER)"
   if [[ -z "$session_user" ]]; then
     log "Skipping Instaloader session validation because no session user is configured."
     return
   fi
 
-  configured_python="$(read_env_value APP_INSTAGRAM_AVATAR_PYTHON_COMMAND)"
-  configured_python="${configured_python:-python3}"
   session_file="$(read_env_value APP_INSTAGRAM_AVATAR_SESSION_FILE)"
-  service_user="$(backend_service_user)"
 
   log "Validating the Instaloader session as backend user $service_user"
   if ! run_as_backend_user "$configured_python" -c "
@@ -267,8 +308,6 @@ validate_backend_runtime_access() {
   log "Validating backend runtime access as user $service_user"
   run_as_backend_user test -x "$APP_DIR/backend" || \
     die "Backend user $service_user cannot enter the working directory: $APP_DIR/backend"
-  run_as_backend_user test -r "$BACKEND_ENV_FILE" || \
-    die "Backend user $service_user cannot read the environment file: $BACKEND_ENV_FILE"
   run_as_backend_user test -x "$java_path" || \
     die "Backend user $service_user cannot execute Java: $java_path"
   run_as_backend_user test -r "$jar_path" || \
@@ -276,9 +315,10 @@ validate_backend_runtime_access() {
 
   if [[ -e "$upload_dir" ]]; then
     [[ -d "$upload_dir" ]] || die "Configured upload path is not a directory: $upload_dir"
-    run_as_backend_user test -w "$upload_dir" && \
-      run_as_backend_user test -x "$upload_dir" || \
+    if ! run_as_backend_user test -w "$upload_dir" || \
+      ! run_as_backend_user test -x "$upload_dir"; then
       die "Backend user $service_user cannot write to the upload directory: $upload_dir"
+    fi
   else
     parent_dir="$upload_dir"
     while [[ ! -e "$parent_dir" ]]; do
@@ -286,9 +326,10 @@ validate_backend_runtime_access() {
     done
     [[ -d "$parent_dir" ]] || \
       die "Upload directory parent is not a directory: $parent_dir"
-    run_as_backend_user test -w "$parent_dir" && \
-      run_as_backend_user test -x "$parent_dir" || \
+    if ! run_as_backend_user test -w "$parent_dir" || \
+      ! run_as_backend_user test -x "$parent_dir"; then
       die "Backend user $service_user cannot create the upload directory under: $parent_dir"
+    fi
   fi
 
   log "Backend runtime access validation passed for user $service_user"
@@ -427,6 +468,7 @@ main() {
     require_cmd sudo
   fi
 
+  resolve_backend_run_user
   validate_configuration
   cd "$APP_DIR"
   update_source
