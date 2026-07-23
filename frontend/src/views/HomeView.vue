@@ -5,7 +5,7 @@ import SkeletonLoader from '../components/SkeletonLoader.vue'
 import { fetchAllClubs, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { clubImage } from '../utils/clubImages'
-import { sampleClubs, schoolTemplate } from '../config/schoolTemplate'
+import { schoolTemplate } from '../config/schoolTemplate'
 
 const clubs = ref<Club[]>([])
 const loading = ref(true)
@@ -14,7 +14,6 @@ const error = ref('')
 const route = useRoute()
 const schoolDisplayName = computed(() => schoolTemplate.schoolName)
 const schoolShortName = computed(() => schoolTemplate.shortName)
-const usingPreviewData = ref(false)
 const currentHeroImageIndex = ref(0)
 const heroClubs = ref<Club[]>([])
 const totalClubCount = ref(0)
@@ -48,13 +47,12 @@ const loadClubs = async () => {
     clubs.value = allClubs.slice(0, pageSize)
     totalClubCount.value = allClubs.length
     hasMore.value = allClubs.length > pageSize
-    usingPreviewData.value = false
     setHeroClubs(allClubs)
   } catch {
-    clubs.value = sampleClubs
-    totalClubCount.value = sampleClubs.length
+    clubs.value = []
+    totalClubCount.value = 0
     hasMore.value = false
-    usingPreviewData.value = true
+    error.value = 'The club directory is temporarily unavailable. Please try again later.'
     setHeroClubs([])
   } finally {
     loading.value = false
@@ -177,9 +175,6 @@ const changeHeroImage = (offset: number) => {
 
     <section v-if="loading" class="page-shell"><SkeletonLoader :count="4" /></section>
     <section v-else-if="error" class="status-banner error">{{ error }}</section>
-    <section v-else-if="usingPreviewData" class="status-banner">
-      Showing template sample clubs until the school API is connected.
-    </section>
 
     <section class="top-clubs-section page-shell">
       <div class="section-heading">
@@ -227,8 +222,7 @@ const changeHeroImage = (offset: number) => {
         <p class="section-label">Directory</p>
         <h2>All clubs</h2>
         <p class="section-subtitle">
-          Replace the sample clubs with your school data, then students can browse by name, advisor,
-          meeting time, or keyword.
+          Browse clubs by name, advisor, meeting time, or keyword.
         </p>
       </div>
       <div v-if="clubs.length" class="club-directory">

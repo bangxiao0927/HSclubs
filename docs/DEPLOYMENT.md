@@ -105,23 +105,41 @@ environment already matches `backend/requirements-instaloader.txt`. Use
 `PYTHON_BIN`, `INSTALOADER_VENV_DIR`, or `BACKEND_ENV_FILE` to override its
 defaults.
 
+Environment values read by the deployment scripts may be unquoted or enclosed
+in one matching pair of single or double quotes. Complex embedded quoting and
+backslash escapes are rejected instead of being interpreted differently from
+systemd.
+
 Instaloader requires authentication. For a headless systemd host, create the
 session as the same account that runs the backend so the service can read it:
 
 ```bash
-sudo install -d -m 0700 -o hsclubs -g hsclubs /opt/hsclubs/backend/.instaloader
-sudo -u hsclubs /opt/hsclubs/backend/.venv/bin/instaloader \
-  --sessionfile /opt/hsclubs/backend/.instaloader/session-your_instagram_username \
+cd /opt/hsclubs
+install -d -m 0700 "$HOME/.config/instaloader"
+./backend/.venv/bin/instaloader \
+  --sessionfile "$HOME/.config/instaloader/session-your_instagram_username" \
   --login your_instagram_username
-sudo chmod 0600 /opt/hsclubs/backend/.instaloader/session-your_instagram_username
+chmod 0600 "$HOME/.config/instaloader/session-your_instagram_username"
 ```
 
 Add the session identity and explicit file path to `backend/.env`:
 
 ```bash
 APP_INSTAGRAM_AVATAR_SESSION_USER=your_instagram_username
-APP_INSTAGRAM_AVATAR_SESSION_FILE=/opt/hsclubs/backend/.instaloader/session-your_instagram_username
+APP_INSTAGRAM_AVATAR_SESSION_FILE=/home/your-deploy-user/.config/instaloader/session-your_instagram_username
 ```
+
+These commands assume the backend uses the default deployment account. Run them
+as the same non-root account that invokes `deploy-main.sh`. If
+`BACKEND_RUN_USER` explicitly selects another service account, create the
+session as that account instead and use its home directory in
+`APP_INSTAGRAM_AVATAR_SESSION_FILE`.
+
+When a session user is configured, `deploy-main.sh` asks Instaloader to load the
+session as the final backend service account before building or restarting the
+service. Deployment stops if that account cannot traverse the session path,
+read the file, or parse its contents. If no explicit session file is configured,
+the check uses Instaloader's default session location for the service account.
 
 For local Linux development, browser cookies are also supported with
 `APP_INSTAGRAM_AVATAR_COOKIE_BROWSER=firefox` (or `chrome`, `edge`,
@@ -229,7 +247,7 @@ After=network.target mysql.service
 
 [Service]
 Type=simple
-User=hsclubs
+User=your-deploy-user
 WorkingDirectory=/opt/hsclubs/backend
 ExecStart=/usr/bin/java -jar /opt/hsclubs/backend/target/demo-0.0.1-SNAPSHOT.jar
 Restart=on-failure
@@ -252,14 +270,40 @@ sudo systemctl status hsclubs
 The repository also includes `scripts/deploy-main.sh`, which initializes Instaloader when
 the avatar cache is enabled, builds both applications, installs or updates the persistent
 service, checks the backend, and then publishes the frontend. Its production defaults use
-the system service and the `hsclubs` user:
+the system service and, for a fresh installation, the non-root account that invokes the
+deploy script. If the service already exists, deployment preserves its configured `User=`
+unless `BACKEND_RUN_USER` is explicitly set. Run the script directly from the deployment
+account; it uses `sudo` internally for privileged installation steps. Set
+`BACKEND_RUN_USER` only when the backend should use a different, existing account or when
+intentionally migrating an existing service:
 
 ```bash
 ./scripts/deploy-main.sh
 
+# Explicitly use a separate service account.
+BACKEND_RUN_USER=your-service-user ./scripts/deploy-main.sh
+
+# Explicitly migrate an existing service to the deployment account after
+# granting that account access to uploads, sessions, and other runtime files.
+BACKEND_RUN_USER="$(id -un)" ./scripts/deploy-main.sh
+
 # Skip Python initialization only when Instaloader is managed separately.
 SETUP_INSTALOADER=0 ./scripts/deploy-main.sh
 ```
+
+Do not run the entire script with `sudo` or from a root login. It exits before
+fetching or building in that case, preventing root-owned source, virtual
+environment, and build artifacts. Run it directly from the intended non-root
+deployment account and enter sudo credentials only when the script requests
+them.
+
+After building the backend and before replacing or restarting the unit, the
+deploy script verifies that the final service account can enter the working
+directory, read the JAR, execute Java and the configured Instaloader runtime,
+and write to or create the configured upload directory. For a system service,
+systemd reads the environment file before changing to the configured service
+account, so the file only needs to be readable by the deployment account and
+system manager.
 
 The deploy script respects `APP_INSTAGRAM_AVATAR_CACHE_ENABLED=false` and skips
 Instaloader initialization when the cache is disabled.
@@ -458,15 +502,16 @@ sudo journalctl -u hsclubs -n 50 --no-pager
 ### Instaloader check fails
 
 ```bash
+BACKEND_RUN_USER="${BACKEND_RUN_USER:-$(id -un)}"
 ./scripts/setup-instaloader.sh --configure-env --check
-sudo -u hsclubs /opt/hsclubs/backend/.venv/bin/python -c 'import instaloader, browser_cookie3'
+sudo -u "$BACKEND_RUN_USER" /opt/hsclubs/backend/.venv/bin/python -c 'import instaloader, browser_cookie3'
 sudo journalctl -u hsclubs -n 100 --no-pager
 ```
 
 If Python cannot create the virtual environment, install the distribution
 packages listed in the Instaloader section. If imports work but avatars still
 fall back to placeholders, recreate the saved session and verify that the
-`hsclubs` service account can read the configured session file.
+configured backend service account can read the configured session file.
 
 ### CORS errors in browser
 
