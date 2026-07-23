@@ -63,14 +63,6 @@ const activeCategory = computed(
     <section v-else-if="error" class="status-card error">{{ error }}</section>
 
     <template v-else>
-      <section class="overview-grid">
-        <article v-for="category in categories" :key="category.title" class="overview-card">
-          <span class="overview-icon">{{ category.icon }}</span>
-          <strong>{{ category.clubCount }}</strong>
-          <span>{{ category.title }}</span>
-        </article>
-      </section>
-
       <div class="category-picker">
         <button
           v-for="category in categories"
@@ -156,32 +148,6 @@ const activeCategory = computed(
 .status-card.error {
   border-color: rgba(239, 68, 68, 0.35);
   color: var(--mv-status-danger);
-}
-
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
-}
-
-.overview-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 1.05rem 1.2rem;
-  border-radius: 22px;
-  border: 1px solid var(--mv-border);
-  background: var(--mv-surface-card);
-  box-shadow: var(--mv-shadow-card);
-}
-
-.overview-card strong {
-  font-size: 1.8rem;
-  color: var(--mv-gold);
-}
-
-.overview-icon {
-  font-size: 1.2rem;
 }
 
 .category-picker {
@@ -392,20 +358,6 @@ const activeCategory = computed(
 }
 
 @media (max-width: 720px) {
-  .overview-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 0.75rem;
-  }
-
-  .overview-card {
-    padding: 0.85rem 0.9rem;
-    border-radius: 18px;
-  }
-
-  .overview-card strong {
-    font-size: 1.3rem;
-  }
-
   .top-grid {
     grid-template-columns: 1fr;
     gap: 0.85rem;
@@ -431,10 +383,6 @@ const activeCategory = computed(
 }
 
 @media (max-width: 480px) {
-  .overview-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
   .panel-hero {
     padding: 1.1rem;
   }
