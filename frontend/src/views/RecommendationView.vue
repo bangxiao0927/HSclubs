@@ -176,7 +176,10 @@ const showResults = ref(false)
 
 const currentQuestion = computed(() => questions[currentQuestionIndex.value]!)
 const selectedOptionIndex = computed(() => answers.value[currentQuestionIndex.value])
-const progress = computed(() => ((currentQuestionIndex.value + 1) / questions.length) * 100)
+const completedAnswerCount = computed(
+  () => answers.value.filter((answer) => answer !== null).length,
+)
+const progress = computed(() => (completedAnswerCount.value / questions.length) * 100)
 
 const rankedCategories = computed(() => {
   const scores = new Map(clubCategoryOptions.map((category) => [category.title, 0]))
@@ -289,26 +292,33 @@ onMounted(loadClubs)
           <p>{{ currentQuestion.helper }}</p>
         </div>
 
-        <div class="answer-grid" role="radiogroup" :aria-label="currentQuestion.prompt">
-          <button
-            v-for="(option, optionIndex) in currentQuestion.options"
-            :key="option.label"
-            type="button"
-            class="answer-card"
-            :class="{ selected: selectedOptionIndex === optionIndex }"
-            role="radio"
-            :aria-checked="selectedOptionIndex === optionIndex"
-            @click="selectOption(optionIndex)"
-          >
-            <span class="answer-marker">{{
-              selectedOptionIndex === optionIndex ? '✓' : optionIndex + 1
-            }}</span>
-            <span>
-              <strong>{{ option.label }}</strong>
-              <small>{{ option.description }}</small>
-            </span>
-          </button>
-        </div>
+        <fieldset class="answer-fieldset">
+          <legend class="answer-legend">{{ currentQuestion.prompt }}</legend>
+          <div class="answer-grid">
+            <label
+              v-for="(option, optionIndex) in currentQuestion.options"
+              :key="option.label"
+              class="answer-card"
+              :class="{ selected: selectedOptionIndex === optionIndex }"
+            >
+              <input
+                class="answer-input"
+                type="radio"
+                :name="`quiz-question-${currentQuestionIndex}`"
+                :value="optionIndex"
+                :checked="selectedOptionIndex === optionIndex"
+                @change="selectOption(optionIndex)"
+              />
+              <span class="answer-marker">{{
+                selectedOptionIndex === optionIndex ? '✓' : optionIndex + 1
+              }}</span>
+              <span>
+                <strong>{{ option.label }}</strong>
+                <small>{{ option.description }}</small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
 
         <footer class="quiz-actions">
           <button
@@ -474,6 +484,25 @@ onMounted(loadClubs)
   color: var(--mv-text-muted);
 }
 
+.answer-fieldset {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.answer-legend,
+.answer-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .answer-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -499,14 +528,13 @@ onMounted(loadClubs)
 }
 
 .answer-card:hover,
-.answer-card:focus-visible,
 .answer-card.selected {
   border-color: var(--mv-gold);
   background: var(--mv-surface-accent);
   transform: translateY(-1px);
 }
 
-.answer-card:focus-visible {
+.answer-input:focus-visible + .answer-marker {
   outline: 2px solid var(--mv-gold);
   outline-offset: 3px;
 }
@@ -715,9 +743,18 @@ onMounted(loadClubs)
 }
 
 @media (max-width: 480px) {
+  .quiz-page {
+    gap: 1.5rem;
+    padding-block: 1.5rem 2.5rem;
+  }
+
   .quiz-card {
     padding: 1rem;
     border-radius: 22px;
+  }
+
+  .question-copy {
+    margin-block: 1.5rem 1rem;
   }
 
   .progress-row {
@@ -732,6 +769,25 @@ onMounted(loadClubs)
 
   .club-grid {
     grid-template-columns: 1fr;
+  }
+
+  .results-header > .secondary-button,
+  .results-title-row .text-link {
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .club-card {
+    grid-template-columns: 60px minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.9rem;
+  }
+
+  .club-card img {
+    width: 60px;
+    height: 60px;
+    border-radius: 15px;
   }
 }
 </style>
