@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 
 import { fetchAllClubs } from '../services/clubService'
 import type { Club } from '../types/club'
@@ -11,7 +11,6 @@ const clubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
 
-const route = useRoute()
 const selectedCategoryTitle = ref(clubCategoryOptions[0]?.title ?? '')
 
 const loadClubs = async () => {
@@ -40,12 +39,16 @@ const categories = computed(() =>
     return {
       ...category,
       clubCount: categoryClubs.length,
-      clubs: categoryClubs}
+      clubs: categoryClubs,
+    }
   }),
 )
 
 const activeCategory = computed(
-  () => categories.value.find((category) => category.title === selectedCategoryTitle.value) ?? categories.value[0] ?? null,
+  () =>
+    categories.value.find((category) => category.title === selectedCategoryTitle.value) ??
+    categories.value[0] ??
+    null,
 )
 </script>
 
@@ -55,7 +58,8 @@ const activeCategory = computed(
       <p class="section-label">Explore</p>
       <h1>Browse clubs by category</h1>
       <p>
-        Clubs are grouped by their saved category, and club admins can now maintain that type directly from the admin page.
+        Clubs are grouped by their saved category, and club admins can now maintain that type
+        directly from the admin page.
       </p>
     </header>
 
@@ -63,6 +67,17 @@ const activeCategory = computed(
     <section v-else-if="error" class="status-card error">{{ error }}</section>
 
     <template v-else>
+      <section class="quiz-callout">
+        <div>
+          <p class="section-label">Not sure where to start?</p>
+          <h2>Find your club match</h2>
+          <p>
+            Answer four quick questions to discover categories and clubs that fit your interests.
+          </p>
+        </div>
+        <RouterLink to="/recommendations" class="quiz-link">Start quiz</RouterLink>
+      </section>
+
       <div class="category-picker">
         <button
           v-for="category in categories"
@@ -91,7 +106,12 @@ const activeCategory = computed(
           <article v-if="!activeCategory.clubs.length" class="empty-card">
             <p>No clubs have been assigned to {{ activeCategory.title }} yet.</p>
           </article>
-          <RouterLink v-for="club in activeCategory.clubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
+          <RouterLink
+            v-for="club in activeCategory.clubs"
+            :key="club.id"
+            class="top-card"
+            :to="`/clubs/${club.id}`"
+          >
             <div class="club-avatar large">
               <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
             </div>
@@ -138,6 +158,41 @@ const activeCategory = computed(
 .status-card.error {
   border-color: rgba(239, 68, 68, 0.35);
   color: var(--mv-status-danger);
+}
+
+.quiz-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--mv-border-strong);
+  border-radius: 26px;
+  background: var(--mv-surface-accent);
+  box-shadow: var(--mv-shadow-card);
+}
+
+.quiz-callout h2 {
+  margin: 0.55rem 0 0.35rem;
+}
+
+.quiz-callout > div > p:last-child {
+  max-width: 650px;
+  color: var(--mv-text-muted);
+}
+
+.quiz-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 130px;
+  min-height: 46px;
+  padding: 0.7rem 1.15rem;
+  border: 1px solid var(--mv-primary-bg);
+  border-radius: 999px;
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+  font-weight: 700;
 }
 
 .category-picker {
@@ -212,7 +267,9 @@ const activeCategory = computed(
   color: inherit;
   text-decoration: none;
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
   content-visibility: auto;
   contain-intrinsic-size: 320px;
 }
@@ -301,6 +358,15 @@ const activeCategory = computed(
 }
 
 @media (max-width: 640px) {
+  .quiz-callout {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .quiz-link {
+    width: 100%;
+  }
+
   .category-pill {
     width: 100%;
     justify-content: space-between;
@@ -323,5 +389,4 @@ const activeCategory = computed(
     align-items: flex-start;
   }
 }
-
 </style>
