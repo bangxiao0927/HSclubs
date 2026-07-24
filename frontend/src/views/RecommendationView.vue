@@ -725,6 +725,22 @@ onMounted(loadClubs)
   color: var(--mv-status-danger);
 }
 
+@media (min-width: 761px) {
+  .quiz-header,
+  .quiz-card {
+    align-self: center;
+  }
+
+  .quiz-header {
+    width: min(900px, 100%);
+    text-align: center;
+  }
+
+  .quiz-header > p:last-child {
+    margin-inline: auto;
+  }
+}
+
 @media (max-width: 760px) {
   .answer-grid,
   .match-summary {
