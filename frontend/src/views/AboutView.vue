@@ -78,16 +78,6 @@ const activeCategory = computed(
         </button>
       </div>
 
-      <article v-if="activeCategory" class="category-panel">
-        <div class="panel-hero" :style="{ background: activeCategory.gradient }">
-          <span class="panel-icon">{{ activeCategory.icon }}</span>
-          <p class="panel-count">{{ activeCategory.clubCount }} clubs in this category</p>
-          <h2>{{ activeCategory.title }}</h2>
-          <p>{{ activeCategory.description }}</p>
-          <span class="panel-focus">{{ activeCategory.focus }}</span>
-        </div>
-      </article>
-
       <section v-if="activeCategory" class="category-clubs">
         <header class="clubs-header">
           <div>
@@ -180,42 +170,6 @@ const activeCategory = computed(
   background: var(--mv-surface-accent);
   border-color: var(--mv-border-strong);
   color: var(--mv-gold);
-}
-
-.category-panel {
-  border-radius: 32px;
-  border: 1px solid var(--mv-border);
-  overflow: hidden;
-  background: var(--mv-surface-card-strong);
-  box-shadow: var(--mv-shadow-elevated);
-}
-
-.panel-hero {
-  padding: clamp(1.5rem, 4vw, 2.8rem);
-  color: #f8fafc;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.panel-icon {
-  font-size: 2rem;
-}
-
-.panel-count {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.85rem;
-  color: rgba(255, 253, 247, 0.9);
-}
-
-.panel-focus {
-  width: fit-content;
-  margin-top: 0.35rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.18);
 }
 
 .category-clubs {
@@ -347,10 +301,6 @@ const activeCategory = computed(
 }
 
 @media (max-width: 640px) {
-  .category-panel {
-    border-radius: 24px;
-  }
-
   .category-pill {
     width: 100%;
     justify-content: space-between;
@@ -368,27 +318,10 @@ const activeCategory = computed(
     border-radius: 18px;
   }
 
-  .panel-hero {
-    padding: 1.35rem;
-  }
-
-  .category-panel {
-    border-radius: 20px;
-  }
-
   .clubs-header {
     flex-direction: column;
     align-items: flex-start;
   }
 }
 
-@media (max-width: 480px) {
-  .panel-hero {
-    padding: 1.1rem;
-  }
-
-  .panel-icon {
-    font-size: 1.6rem;
-  }
-}
 </style>
