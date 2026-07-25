@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { updateGraduationYear } from '../services/userService'
-import { normalizeAuthRedirect } from '../utils/authRedirect'
+import { sanitizeAuthRedirectTarget } from '../utils/authRedirect'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,11 +24,7 @@ const yearOptions = computed(() => {
 
 const canSave = computed(() => graduationYear.value !== null && graduationYear.value > 0)
 
-const resolveRedirectTarget = () => {
-  const redirect = normalizeAuthRedirect(route.query.redirect)
-  const redirectPath = redirect?.split(/[?#]/, 1)[0]
-  return redirect && redirectPath !== '/onboarding' ? redirect : '/profile'
-}
+const resolveRedirectTarget = () => sanitizeAuthRedirectTarget(route.query.redirect)
 
 const handleSave = async () => {
   if (!canSave.value) return

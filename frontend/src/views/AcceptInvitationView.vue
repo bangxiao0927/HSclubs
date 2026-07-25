@@ -55,7 +55,11 @@ onMounted(() => {
       <div v-if="!isAuthenticated" class="auth-gate">
         <h1>Accept school invitation</h1>
         <p>Sign in first to accept your invitation as a school administrator.</p>
-        <RouterLink to="/auth?intent=login" class="btn primary">Sign in</RouterLink>
+        <RouterLink
+          :to="{ name: 'auth-choice', query: { intent: 'login', redirect: route.fullPath } }"
+          class="btn primary"
+          >Sign in</RouterLink
+        >
       </div>
 
       <div v-else-if="status === 'loading'" class="status">
