@@ -6,6 +6,7 @@ import { fetchAllClubs } from '../services/clubService'
 import type { Club } from '../types/club'
 import { clubCategoryOptions } from '../utils/clubCategories'
 import { clubImage } from '../utils/clubImages'
+import { selectWeightedClubRecommendations } from '../utils/clubRecommendations'
 
 type QuizOption = {
   label: string
@@ -197,35 +198,12 @@ const rankedCategories = computed(() => {
     .sort((a, b) => b.score - a.score || a.index - b.index)
 })
 
-const topCategories = computed(() => rankedCategories.value.slice(0, 3))
-const recommendedClubs = computed(() => {
-  const categoryQueues = topCategories.value.map((category) => ({
-    title: category.title,
-    clubs: clubs.value
-      .filter((club) => club.category === category.title)
-      .sort((a, b) => {
-        const memberDelta = (b.memberCount ?? 0) - (a.memberCount ?? 0)
-        return memberDelta !== 0 ? memberDelta : a.name.localeCompare(b.name)
-      }),
-    nextIndex: 0,
-  }))
-  const matches: Club[] = []
-
-  while (matches.length < 12) {
-    let addedClub = false
-    categoryQueues.forEach((queue) => {
-      const club = queue.clubs[queue.nextIndex]
-      if (club && matches.length < 12) {
-        matches.push(club)
-        queue.nextIndex++
-        addedClub = true
-      }
-    })
-    if (!addedClub) break
-  }
-
-  return matches
-})
+const topCategories = computed(() =>
+  rankedCategories.value.filter((category) => category.score > 0).slice(0, 3),
+)
+const recommendedClubs = computed(() =>
+  selectWeightedClubRecommendations(clubs.value, topCategories.value),
+)
 
 const loadClubs = async () => {
   loading.value = true

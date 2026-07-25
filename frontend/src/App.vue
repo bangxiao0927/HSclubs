@@ -48,6 +48,7 @@ watch(
 
 const logoText = schoolTemplate.brandName
 const searchPlaceholder = 'Search clubs, advisors, categories, or keywords'
+document.title = logoText
 
 const handleLogout = () => {
   authStore.logout()
