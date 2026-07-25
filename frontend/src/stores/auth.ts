@@ -55,20 +55,37 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const refreshUser = async () => {
-    userLoading.value = true
-    try {
-      const fetched = await fetchAuthenticatedUser()
-      currentUser.value = normalizeUser(fetched)
-      userError.value = null
-    } catch (error) {
-      userError.value =
-        error instanceof Error ? error.message : 'Unable to verify session'
-      currentUser.value = null
-    } finally {
-      userLoading.value = false
-      hasCheckedSession.value = true
+  // Concurrent callers (e.g. main.ts's bootstrap() and the router guard both
+  // firing on cold load, before either has resolved) must share a single
+  // /api/auth/me request instead of each issuing their own. The in-flight
+  // promise is cached here and cleared once the request settles, so a later
+  // explicit refreshUser() call still triggers a fresh request.
+  let inFlightRefresh: Promise<void> | null = null
+
+  const refreshUser = (): Promise<void> => {
+    if (inFlightRefresh) {
+      return inFlightRefresh
     }
+
+    const request = (async () => {
+      userLoading.value = true
+      try {
+        const fetched = await fetchAuthenticatedUser()
+        currentUser.value = normalizeUser(fetched)
+        userError.value = null
+      } catch (error) {
+        userError.value =
+          error instanceof Error ? error.message : 'Unable to verify session'
+        currentUser.value = null
+      } finally {
+        userLoading.value = false
+        hasCheckedSession.value = true
+        inFlightRefresh = null
+      }
+    })()
+
+    inFlightRefresh = request
+    return request
   }
 
   const bootstrap = async () => {
@@ -82,11 +99,14 @@ export const useAuthStore = defineStore('auth', () => {
         'No OAuth provider was selected. Please refresh and try again.'
       return
     }
-    savePendingAuthRedirect(redirectTarget)
     const provider = providers.value.find((item) => item.id === sanitizedId)
-    const authorizationPath =
-      provider?.authorizationUrl ?? `/oauth2/authorization/${sanitizedId}`
-    window.location.href = buildApiUrl(authorizationPath)
+    if (!provider?.authorizationUrl) {
+      providersError.value =
+        'This sign-in provider is not configured correctly. Please refresh and try again.'
+      return
+    }
+    savePendingAuthRedirect(redirectTarget)
+    window.location.href = buildApiUrl(provider.authorizationUrl)
   }
 
   const logout = async () => {

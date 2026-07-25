@@ -150,6 +150,15 @@ router.beforeEach(async (to) => {
     }
   }
 
+  // An already-authenticated user landing on the sign-in page (stale link,
+  // browser Back, bookmarked /auth?redirect=...) has nothing to choose from
+  // here. Route them onward through the same post-auth resolver used after a
+  // real login, so a not-yet-onboarded user still lands on /accept-terms or
+  // /onboarding instead of skipping those steps.
+  if (authStore.isAuthenticated && to.name === 'auth-choice') {
+    return resolvePostAuthRoute(authStore.currentUser, to.query.redirect) ?? DEFAULT_POST_AUTH_PATH
+  }
+
   if (
     authStore.isAuthenticated &&
     authStore.currentUser?.acceptedTerms === false &&
