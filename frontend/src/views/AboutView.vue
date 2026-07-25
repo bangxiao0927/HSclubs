@@ -68,7 +68,7 @@ const activeCategory = computed(
 
     <template v-else>
       <RouterLink to="/recommendations" class="quiz-link">
-        <span>Start quiz</span>
+        <span>Get your interest club</span>
         <span aria-hidden="true">→</span>
       </RouterLink>
 
@@ -157,10 +157,11 @@ const activeCategory = computed(
 .quiz-link {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  position: relative;
   width: 100%;
-  min-height: 72px;
-  padding: 1rem clamp(1.25rem, 3vw, 2rem);
+  min-height: 144px;
+  padding: 2rem clamp(3.5rem, 6vw, 5rem);
   border: 1px solid var(--mv-primary-bg);
   border-radius: 22px;
   background: var(--mv-primary-bg);
@@ -184,6 +185,8 @@ const activeCategory = computed(
 }
 
 .quiz-link span:last-child {
+  position: absolute;
+  right: clamp(1.25rem, 3vw, 2rem);
   font-size: 1.5rem;
 }
 
