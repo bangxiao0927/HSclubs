@@ -1,0 +1,198 @@
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../services/authService', () => ({
+  fetchAuthProviders: vi.fn(),
+  fetchAuthenticatedUser: vi.fn(),
+  logout: vi.fn(),
+}))
+
+import type { AuthUser } from '../types/auth'
+import { fetchAuthenticatedUser } from '../services/authService'
+import router from './index'
+
+const fetchAuthenticatedUserMock = vi.mocked(fetchAuthenticatedUser)
+
+// A fully-onboarded user: accepted the terms and has a graduation year on
+// file, so none of the post-auth steps (accept-terms, onboarding) apply.
+const onboardedUser: AuthUser = {
+  id: 'user-1',
+  email: 'ada@example.com',
+  displayName: 'Ada Lovelace',
+  avatarUrl: '',
+  provider: 'google',
+  isOwner: false,
+  graduationYear: 2026,
+  acceptedTerms: true,
+}
+
+// The catch-all 404 route: it has no `requiresAuth` meta and is in the
+// guard's `termsBypassRouteNames` allowlist, so navigating here never
+// triggers a redirect for ANY auth/terms/onboarding combination. That makes
+// it a safe "neutral" waypoint to move the router away from wherever the
+// previous test left `currentRoute`, without that move itself being
+// redirected (which would make its `refreshUser()` call reflect the wrong
+// session for the test that follows).
+const NEUTRAL_RESET_PATH = '/__router-spec-reset__'
+
+/**
+ * Establishes a fresh Pinia store, wires the mocked `fetchAuthenticatedUser`
+ * to resolve as `user`, and performs the one navigation that actually
+ * triggers the guard's `refreshUser()` call (since `hasCheckedSession` stays
+ * true forever after). Every subsequent `router.push` in the test reuses
+ * that already-resolved session.
+ */
+const primeSession = async (user: AuthUser | null) => {
+  setActivePinia(createPinia())
+  fetchAuthenticatedUserMock.mockReset()
+  fetchAuthenticatedUserMock.mockResolvedValue(user)
+  await router.push(NEUTRAL_RESET_PATH)
+  await router.isReady()
+}
+
+beforeEach(() => {
+  fetchAuthenticatedUserMock.mockReset()
+})
+
+describe('authentication gate', () => {
+  it('redirects an unauthenticated user requesting a protected route to auth-choice, preserving the original path', async () => {
+    await primeSession(null)
+
+    await router.push('/profile')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('auth-choice')
+    expect(router.currentRoute.value.query.intent).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/profile')
+  })
+
+  it('still renders the sign-in page for an unauthenticated visitor (no redirect)', async () => {
+    await primeSession(null)
+
+    await router.push('/auth')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('auth-choice')
+    expect(router.currentRoute.value.fullPath).toBe('/auth')
+  })
+
+  it('leaves a public route untouched for an unauthenticated visitor', async () => {
+    await primeSession(null)
+
+    await router.push('/search')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('club-search')
+  })
+})
+
+describe('already-authenticated user landing on the sign-in page', () => {
+  it('sends a fully-onboarded user to the default landing path', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/auth')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/profile')
+  })
+
+  it('forwards a fully-onboarded user to the requested redirect target', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/auth?intent=login&redirect=/clubs/3')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('club-detail')
+    expect(router.currentRoute.value.path).toBe('/clubs/3')
+  })
+
+  it('does not follow an off-site redirect target, falling back to the default landing path', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/auth?redirect=https://evil.com')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/profile')
+  })
+
+  it('sends a user who has not accepted the terms to accept-terms instead', async () => {
+    await primeSession({ ...onboardedUser, acceptedTerms: false })
+
+    await router.push('/auth')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('accept-terms')
+  })
+
+  it('sends a user with no graduation year to onboarding instead', async () => {
+    await primeSession({ ...onboardedUser, graduationYear: null })
+
+    await router.push('/auth')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('onboarding')
+  })
+
+  it('does not hijack the OAuth callback route (only auth-choice is redirected onward)', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/auth/callback')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('auth-callback')
+  })
+})
+
+describe('terms enforcement', () => {
+  it('redirects a user who has not accepted the terms to accept-terms, preserving the requested route', async () => {
+    await primeSession({ ...onboardedUser, acceptedTerms: false })
+
+    await router.push('/profile')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('accept-terms')
+    expect(router.currentRoute.value.query.redirect).toBe('/profile')
+  })
+
+  it('still allows a user who has not accepted the terms to reach the terms and privacy pages', async () => {
+    await primeSession({ ...onboardedUser, acceptedTerms: false })
+
+    await router.push('/terms')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('terms')
+
+    await router.push('/privacy')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('privacy')
+  })
+
+  it('regression: after accepting the terms, a user with no graduation year is forwarded to onboarding, not the original redirect target', async () => {
+    await primeSession({ ...onboardedUser, acceptedTerms: true, graduationYear: null })
+
+    await router.push('/accept-terms?redirect=/clubs/3')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('onboarding')
+    expect(router.currentRoute.value.query.redirect).toBe('/clubs/3')
+  })
+
+  it('does not loop when the redirect target is accept-terms itself, terminating on the default landing path', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/accept-terms?redirect=/accept-terms')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/profile')
+  })
+})
+
+describe('owner gate', () => {
+  it('redirects an authenticated non-owner away from an owner-only route, back to home', async () => {
+    await primeSession({ ...onboardedUser, isOwner: false })
+
+    await router.push('/admin')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('home')
+  })
+})
