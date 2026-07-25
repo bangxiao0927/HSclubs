@@ -115,6 +115,12 @@ describe('resolvePostAuthRoute', () => {
       resolvePostAuthRoute({ acceptedTerms: false, graduationYear: null }, '/onboarding'),
     ).toEqual({ path: '/accept-terms', query: { redirect: '/profile' } })
   })
+
+  it('sends a fully-onboarded user to the default landing path when there is no target', () => {
+    expect(resolvePostAuthRoute({ acceptedTerms: true, graduationYear: 2027 }, null)).toBe(
+      '/profile',
+    )
+  })
 })
 
 describe('pending auth redirect round-trip', () => {

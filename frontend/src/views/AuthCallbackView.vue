@@ -15,11 +15,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const resolveRedirectTarget = () => {
-  return (
-    normalizeAuthRedirect(route.query.redirect) ??
-    consumePendingAuthRedirect() ??
-    DEFAULT_POST_AUTH_PATH
-  )
+  return normalizeAuthRedirect(route.query.redirect) ?? consumePendingAuthRedirect()
 }
 
 onMounted(async () => {
@@ -28,7 +24,7 @@ onMounted(async () => {
   if (authStore.isAuthenticated) {
     const redirectTarget = resolveRedirectTarget()
     const destination = resolvePostAuthRoute(authStore.currentUser, redirectTarget)
-    router.replace(destination ?? redirectTarget)
+    router.replace(destination ?? DEFAULT_POST_AUTH_PATH)
   } else {
     router.replace({ path: '/auth', query: { error: 'login_failed' } })
   }
