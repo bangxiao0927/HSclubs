@@ -29,6 +29,19 @@ See [Vite Configuration Reference](https://vite.dev/config/).
 npm install
 ```
 
+### Configure School Branding
+
+Copy `.env.example` to `.env` and customize the school-facing options before building:
+
+```sh
+VITE_BRAND_NAME=HS Clubs
+VITE_SCHOOL_NAME=Sample High School
+VITE_SCHOOL_SHORT_NAME=School Clubs
+VITE_DEFAULT_COLOR_MODE=light
+```
+
+`VITE_DEFAULT_COLOR_MODE` accepts `light` or `dark`. A visitor's saved theme preference takes priority after they use the theme toggle.
+
 ### Compile and Hot-Reload for Development
 
 ```sh

@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from './stores/auth'
 import ErrorDisplay from './components/ErrorDisplay.vue'
+import { schoolTemplate, type ColorMode } from './config/schoolTemplate'
 
 const searchQuery = ref('')
 const route = useRoute()
@@ -45,7 +46,7 @@ watch(
   },
 )
 
-const logoText = 'HS Clubs'
+const logoText = schoolTemplate.brandName
 const searchPlaceholder = 'Search clubs, advisors, categories, or keywords'
 
 const handleLogout = () => {
@@ -57,10 +58,10 @@ const handleMobileLogout = () => {
   handleLogout()
 }
 
-const theme = ref<'light' | 'dark'>('light')
+const theme = ref<ColorMode>(schoolTemplate.defaultColorMode)
 const themeLabel = computed(() => (theme.value === 'light' ? 'Dark mode' : 'Light mode'))
 
-const applyTheme = (value: 'light' | 'dark') => {
+const applyTheme = (value: ColorMode) => {
   document.documentElement.dataset.theme = value
   try {
     localStorage.setItem('theme', value)
@@ -151,7 +152,7 @@ watch(
         <div class="header-left">
           <div class="logo">
             <RouterLink to="/" class="logo-link">
-              <img class="logo-icon" src="/android-chrome-512x512.png" alt="HS Clubs logo" />
+              <img class="logo-icon" src="/android-chrome-512x512.png" :alt="`${logoText} logo`" />
               <span class="logo-text">{{ logoText }}</span>
             </RouterLink>
           </div>
@@ -281,7 +282,7 @@ watch(
 
     <footer class="app-footer">
       <div class="footer-inner page-shell">
-        <span class="footer-brand">HS Clubs</span>
+        <span class="footer-brand">{{ logoText }}</span>
         <nav class="footer-links">
           <RouterLink to="/terms">Terms of Use</RouterLink>
           <RouterLink to="/privacy">Privacy Policy</RouterLink>
