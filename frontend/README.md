@@ -9,7 +9,7 @@ This template should help get you started developing with Vue 3 in Vite.
 ## Recommended Browser Setup
 
 - Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd) 
+  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
   - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
 - Firefox:
   - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
@@ -28,6 +28,19 @@ See [Vite Configuration Reference](https://vite.dev/config/).
 ```sh
 npm install
 ```
+
+### Configure School Branding
+
+Copy `.env.example` to `.env` and customize the school-facing options before building:
+
+```sh
+VITE_BRAND_NAME=HS Clubs
+VITE_SCHOOL_NAME=Sample High School
+VITE_SCHOOL_SHORT_NAME=School Clubs
+VITE_DEFAULT_COLOR_MODE=light
+```
+
+`VITE_DEFAULT_COLOR_MODE` accepts `light` or `dark`. A visitor's saved theme preference takes priority after they use the theme toggle.
 
 ### Compile and Hot-Reload for Development
 

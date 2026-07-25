@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { schoolTemplate } from '../config/schoolTemplate'
 import { useAuthStore } from '../stores/auth'
 import { buildApiUrl } from '../services/httpClient'
 import { normalizeAuthRedirect } from '../utils/authRedirect'
@@ -8,6 +9,7 @@ import { normalizeAuthRedirect } from '../utils/authRedirect'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const brandName = schoolTemplate.brandName
 const agreed = ref(false)
 const loading = ref(false)
 const error = ref('')
@@ -41,7 +43,7 @@ const handleAccept = async () => {
     <header class="terms-hero">
       <p class="section-label">Welcome</p>
       <h1>Before you continue</h1>
-      <p>Please review and accept our terms to start using HS Clubs.</p>
+      <p>Please review and accept our terms to start using {{ brandName }}.</p>
     </header>
 
     <div class="terms-summary">
@@ -60,7 +62,7 @@ const handleAccept = async () => {
         <h2>Privacy Policy</h2>
         <ul>
           <li>We collect your name, email, and profile picture via Google</li>
-          <li>Your data stays within the HS Clubs platform</li>
+          <li>Your data stays within the {{ brandName }} platform</li>
           <li>We do not sell or share your personal information</li>
           <li>You can request account deletion anytime</li>
         </ul>
@@ -77,7 +79,7 @@ const handleAccept = async () => {
       <p v-if="error" class="form-error">{{ error }}</p>
 
       <button type="submit" class="btn primary" :disabled="!agreed || loading">
-        {{ loading ? 'Saving…' : 'Continue to HS Clubs' }}
+        {{ loading ? 'Saving…' : `Continue to ${brandName}` }}
       </button>
     </form>
   </div>

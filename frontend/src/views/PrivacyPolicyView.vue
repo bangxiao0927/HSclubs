@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { schoolTemplate } from '../config/schoolTemplate'
+
+const brandName = schoolTemplate.brandName
 </script>
 
 <template>
@@ -27,7 +30,7 @@
       <h2>3. Data Sharing</h2>
       <p>
         We do not sell or share your personal information with third parties. Your data stays within
-        the HS Clubs platform and your school's instance.
+        the {{ brandName }} platform and your school's instance.
       </p>
 
       <h2>4. Data Retention</h2>
@@ -44,14 +47,14 @@
 
       <h2>6. Children's Privacy</h2>
       <p>
-        The Platform is designed for high school students. We comply with applicable student
-        data privacy laws. Parents or guardians with concerns may contact the platform administrator.
+        The Platform is designed for high school students. We comply with applicable student data
+        privacy laws. Parents or guardians with concerns may contact the platform administrator.
       </p>
 
       <h2>7. Contact</h2>
       <p>
-        For privacy-related questions, contact the platform administrator through your school's
-        club directory page.
+        For privacy-related questions, contact the platform administrator through your school's club
+        directory page.
       </p>
     </section>
   </div>

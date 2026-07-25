@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { schoolTemplate } from '../config/schoolTemplate'
+
+const brandName = schoolTemplate.brandName
 </script>
 
 <template>
@@ -12,8 +15,8 @@
     <section class="legal-content">
       <h2>1. Acceptance of Terms</h2>
       <p>
-        By accessing or using HS Clubs ("the Platform"), you agree to be bound by these Terms of Use.
-        If you do not agree, do not use the Platform.
+        By accessing or using {{ brandName }} ("the Platform"), you agree to be bound by these Terms
+        of Use. If you do not agree, do not use the Platform.
       </p>
 
       <h2>2. Eligibility</h2>
@@ -33,8 +36,9 @@
 
       <h2>4. Platform Role</h2>
       <p>
-        HS Clubs provides a directory and management tool for school clubs. Individual schools and
-        club leaders are responsible for the content and accuracy of their club listings.
+        {{ brandName }} provides a directory and management tool for school clubs. Individual
+        schools and club leaders are responsible for the content and accuracy of their club
+        listings.
       </p>
 
       <h2>5. Account Termination</h2>
@@ -51,8 +55,8 @@
 
       <h2>7. Contact</h2>
       <p>
-        Questions about these terms? Contact the platform administrator through your school's
-        club directory page.
+        Questions about these terms? Contact the platform administrator through your school's club
+        directory page.
       </p>
     </section>
   </div>

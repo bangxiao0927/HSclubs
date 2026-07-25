@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 
 import { fetchAllClubs } from '../services/clubService'
 import type { Club } from '../types/club'
@@ -11,7 +11,6 @@ const clubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
 
-const route = useRoute()
 const selectedCategoryTitle = ref(clubCategoryOptions[0]?.title ?? '')
 
 const loadClubs = async () => {
@@ -40,12 +39,16 @@ const categories = computed(() =>
     return {
       ...category,
       clubCount: categoryClubs.length,
-      clubs: categoryClubs}
+      clubs: categoryClubs,
+    }
   }),
 )
 
 const activeCategory = computed(
-  () => categories.value.find((category) => category.title === selectedCategoryTitle.value) ?? categories.value[0] ?? null,
+  () =>
+    categories.value.find((category) => category.title === selectedCategoryTitle.value) ??
+    categories.value[0] ??
+    null,
 )
 </script>
 
@@ -55,7 +58,8 @@ const activeCategory = computed(
       <p class="section-label">Explore</p>
       <h1>Browse clubs by category</h1>
       <p>
-        Clubs are grouped by their saved category, and club admins can now maintain that type directly from the admin page.
+        Clubs are grouped by their saved category, and club admins can now maintain that type
+        directly from the admin page.
       </p>
     </header>
 
@@ -63,13 +67,10 @@ const activeCategory = computed(
     <section v-else-if="error" class="status-card error">{{ error }}</section>
 
     <template v-else>
-      <section class="overview-grid">
-        <article v-for="category in categories" :key="category.title" class="overview-card">
-          <span class="overview-icon">{{ category.icon }}</span>
-          <strong>{{ category.clubCount }}</strong>
-          <span>{{ category.title }}</span>
-        </article>
-      </section>
+      <RouterLink to="/recommendations" class="quiz-link">
+        <span>Get your interest club</span>
+        <span aria-hidden="true">→</span>
+      </RouterLink>
 
       <div class="category-picker">
         <button
@@ -86,16 +87,6 @@ const activeCategory = computed(
         </button>
       </div>
 
-      <article v-if="activeCategory" class="category-panel">
-        <div class="panel-hero" :style="{ background: activeCategory.gradient }">
-          <span class="panel-icon">{{ activeCategory.icon }}</span>
-          <p class="panel-count">{{ activeCategory.clubCount }} clubs in this category</p>
-          <h2>{{ activeCategory.title }}</h2>
-          <p>{{ activeCategory.description }}</p>
-          <span class="panel-focus">{{ activeCategory.focus }}</span>
-        </div>
-      </article>
-
       <section v-if="activeCategory" class="category-clubs">
         <header class="clubs-header">
           <div>
@@ -109,7 +100,12 @@ const activeCategory = computed(
           <article v-if="!activeCategory.clubs.length" class="empty-card">
             <p>No clubs have been assigned to {{ activeCategory.title }} yet.</p>
           </article>
-          <RouterLink v-for="club in activeCategory.clubs" :key="club.id" class="top-card" :to="`/clubs/${club.id}`">
+          <RouterLink
+            v-for="club in activeCategory.clubs"
+            :key="club.id"
+            class="top-card"
+            :to="`/clubs/${club.id}`"
+          >
             <div class="club-avatar large">
               <img :src="clubImage(club)" :alt="`${club.name} avatar`" loading="lazy" />
             </div>
@@ -158,30 +154,40 @@ const activeCategory = computed(
   color: var(--mv-status-danger);
 }
 
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
-}
-
-.overview-card {
+.quiz-link {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 1.05rem 1.2rem;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+  min-height: 144px;
+  padding: 2rem clamp(3.5rem, 6vw, 5rem);
+  border: 1px solid var(--mv-primary-bg);
   border-radius: 22px;
-  border: 1px solid var(--mv-border);
-  background: var(--mv-surface-card);
-  box-shadow: var(--mv-shadow-card);
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+  box-shadow: var(--mv-primary-shadow);
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  font-weight: 700;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.overview-card strong {
-  font-size: 1.8rem;
-  color: var(--mv-gold);
+.quiz-link:hover,
+.quiz-link:focus-visible {
+  transform: translateY(-2px);
 }
 
-.overview-icon {
-  font-size: 1.2rem;
+.quiz-link:focus-visible {
+  outline: 3px solid var(--mv-gold);
+  outline-offset: 3px;
+}
+
+.quiz-link span:last-child {
+  position: absolute;
+  right: clamp(1.25rem, 3vw, 2rem);
+  font-size: 1.5rem;
 }
 
 .category-picker {
@@ -214,42 +220,6 @@ const activeCategory = computed(
   background: var(--mv-surface-accent);
   border-color: var(--mv-border-strong);
   color: var(--mv-gold);
-}
-
-.category-panel {
-  border-radius: 32px;
-  border: 1px solid var(--mv-border);
-  overflow: hidden;
-  background: var(--mv-surface-card-strong);
-  box-shadow: var(--mv-shadow-elevated);
-}
-
-.panel-hero {
-  padding: clamp(1.5rem, 4vw, 2.8rem);
-  color: #f8fafc;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.panel-icon {
-  font-size: 2rem;
-}
-
-.panel-count {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.85rem;
-  color: rgba(255, 253, 247, 0.9);
-}
-
-.panel-focus {
-  width: fit-content;
-  margin-top: 0.35rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.18);
 }
 
 .category-clubs {
@@ -292,7 +262,9 @@ const activeCategory = computed(
   color: inherit;
   text-decoration: none;
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
   content-visibility: auto;
   contain-intrinsic-size: 320px;
 }
@@ -381,10 +353,6 @@ const activeCategory = computed(
 }
 
 @media (max-width: 640px) {
-  .category-panel {
-    border-radius: 24px;
-  }
-
   .category-pill {
     width: 100%;
     justify-content: space-between;
@@ -392,20 +360,6 @@ const activeCategory = computed(
 }
 
 @media (max-width: 720px) {
-  .overview-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 0.75rem;
-  }
-
-  .overview-card {
-    padding: 0.85rem 0.9rem;
-    border-radius: 18px;
-  }
-
-  .overview-card strong {
-    font-size: 1.3rem;
-  }
-
   .top-grid {
     grid-template-columns: 1fr;
     gap: 0.85rem;
@@ -416,31 +370,9 @@ const activeCategory = computed(
     border-radius: 18px;
   }
 
-  .panel-hero {
-    padding: 1.35rem;
-  }
-
-  .category-panel {
-    border-radius: 20px;
-  }
-
   .clubs-header {
     flex-direction: column;
     align-items: flex-start;
-  }
-}
-
-@media (max-width: 480px) {
-  .overview-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .panel-hero {
-    padding: 1.1rem;
-  }
-
-  .panel-icon {
-    font-size: 1.6rem;
   }
 }
 </style>

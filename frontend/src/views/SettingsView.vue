@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import { schoolTemplate } from '../config/schoolTemplate'
+
+const brandName = schoolTemplate.brandName
 
 const clearCache = () => {
-  try { localStorage.clear() } catch { /* ignore */ }
+  try {
+    localStorage.clear()
+  } catch {
+    /* ignore */
+  }
   window.location.reload()
 }
 </script>
@@ -12,7 +19,7 @@ const clearCache = () => {
     <header class="settings-hero">
       <p class="section-label">Settings</p>
       <h1>Preferences</h1>
-      <p>Customize your HS Clubs experience.</p>
+      <p>Customize your {{ brandName }} experience.</p>
     </header>
 
     <section class="settings-group">
@@ -51,7 +58,7 @@ const clearCache = () => {
       <h2>About</h2>
       <div class="setting-row">
         <div>
-          <strong>HS Clubs</strong>
+          <strong>{{ brandName }}</strong>
           <p>Single-school club directory platform. Built with Vue 3 + Spring Boot.</p>
         </div>
       </div>
@@ -68,8 +75,14 @@ const clearCache = () => {
   max-width: 640px;
 }
 
-.settings-hero { display: flex; flex-direction: column; gap: 0.5rem; }
-.settings-hero h1 { margin: 0; }
+.settings-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.settings-hero h1 {
+  margin: 0;
+}
 
 .settings-group {
   display: flex;
@@ -98,10 +111,18 @@ const clearCache = () => {
   color: inherit;
 }
 
-.setting-row.link:hover { background: var(--mv-surface-accent); }
+.setting-row.link:hover {
+  background: var(--mv-surface-accent);
+}
 
-.setting-row strong { font-size: 0.95rem; }
-.setting-row p { margin: 0.25rem 0 0; color: var(--mv-text-muted); font-size: 0.85rem; }
+.setting-row strong {
+  font-size: 0.95rem;
+}
+.setting-row p {
+  margin: 0.25rem 0 0;
+  color: var(--mv-text-muted);
+  font-size: 0.85rem;
+}
 
 .btn {
   padding: 0.4rem 1rem;
@@ -114,7 +135,9 @@ const clearCache = () => {
   color: var(--mv-ghost-text);
   flex-shrink: 0;
 }
-.btn:hover { background: var(--mv-surface-accent); }
+.btn:hover {
+  background: var(--mv-surface-accent);
+}
 
 @media (max-width: 480px) {
   .setting-row {

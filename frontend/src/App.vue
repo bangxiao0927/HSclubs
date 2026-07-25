@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from './stores/auth'
 import ErrorDisplay from './components/ErrorDisplay.vue'
+import { schoolTemplate, type ColorMode } from './config/schoolTemplate'
 
 const searchQuery = ref('')
 const route = useRoute()
@@ -45,8 +46,9 @@ watch(
   },
 )
 
-const logoText = 'HS Clubs'
+const logoText = schoolTemplate.brandName
 const searchPlaceholder = 'Search clubs, advisors, categories, or keywords'
+document.title = logoText
 
 const handleLogout = () => {
   authStore.logout()
@@ -57,11 +59,14 @@ const handleMobileLogout = () => {
   handleLogout()
 }
 
-const theme = ref<'light' | 'dark'>('light')
+const theme = ref<ColorMode>(schoolTemplate.defaultColorMode)
 const themeLabel = computed(() => (theme.value === 'light' ? 'Dark mode' : 'Light mode'))
 
-const applyTheme = (value: 'light' | 'dark') => {
+const applyTheme = (value: ColorMode) => {
   document.documentElement.dataset.theme = value
+}
+
+const persistTheme = (value: ColorMode) => {
   try {
     localStorage.setItem('theme', value)
   } catch (error) {
@@ -70,7 +75,9 @@ const applyTheme = (value: 'light' | 'dark') => {
 }
 
 const toggleTheme = () => {
-  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  const nextTheme = theme.value === 'light' ? 'dark' : 'light'
+  theme.value = nextTheme
+  persistTheme(nextTheme)
 }
 
 try {
@@ -151,21 +158,15 @@ watch(
         <div class="header-left">
           <div class="logo">
             <RouterLink to="/" class="logo-link">
-              <img class="logo-icon" src="/android-chrome-512x512.png" alt="HS Clubs logo" />
+              <img class="logo-icon" src="/android-chrome-512x512.png" :alt="`${logoText} logo`" />
               <span class="logo-text">{{ logoText }}</span>
             </RouterLink>
           </div>
           <nav class="nav">
-            <RouterLink
-              to="/"
-              class="nav-link"
-              :class="{ active: route.name === 'home' }"
+            <RouterLink to="/" class="nav-link" :class="{ active: route.name === 'home' }"
               >Home</RouterLink
             >
-            <RouterLink
-              to="/about"
-              class="nav-link"
-              :class="{ active: route.name === 'about' }"
+            <RouterLink to="/about" class="nav-link" :class="{ active: route.name === 'about' }"
               >Category</RouterLink
             >
             <RouterLink
@@ -249,14 +250,28 @@ watch(
           </form>
           <nav class="mobile-nav">
             <RouterLink to="/" class="mobile-nav-link" @click="closeMobileMenu">Home</RouterLink>
-            <RouterLink to="/about" class="mobile-nav-link" @click="closeMobileMenu">Category</RouterLink>
-            <RouterLink to="/calendar" class="mobile-nav-link" @click="closeMobileMenu">Calendar</RouterLink>
-            <RouterLink v-if="currentUser?.isOwner" to="/admin" class="mobile-nav-link" @click="closeMobileMenu">Admin</RouterLink>
+            <RouterLink to="/about" class="mobile-nav-link" @click="closeMobileMenu"
+              >Category</RouterLink
+            >
+            <RouterLink to="/calendar" class="mobile-nav-link" @click="closeMobileMenu"
+              >Calendar</RouterLink
+            >
+            <RouterLink
+              v-if="currentUser?.isOwner"
+              to="/admin"
+              class="mobile-nav-link"
+              @click="closeMobileMenu"
+              >Admin</RouterLink
+            >
           </nav>
           <div class="mobile-actions">
             <template v-if="isAuthenticated">
-              <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu">Profile</RouterLink>
-              <button type="button" class="auth-btn ghost" @click="handleMobileLogout">Log out</button>
+              <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu"
+                >Profile</RouterLink
+              >
+              <button type="button" class="auth-btn ghost" @click="handleMobileLogout">
+                Log out
+              </button>
             </template>
             <template v-else>
               <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
@@ -281,7 +296,7 @@ watch(
 
     <footer class="app-footer">
       <div class="footer-inner page-shell">
-        <span class="footer-brand">HS Clubs</span>
+        <span class="footer-brand">{{ logoText }}</span>
         <nav class="footer-links">
           <RouterLink to="/terms">Terms of Use</RouterLink>
           <RouterLink to="/privacy">Privacy Policy</RouterLink>
@@ -429,7 +444,9 @@ watch(
   color: var(--mv-profile-text);
   text-decoration: none;
   font-size: 0.9rem;
-  transition: background 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
 }
 
 .profile-link:hover {
@@ -544,8 +561,12 @@ watch(
   transition: transform 0.25s;
 }
 
-.hamburger::before { top: -7px; }
-.hamburger::after { top: 7px; }
+.hamburger::before {
+  top: -7px;
+}
+.hamburger::after {
+  top: 7px;
+}
 
 .mobile-menu {
   padding: 1rem var(--page-padding-inline) 1.5rem;
