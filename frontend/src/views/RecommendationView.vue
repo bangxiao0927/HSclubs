@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { fetchAllClubs } from '../services/clubService'
@@ -174,6 +174,8 @@ const error = ref('')
 const currentQuestionIndex = ref(0)
 const answers = ref<(number | null)[]>(questions.map(() => null))
 const showResults = ref(false)
+const questionHeading = ref<HTMLElement | null>(null)
+const resultsHeading = ref<HTMLElement | null>(null)
 
 const currentQuestion = computed(() => questions[currentQuestionIndex.value]!)
 const selectedOptionIndex = computed(() => answers.value[currentQuestionIndex.value])
@@ -221,24 +223,35 @@ const selectOption = (optionIndex: number) => {
   answers.value[currentQuestionIndex.value] = optionIndex
 }
 
-const goBack = () => {
-  if (currentQuestionIndex.value > 0) currentQuestionIndex.value--
+const focusQuestionHeading = async () => {
+  await nextTick()
+  questionHeading.value?.focus()
 }
 
-const continueQuiz = () => {
+const goBack = async () => {
+  if (currentQuestionIndex.value === 0) return
+  currentQuestionIndex.value--
+  await focusQuestionHeading()
+}
+
+const continueQuiz = async () => {
   if (selectedOptionIndex.value === null) return
   if (currentQuestionIndex.value < questions.length - 1) {
     currentQuestionIndex.value++
+    await focusQuestionHeading()
     return
   }
   showResults.value = true
+  await nextTick()
+  resultsHeading.value?.focus()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-const restartQuiz = () => {
+const restartQuiz = async () => {
   answers.value = questions.map(() => null)
   currentQuestionIndex.value = 0
   showResults.value = false
+  await focusQuestionHeading()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -266,7 +279,9 @@ onMounted(loadClubs)
         </div>
 
         <div class="question-copy">
-          <h2 id="quiz-question">{{ currentQuestion.prompt }}</h2>
+          <h2 id="quiz-question" ref="questionHeading" tabindex="-1">
+            {{ currentQuestion.prompt }}
+          </h2>
           <p>{{ currentQuestion.helper }}</p>
         </div>
 
@@ -323,7 +338,7 @@ onMounted(loadClubs)
       <header class="results-header">
         <div>
           <p class="section-label">Your results</p>
-          <h1>Your best club matches</h1>
+          <h1 ref="resultsHeading" tabindex="-1">Your best club matches</h1>
           <p>These recommendations are based on the interests and environment you selected.</p>
         </div>
         <button type="button" class="secondary-button" @click="restartQuiz">Retake quiz</button>

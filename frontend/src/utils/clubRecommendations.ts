@@ -20,7 +20,7 @@ export const selectWeightedClubRecommendations = (
         .sort((a, b) => {
           const memberDelta = (b.memberCount ?? 0) - (a.memberCount ?? 0)
           return memberDelta !== 0 ? memberDelta : a.name.localeCompare(b.name)
-      }),
+        }),
       nextIndex: 0,
     }))
   const matches: Club[] = []

@@ -64,6 +64,9 @@ const themeLabel = computed(() => (theme.value === 'light' ? 'Dark mode' : 'Ligh
 
 const applyTheme = (value: ColorMode) => {
   document.documentElement.dataset.theme = value
+}
+
+const persistTheme = (value: ColorMode) => {
   try {
     localStorage.setItem('theme', value)
   } catch (error) {
@@ -72,7 +75,9 @@ const applyTheme = (value: ColorMode) => {
 }
 
 const toggleTheme = () => {
-  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  const nextTheme = theme.value === 'light' ? 'dark' : 'light'
+  theme.value = nextTheme
+  persistTheme(nextTheme)
 }
 
 try {
@@ -158,16 +163,10 @@ watch(
             </RouterLink>
           </div>
           <nav class="nav">
-            <RouterLink
-              to="/"
-              class="nav-link"
-              :class="{ active: route.name === 'home' }"
+            <RouterLink to="/" class="nav-link" :class="{ active: route.name === 'home' }"
               >Home</RouterLink
             >
-            <RouterLink
-              to="/about"
-              class="nav-link"
-              :class="{ active: route.name === 'about' }"
+            <RouterLink to="/about" class="nav-link" :class="{ active: route.name === 'about' }"
               >Category</RouterLink
             >
             <RouterLink
@@ -251,14 +250,28 @@ watch(
           </form>
           <nav class="mobile-nav">
             <RouterLink to="/" class="mobile-nav-link" @click="closeMobileMenu">Home</RouterLink>
-            <RouterLink to="/about" class="mobile-nav-link" @click="closeMobileMenu">Category</RouterLink>
-            <RouterLink to="/calendar" class="mobile-nav-link" @click="closeMobileMenu">Calendar</RouterLink>
-            <RouterLink v-if="currentUser?.isOwner" to="/admin" class="mobile-nav-link" @click="closeMobileMenu">Admin</RouterLink>
+            <RouterLink to="/about" class="mobile-nav-link" @click="closeMobileMenu"
+              >Category</RouterLink
+            >
+            <RouterLink to="/calendar" class="mobile-nav-link" @click="closeMobileMenu"
+              >Calendar</RouterLink
+            >
+            <RouterLink
+              v-if="currentUser?.isOwner"
+              to="/admin"
+              class="mobile-nav-link"
+              @click="closeMobileMenu"
+              >Admin</RouterLink
+            >
           </nav>
           <div class="mobile-actions">
             <template v-if="isAuthenticated">
-              <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu">Profile</RouterLink>
-              <button type="button" class="auth-btn ghost" @click="handleMobileLogout">Log out</button>
+              <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu"
+                >Profile</RouterLink
+              >
+              <button type="button" class="auth-btn ghost" @click="handleMobileLogout">
+                Log out
+              </button>
             </template>
             <template v-else>
               <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
@@ -431,7 +444,9 @@ watch(
   color: var(--mv-profile-text);
   text-decoration: none;
   font-size: 0.9rem;
-  transition: background 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
 }
 
 .profile-link:hover {
@@ -546,8 +561,12 @@ watch(
   transition: transform 0.25s;
 }
 
-.hamburger::before { top: -7px; }
-.hamburger::after { top: 7px; }
+.hamburger::before {
+  top: -7px;
+}
+.hamburger::after {
+  top: 7px;
+}
 
 .mobile-menu {
   padding: 1rem var(--page-padding-inline) 1.5rem;
