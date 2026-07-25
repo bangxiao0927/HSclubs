@@ -63,6 +63,20 @@ export const consumePendingAuthRedirect = () => {
   }
 }
 
+/**
+ * Drops any pending redirect target without reading it. Callers use this when
+ * a login attempt has concluded unsuccessfully (backend-reported error, or an
+ * unauthenticated refreshUser() result): a stale target must not survive to
+ * hijack the user's next, unrelated login attempt.
+ */
+export const clearPendingAuthRedirect = () => {
+  try {
+    sessionStorage.removeItem(PENDING_AUTH_REDIRECT_KEY)
+  } catch {
+    // Ignore storage failures; there is nothing to clean up if storage never worked.
+  }
+}
+
 export type PostAuthUser = Pick<AuthUser, 'acceptedTerms' | 'graduationYear'>
 
 export type PostAuthRoute =

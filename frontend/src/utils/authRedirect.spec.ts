@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  clearPendingAuthRedirect,
   consumePendingAuthRedirect,
   normalizeAuthRedirect,
   resolvePostAuthRoute,
@@ -137,5 +138,45 @@ describe('pending auth redirect round-trip', () => {
     savePendingAuthRedirect('/clubs/7')
     consumePendingAuthRedirect()
     expect(consumePendingAuthRedirect()).toBeNull()
+  })
+
+  it('clears a saved redirect so it is no longer consumable', () => {
+    savePendingAuthRedirect('/clubs/7')
+    clearPendingAuthRedirect()
+    expect(consumePendingAuthRedirect()).toBeNull()
+  })
+
+  it('clearing when nothing is stored is a no-op and does not throw', () => {
+    expect(() => clearPendingAuthRedirect()).not.toThrow()
+    expect(consumePendingAuthRedirect()).toBeNull()
+  })
+
+  it('survives a throwing sessionStorage when saving, consuming, and clearing', () => {
+    const originalSessionStorage = window.sessionStorage
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: {
+        getItem: () => {
+          throw new Error('storage disabled')
+        },
+        setItem: () => {
+          throw new Error('storage disabled')
+        },
+        removeItem: () => {
+          throw new Error('storage disabled')
+        },
+      },
+    })
+
+    try {
+      expect(() => savePendingAuthRedirect('/clubs/7')).not.toThrow()
+      expect(consumePendingAuthRedirect()).toBeNull()
+      expect(() => clearPendingAuthRedirect()).not.toThrow()
+    } finally {
+      Object.defineProperty(window, 'sessionStorage', {
+        configurable: true,
+        value: originalSessionStorage,
+      })
+    }
   })
 })

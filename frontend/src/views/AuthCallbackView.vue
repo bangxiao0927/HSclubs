@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth'
 import {
+  clearPendingAuthRedirect,
   consumePendingAuthRedirect,
   DEFAULT_POST_AUTH_PATH,
   normalizeAuthRedirect,
@@ -19,6 +20,17 @@ const resolveRedirectTarget = () => {
 }
 
 onMounted(async () => {
+  // The backend's OAuth2 failure handler redirects here with `?error=...`
+  // when it already knows the login failed, so there is no session to
+  // fetch. Skip the pointless refreshUser() round trip in that case.
+  if (typeof route.query.error === 'string') {
+    // A stale pending redirect must not survive a failed login and hijack
+    // the user's next, unrelated login attempt.
+    clearPendingAuthRedirect()
+    router.replace({ path: '/auth', query: { error: route.query.error } })
+    return
+  }
+
   await authStore.refreshUser()
 
   if (authStore.isAuthenticated) {
@@ -26,6 +38,7 @@ onMounted(async () => {
     const destination = resolvePostAuthRoute(authStore.currentUser, redirectTarget)
     router.replace(destination ?? DEFAULT_POST_AUTH_PATH)
   } else {
+    clearPendingAuthRedirect()
     router.replace({ path: '/auth', query: { error: 'login_failed' } })
   }
 })
