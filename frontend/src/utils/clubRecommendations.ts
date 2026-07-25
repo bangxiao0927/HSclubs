@@ -20,9 +20,8 @@ export const selectWeightedClubRecommendations = (
         .sort((a, b) => {
           const memberDelta = (b.memberCount ?? 0) - (a.memberCount ?? 0)
           return memberDelta !== 0 ? memberDelta : a.name.localeCompare(b.name)
-        }),
+      }),
       nextIndex: 0,
-      selectedCount: 0,
     }))
   const matches: Club[] = []
 
@@ -31,14 +30,13 @@ export const selectWeightedClubRecommendations = (
     if (!availableQueues.length) break
 
     availableQueues.sort((a, b) => {
-      const allocationDelta = a.selectedCount / a.score - b.selectedCount / b.score
+      const allocationDelta = a.nextIndex / a.score - b.nextIndex / b.score
       return allocationDelta || a.rank - b.rank
     })
 
     const queue = availableQueues[0]!
     matches.push(queue.clubs[queue.nextIndex]!)
     queue.nextIndex++
-    queue.selectedCount++
   }
 
   return matches
