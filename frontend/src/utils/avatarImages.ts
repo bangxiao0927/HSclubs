@@ -1,4 +1,5 @@
 import { buildApiUrl } from '../services/httpClient'
+import { schoolTemplate } from '../config/schoolTemplate'
 
 const palette = [
   ['#0f766e', '#67e8f9'],
@@ -18,27 +19,21 @@ const hashSeed = (seed: string) => {
 }
 
 const escapeXml = (value: string) =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 const initialsFor = (seed: string) => {
-  const words = seed
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-  const initials = words.length > 1
-    ? `${words[0]?.[0] ?? ''}${words[1]?.[0] ?? ''}`
-    : seed.trim().slice(0, 2)
+  const words = seed.trim().split(/\s+/).filter(Boolean)
+  const initials =
+    words.length > 1 ? `${words[0]?.[0] ?? ''}${words[1]?.[0] ?? ''}` : seed.trim().slice(0, 2)
   return escapeXml((initials || 'HC').toUpperCase())
 }
 
 export const localAvatar = (seed: string) => {
-  const normalizedSeed = seed.trim() || 'HS Clubs'
-  const [background, foreground] =
-    palette[hashSeed(normalizedSeed) % palette.length] ?? ['#0f766e', '#67e8f9']
+  const normalizedSeed = seed.trim() || schoolTemplate.brandName
+  const [background, foreground] = palette[hashSeed(normalizedSeed) % palette.length] ?? [
+    '#0f766e',
+    '#67e8f9',
+  ]
   const initials = initialsFor(normalizedSeed)
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">

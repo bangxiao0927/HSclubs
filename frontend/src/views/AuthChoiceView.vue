@@ -3,11 +3,13 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
+import { schoolTemplate } from '../config/schoolTemplate'
 import { useAuthStore } from '../stores/auth'
 import BackButton from '../components/BackButton.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
+const brandName = schoolTemplate.brandName
 const { providers, providersLoading, providersError } = storeToRefs(authStore)
 const acceptedTerms = ref(false)
 const termsError = ref('')
@@ -16,10 +18,14 @@ onMounted(() => {
   authStore.ensureProvidersLoaded()
 })
 
-const intentLabel = computed(() => (route.query.intent === 'register' ? 'Create account' : 'Sign in'))
+const intentLabel = computed(() =>
+  route.query.intent === 'register' ? 'Create account' : 'Sign in',
+)
 
 const routeError = computed(() => {
-  return typeof route.query.error === 'string' ? 'We could not complete your sign in. Please try again.' : ''
+  return typeof route.query.error === 'string'
+    ? 'We could not complete your sign in. Please try again.'
+    : ''
 })
 
 const redirectTarget = computed(() => {
@@ -43,8 +49,8 @@ const handleProviderLogin = (providerId: string) => {
       <p class="page-label">{{ intentLabel }}</p>
       <h1>Continue with your school account</h1>
       <p class="description">
-        Use OAuth2 to sign in safely with your school-provided Google account. We only request basic profile details so you can
-        access HS Clubs across devices.
+        Use OAuth2 to sign in safely with your school-provided Google account. We only request basic
+        profile details so you can access {{ brandName }} across devices.
       </p>
       <div class="alerts">
         <p v-if="routeError" class="alert error">{{ routeError }}</p>
@@ -73,7 +79,9 @@ const handleProviderLogin = (providerId: string) => {
           <span class="provider-icon" aria-hidden="true">{{ provider.name.charAt(0) }}</span>
           Sign in with {{ provider.name }}
         </button>
-        <p v-if="providers.length === 0" class="alert muted">No OAuth providers are configured yet.</p>
+        <p v-if="providers.length === 0" class="alert muted">
+          No OAuth providers are configured yet.
+        </p>
       </div>
       <BackButton>Back to club catalog</BackButton>
     </div>
@@ -89,8 +97,7 @@ const handleProviderLogin = (providerId: string) => {
   padding: 2rem;
   background:
     radial-gradient(circle at 20% 20%, var(--mv-gold-soft), transparent 55%),
-    radial-gradient(circle at 80% 0%, var(--mv-surface-accent), transparent 60%),
-    var(--app-body-bg);
+    radial-gradient(circle at 80% 0%, var(--mv-surface-accent), transparent 60%), var(--app-body-bg);
   color: var(--mv-text);
 }
 
@@ -149,7 +156,9 @@ const handleProviderLogin = (providerId: string) => {
   color: var(--mv-text);
   background: var(--mv-surface-card-strong);
   box-shadow: var(--mv-shadow-card);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .provider-btn:hover {
@@ -195,7 +204,13 @@ const handleProviderLogin = (providerId: string) => {
   justify-content: center;
   font-weight: 700;
   color: #ea4335;
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Inter',
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
 }
 
 .alerts {

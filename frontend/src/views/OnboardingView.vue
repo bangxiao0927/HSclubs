@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { schoolTemplate } from '../config/schoolTemplate'
 import { useAuthStore } from '../stores/auth'
 import { updateGraduationYear } from '../services/userService'
 import { normalizeAuthRedirect } from '../utils/authRedirect'
@@ -8,6 +9,7 @@ import { normalizeAuthRedirect } from '../utils/authRedirect'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const brandName = schoolTemplate.brandName
 
 const saving = ref(false)
 const error = ref('')
@@ -60,7 +62,7 @@ const handleSkip = () => {
 <template>
   <div class="onboarding-page">
     <div class="onboarding-card">
-      <h1>Welcome to HS Clubs!</h1>
+      <h1>Welcome to {{ brandName }}!</h1>
       <p class="subtitle">Set up your profile to get the most out of the club directory.</p>
 
       <form @submit.prevent="handleSave" class="onboarding-form">
@@ -203,7 +205,11 @@ legend {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .ghost-btn {
