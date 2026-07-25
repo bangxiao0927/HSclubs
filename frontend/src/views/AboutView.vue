@@ -67,16 +67,10 @@ const activeCategory = computed(
     <section v-else-if="error" class="status-card error">{{ error }}</section>
 
     <template v-else>
-      <section class="quiz-callout">
-        <div>
-          <p class="section-label">Not sure where to start?</p>
-          <h2>Find your club match</h2>
-          <p>
-            Answer four quick questions to discover categories and clubs that fit your interests.
-          </p>
-        </div>
-        <RouterLink to="/recommendations" class="quiz-link">Start quiz</RouterLink>
-      </section>
+      <RouterLink to="/recommendations" class="quiz-link">
+        <span>Start quiz</span>
+        <span aria-hidden="true">→</span>
+      </RouterLink>
 
       <div class="category-picker">
         <button
@@ -160,39 +154,37 @@ const activeCategory = computed(
   color: var(--mv-status-danger);
 }
 
-.quiz-callout {
+.quiz-link {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
-  padding: clamp(1.25rem, 3vw, 2rem);
-  border: 1px solid var(--mv-border-strong);
-  border-radius: 26px;
-  background: var(--mv-surface-accent);
-  box-shadow: var(--mv-shadow-card);
-}
-
-.quiz-callout h2 {
-  margin: 0.55rem 0 0.35rem;
-}
-
-.quiz-callout > div > p:last-child {
-  max-width: 650px;
-  color: var(--mv-text-muted);
-}
-
-.quiz-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 130px;
-  min-height: 46px;
-  padding: 0.7rem 1.15rem;
+  width: 100%;
+  min-height: 72px;
+  padding: 1rem clamp(1.25rem, 3vw, 2rem);
   border: 1px solid var(--mv-primary-bg);
-  border-radius: 999px;
+  border-radius: 22px;
   background: var(--mv-primary-bg);
   color: var(--mv-primary-text);
+  box-shadow: var(--mv-primary-shadow);
+  font-size: clamp(1rem, 2vw, 1.2rem);
   font-weight: 700;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.quiz-link:hover,
+.quiz-link:focus-visible {
+  transform: translateY(-2px);
+}
+
+.quiz-link:focus-visible {
+  outline: 3px solid var(--mv-gold);
+  outline-offset: 3px;
+}
+
+.quiz-link span:last-child {
+  font-size: 1.5rem;
 }
 
 .category-picker {
@@ -358,15 +350,6 @@ const activeCategory = computed(
 }
 
 @media (max-width: 640px) {
-  .quiz-callout {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .quiz-link {
-    width: 100%;
-  }
-
   .category-pill {
     width: 100%;
     justify-content: space-between;
