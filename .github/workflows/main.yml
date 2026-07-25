@@ -47,4 +47,5 @@ jobs:
       working-directory: frontend
       run: |
         npm ci
+        npm run test:unit -- --run
         npm run build
