@@ -225,7 +225,8 @@ const selectOption = (optionIndex: number) => {
 
 const focusQuestionHeading = async () => {
   await nextTick()
-  questionHeading.value?.focus()
+  questionHeading.value?.focus({ preventScroll: true })
+  questionHeading.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
 const goBack = async () => {
@@ -243,7 +244,7 @@ const continueQuiz = async () => {
   }
   showResults.value = true
   await nextTick()
-  resultsHeading.value?.focus()
+  resultsHeading.value?.focus({ preventScroll: true })
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -252,7 +253,6 @@ const restartQuiz = async () => {
   currentQuestionIndex.value = 0
   showResults.value = false
   await focusQuestionHeading()
-  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 onMounted(loadClubs)
@@ -471,6 +471,7 @@ onMounted(loadClubs)
 .question-copy h2 {
   margin: 0 0 0.5rem;
   font-size: clamp(1.45rem, 3vw, 2rem);
+  scroll-margin-top: 7rem;
 }
 
 .question-copy p {
