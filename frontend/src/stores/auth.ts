@@ -9,7 +9,7 @@ import {
 } from '../services/authService'
 import { buildApiUrl } from '../services/httpClient'
 import { localAvatar, userAvatar } from '../utils/avatarImages'
-import { savePendingAuthRedirect } from '../utils/authRedirect'
+import { normalizeAuthRedirect, savePendingAuthRedirect } from '../utils/authRedirect'
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<AuthUser | null>(null)
@@ -121,7 +121,12 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
     savePendingAuthRedirect(redirectTarget)
-    window.location.href = buildApiUrl(provider.authorizationUrl)
+
+    const authorizationUrl = buildApiUrl(provider.authorizationUrl)
+    const normalizedTarget = normalizeAuthRedirect(redirectTarget)
+    window.location.href = normalizedTarget
+      ? `${authorizationUrl}${authorizationUrl.includes('?') ? '&' : '?'}redirect=${encodeURIComponent(normalizedTarget)}`
+      : authorizationUrl
   }
 
   const logout = async () => {
