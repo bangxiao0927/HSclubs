@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
@@ -9,8 +9,6 @@ import BackButton from '../components/BackButton.vue'
 const route = useRoute()
 const authStore = useAuthStore()
 const { providers, providersLoading, providersError } = storeToRefs(authStore)
-const acceptedTerms = ref(false)
-const termsError = ref('')
 
 onMounted(() => {
   authStore.ensureProvidersLoaded()
@@ -28,11 +26,6 @@ const redirectTarget = computed(() => {
 })
 
 const handleProviderLogin = (providerId: string) => {
-  if (!acceptedTerms.value) {
-    termsError.value = 'Please accept the Terms of Use before continuing.'
-    return
-  }
-  termsError.value = ''
   authStore.beginLogin(providerId, redirectTarget.value)
 }
 </script>
@@ -49,25 +42,20 @@ const handleProviderLogin = (providerId: string) => {
       <div class="alerts">
         <p v-if="routeError" class="alert error">{{ routeError }}</p>
         <p v-if="providersError" class="alert error">{{ providersError }}</p>
-        <p v-if="termsError" class="alert error">{{ termsError }}</p>
         <p v-else-if="providersLoading" class="alert muted">Loading sign-in options…</p>
       </div>
-      <label class="terms-check">
-        <input v-model="acceptedTerms" type="checkbox" @change="termsError = ''" />
-        <span>
-          I agree to the
-          <RouterLink to="/terms" target="_blank">Terms of Use</RouterLink>
-          and
-          <RouterLink to="/privacy" target="_blank">Privacy Policy</RouterLink>.
-        </span>
-      </label>
+      <p class="terms-notice">
+        By continuing you agree to our
+        <RouterLink to="/terms" target="_blank">Terms of Use</RouterLink>
+        and
+        <RouterLink to="/privacy" target="_blank">Privacy Policy</RouterLink>.
+      </p>
       <div v-if="!providersLoading && !providersError" class="provider-list">
         <button
           v-for="provider in providers"
           :key="provider.id"
           class="provider-btn"
           type="button"
-          :disabled="!acceptedTerms"
           @click="handleProviderLogin(provider.id)"
         >
           <span class="provider-icon" aria-hidden="true">{{ provider.name.charAt(0) }}</span>
@@ -157,29 +145,15 @@ const handleProviderLogin = (providerId: string) => {
   box-shadow: var(--mv-shadow-elevated);
 }
 
-.provider-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.terms-check {
+.terms-notice {
   width: 100%;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.65rem;
+  margin: 0;
   color: var(--mv-text-soft);
   font-size: 0.95rem;
   line-height: 1.5;
 }
 
-.terms-check input {
-  margin-top: 0.25rem;
-  flex: 0 0 auto;
-}
-
-.terms-check a {
+.terms-notice a {
   color: var(--mv-gold);
   font-weight: 600;
 }
