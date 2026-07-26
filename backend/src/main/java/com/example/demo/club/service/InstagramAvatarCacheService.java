@@ -25,9 +25,12 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -36,6 +39,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class InstagramAvatarCacheService {
@@ -46,6 +50,19 @@ public class InstagramAvatarCacheService {
     private static final List<String> IMAGE_EXTENSIONS = List.of("png", "jpg", "jpeg", "webp", "gif");
     private static final MediaType SVG_MEDIA_TYPE = MediaType.valueOf("image/svg+xml");
     private static final MediaType WEBP_MEDIA_TYPE = MediaType.valueOf("image/webp");
+    // The single canonical source of truth for which image formats the on-disk avatar
+    // cache can WRITE and for what extension it writes them under. downloadAvatar's
+    // Accept header, safeImageMediaType's supported-format check, and
+    // extensionForMediaType's extension lookup are all derived from this map, so the
+    // four supported formats can never drift out of sync between those three call sites
+    // again. This is a WRITE-side mapping only: it intentionally does not cover legacy
+    // on-disk extensions such as ".jpeg" (see IMAGE_EXTENSIONS/mediaTypeForExtension,
+    // which remain the READ-side mapping and must keep recognizing those legacy files).
+    private static final Map<MediaType, String> SUPPORTED_MEDIA_TYPE_EXTENSIONS = supportedMediaTypeExtensions();
+    private static final String SUPPORTED_AVATAR_ACCEPT_HEADER = SUPPORTED_MEDIA_TYPE_EXTENSIONS.keySet()
+        .stream()
+        .map(MediaType::toString)
+        .collect(Collectors.joining(","));
     private static final String INSTAGRAM_WEB_PROFILE_API =
         "https://www.instagram.com/api/v1/users/web_profile_info/?username=%s";
     private static final String BROWSER_USER_AGENT =
@@ -488,7 +505,7 @@ public class InstagramAvatarCacheService {
             .uri(uri)
             .timeout(Duration.ofMillis(fetchTimeoutMillis))
             .header("User-Agent", BROWSER_USER_AGENT)
-            .header("Accept", "image/webp,image/png,image/jpeg,image/gif")
+            .header("Accept", SUPPORTED_AVATAR_ACCEPT_HEADER)
             .GET()
             .build();
         HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
@@ -504,12 +521,14 @@ public class InstagramAvatarCacheService {
         return new CachedAvatar(bytes, mediaType);
     }
 
-    // PNG, JPEG, GIF, and WebP are the single supported image format set shared by the
-    // download Accept header, response media-type validation below, and the on-disk
-    // extension mapping (extensionForMediaType/mediaTypeForExtension). Any format outside
-    // this set must be rejected here rather than silently mislabeled/cached, otherwise it
-    // can be written to disk under the wrong extension and served with the wrong
-    // Content-Type for the lifetime of the cache TTL.
+    // PNG, JPEG, GIF and WebP (SUPPORTED_MEDIA_TYPE_EXTENSIONS) are the single supported
+    // image format set, and that map is what the download Accept header, the
+    // response media-type validation below (via safeImageMediaType), and the on-disk
+    // extension mapping (extensionForMediaType) all derive from, so the set cannot drift
+    // out of sync between those call sites again. Any format outside this set must be
+    // rejected here rather than silently mislabeled/cached, otherwise it can be written
+    // to disk under the wrong extension and served with the wrong Content-Type for the
+    // lifetime of the cache TTL.
     private Optional<MediaType> mediaTypeFromResponse(HttpResponse<byte[]> response, byte[] bytes) {
         Optional<MediaType> headerMediaType = response.headers()
             .firstValue("content-type")
@@ -526,9 +545,7 @@ public class InstagramAvatarCacheService {
             if (Set.of("jpg", "jpeg", "pjpeg").contains(mediaType.getSubtype())) {
                 return Optional.of(MediaType.IMAGE_JPEG);
             }
-            if (MediaType.IMAGE_PNG.equalsTypeAndSubtype(mediaType)
-                || MediaType.IMAGE_GIF.equalsTypeAndSubtype(mediaType)
-                || WEBP_MEDIA_TYPE.equalsTypeAndSubtype(mediaType)) {
+            if (isSupportedMediaType(mediaType)) {
                 return Optional.of(mediaType);
             }
             // Unsupported image subtype (avif, svg+xml, heic, bmp, tiff, ...): reject rather
@@ -632,22 +649,37 @@ public class InstagramAvatarCacheService {
     }
 
     private String extensionForMediaType(MediaType mediaType) {
-        if (MediaType.IMAGE_JPEG.includes(mediaType)) {
-            return "jpg";
-        }
         if (Set.of("jpg", "jpeg", "pjpeg").contains(mediaType.getSubtype())) {
-            return "jpg";
+            return SUPPORTED_MEDIA_TYPE_EXTENSIONS.get(MediaType.IMAGE_JPEG);
         }
-        if (MediaType.IMAGE_GIF.includes(mediaType)) {
-            return "gif";
+        for (Map.Entry<MediaType, String> entry : SUPPORTED_MEDIA_TYPE_EXTENSIONS.entrySet()) {
+            if (entry.getKey().includes(mediaType)) {
+                return entry.getValue();
+            }
         }
-        if (WEBP_MEDIA_TYPE.includes(mediaType)) {
-            return "webp";
+        // A genuine programming error, not a reachable format-mapping case: every
+        // MediaType that reaches this method was already produced by
+        // mediaTypeFromResponse/safeImageMediaType, which only ever return one of the
+        // formats in SUPPORTED_MEDIA_TYPE_EXTENSIONS.
+        throw new IllegalStateException("No cache extension is mapped for media type " + mediaType);
+    }
+
+    private static Map<MediaType, String> supportedMediaTypeExtensions() {
+        Map<MediaType, String> extensions = new LinkedHashMap<>();
+        extensions.put(WEBP_MEDIA_TYPE, "webp");
+        extensions.put(MediaType.IMAGE_PNG, "png");
+        extensions.put(MediaType.IMAGE_JPEG, "jpg");
+        extensions.put(MediaType.IMAGE_GIF, "gif");
+        return Collections.unmodifiableMap(extensions);
+    }
+
+    private static boolean isSupportedMediaType(MediaType mediaType) {
+        for (MediaType supported : SUPPORTED_MEDIA_TYPE_EXTENSIONS.keySet()) {
+            if (supported.equalsTypeAndSubtype(mediaType)) {
+                return true;
+            }
         }
-        // Unreachable given upstream validation in mediaTypeFromResponse/safeImageMediaType,
-        // which only ever produce the four supported formats handled above. Not a
-        // format-mapping table entry for arbitrary media types.
-        return "png";
+        return false;
     }
 
     public record CachedAvatar(byte[] bytes, MediaType mediaType) {}

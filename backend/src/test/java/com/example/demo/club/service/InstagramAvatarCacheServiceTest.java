@@ -23,6 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 class InstagramAvatarCacheServiceTest {
 
@@ -55,6 +56,25 @@ class InstagramAvatarCacheServiceTest {
 
         assertThat(avatar.bytes()).isEqualTo(bytes);
         assertThat(avatar.mediaType()).isEqualTo(MediaType.IMAGE_PNG);
+        assertThat(avatar.maxAge()).isEqualTo(60);
+        assertThat(avatar.maxAgeUnit()).isEqualTo(TimeUnit.DAYS);
+    }
+
+    @Test
+    void resolveAvatarReadsLegacyJpegExtensionFromCache() throws Exception {
+        // extensionForMediaType only ever WRITES the "jpg" extension, but older cache
+        // files were written as ".jpeg" before that convention existed. The read path
+        // (IMAGE_EXTENSIONS/mediaTypeForExtension) must keep recognizing them.
+        Path cacheDir = tempDir.resolve("avatar-cache").resolve("instagram");
+        Files.createDirectories(cacheDir);
+        byte[] bytes = new byte[] { 4, 5, 6 };
+        Files.write(cacheDir.resolve("mvhsclubs.jpeg"), bytes);
+        InstagramAvatarCacheService service = service(true);
+
+        InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
+
+        assertThat(avatar.bytes()).isEqualTo(bytes);
+        assertThat(avatar.mediaType()).isEqualTo(MediaType.IMAGE_JPEG);
         assertThat(avatar.maxAge()).isEqualTo(60);
         assertThat(avatar.maxAgeUnit()).isEqualTo(TimeUnit.DAYS);
     }
@@ -249,8 +269,10 @@ class InstagramAvatarCacheServiceTest {
         // before they reach the cache, so resolveAvatar must fall back to the generated
         // SVG placeholder and no file should be written for the handle.
         byte[] bytes = { 0, 1, 2, 3, 4, 5, 6, 7 };
+        AtomicInteger hits = new AtomicInteger();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/avatar.avif", exchange -> {
+            hits.incrementAndGet();
             exchange.getResponseHeaders().add("Content-Type", "image/avif");
             exchange.sendResponseHeaders(200, bytes.length);
             exchange.getResponseBody().write(bytes);
@@ -270,7 +292,15 @@ class InstagramAvatarCacheServiceTest {
         try {
             InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
 
+            // The download must actually have happened; otherwise this test would pass
+            // just as well for a broken harness (unreachable server, bad script path...).
+            assertThat(hits.get()).isGreaterThanOrEqualTo(1);
+            // Assert the payload is the GENERATED placeholder (not merely that the media
+            // type matches, which the served response also happens to report as SVG).
             assertThat(avatar.mediaType()).isEqualTo(MediaType.valueOf("image/svg+xml"));
+            assertThat(new String(avatar.bytes(), StandardCharsets.UTF_8)).contains("<svg").contains("MV");
+            assertThat(avatar.maxAge()).isEqualTo(15);
+            assertThat(avatar.maxAgeUnit()).isEqualTo(TimeUnit.SECONDS);
             assertThat(cachedAvatarFiles("mvhsclubs")).isEmpty();
         } finally {
             server.stop(0);
@@ -316,10 +346,16 @@ class InstagramAvatarCacheServiceTest {
     @Test
     void resolveAvatarRejectsSvgContentTypeAndDoesNotCacheIt() throws Exception {
         // The reviewer's other flagged example (image/svg+xml pretending to be a
-        // cacheable avatar) must also be rejected rather than cached.
+        // cacheable avatar) must also be rejected rather than cached. The served
+        // Content-Type here is ALSO image/svg+xml, so the returned media type alone
+        // cannot distinguish "rejected, replaced by the generated placeholder" from
+        // "passed straight through" -- assert on the placeholder's actual payload/TTL
+        // and on the download having happened instead.
         byte[] bytes = { 0, 1, 2, 3, 4, 5, 6, 7 };
+        AtomicInteger hits = new AtomicInteger();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/avatar.svg", exchange -> {
+            hits.incrementAndGet();
             exchange.getResponseHeaders().add("Content-Type", "image/svg+xml");
             exchange.sendResponseHeaders(200, bytes.length);
             exchange.getResponseBody().write(bytes);
@@ -339,7 +375,16 @@ class InstagramAvatarCacheServiceTest {
         try {
             InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
 
+            // The download must actually have happened; otherwise this test would pass
+            // just as well for a broken harness (unreachable server, bad script path...).
+            assertThat(hits.get()).isGreaterThanOrEqualTo(1);
+            // Assert the payload is the GENERATED placeholder, not the served bytes,
+            // and that it carries the placeholder's short TTL rather than the cached
+            // 60-day TTL.
             assertThat(avatar.mediaType()).isEqualTo(MediaType.valueOf("image/svg+xml"));
+            assertThat(new String(avatar.bytes(), StandardCharsets.UTF_8)).contains("<svg").contains("MV");
+            assertThat(avatar.maxAge()).isEqualTo(15);
+            assertThat(avatar.maxAgeUnit()).isEqualTo(TimeUnit.SECONDS);
             assertThat(cachedAvatarFiles("mvhsclubs")).isEmpty();
         } finally {
             server.stop(0);
