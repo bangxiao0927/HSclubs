@@ -134,7 +134,7 @@ const termsBypassRouteNames = new Set([
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
   if (!authStore.hasCheckedSession) {
-    await authStore.refreshUser()
+    await authStore.ensureSessionChecked()
   }
 
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
@@ -147,6 +147,34 @@ router.beforeEach(async (to) => {
         intent: 'login',
         redirect: to.fullPath,
       },
+    }
+  }
+
+  // An already-authenticated user landing on the sign-in page (stale link,
+  // browser Back, bookmarked /auth?redirect=...) has nothing to choose from
+  // here. Route them onward through the same post-auth resolver used after a
+  // real login, so a not-yet-onboarded user still lands on /accept-terms or
+  // /onboarding instead of skipping those steps.
+  if (authStore.isAuthenticated && to.name === 'auth-choice') {
+    // An authenticated visit to /auth must not leave /auth sitting in
+    // history: forward with `replace: true` so the (now-pointless) /auth
+    // entry doesn't trap the Back button behind the real destination.
+    //
+    // The destination is resolved (via `router.resolve`) before being
+    // returned rather than being returned as-is: `resolvePostAuthRoute` can
+    // return a bare string carrying its own query string and/or hash (e.g.
+    // `/accept-invitation?token=abc`), and wrapping that string directly in
+    // `{ path: destination }` would make vue-router silently drop everything
+    // after the path. Resolving first and re-expressing the result as
+    // `{ path, query, hash }` keeps the query and hash intact for both the
+    // bare-string and object-shaped (`{ path, query }`) cases.
+    const destination = resolvePostAuthRoute(authStore.currentUser, to.query.redirect) ?? DEFAULT_POST_AUTH_PATH
+    const resolved = router.resolve(destination)
+    return {
+      path: resolved.path,
+      query: resolved.query,
+      hash: resolved.hash,
+      replace: true,
     }
   }
 

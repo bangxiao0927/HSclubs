@@ -9,12 +9,24 @@ export const DEFAULT_POST_AUTH_PATH = '/profile'
 // target, since landing back on them would create a redirect loop.
 const NON_TARGETABLE_AUTH_STEPS = new Set(['/accept-terms', '/onboarding'])
 
+// A raw backslash or a raw control character (including newlines) anywhere in
+// the target is rejected. Per the WHATWG URL spec a browser treats `\` as a
+// path separator just like `/`, so `/\evil.com` and `/\/evil.com` both
+// resolve to `http://evil.com/` instead of staying in-app -- the same shape
+// the backend's `PostLoginRedirectResolver.isSafeInAppTarget` already
+// rejects. No legitimate in-app route needs a raw backslash or control
+// character, so rejecting them outright is not a functional regression.
+const UNSAFE_REDIRECT_CHARS = /[\\\u0000-\u001f]/
+
 export const normalizeAuthRedirect = (value: unknown) => {
   if (typeof value !== 'string') {
     return null
   }
   const trimmed = value.trim()
   if (!trimmed.startsWith('/') || trimmed.startsWith('//')) {
+    return null
+  }
+  if (UNSAFE_REDIRECT_CHARS.test(trimmed)) {
     return null
   }
   return trimmed
@@ -60,6 +72,20 @@ export const consumePendingAuthRedirect = () => {
     return redirect
   } catch {
     return null
+  }
+}
+
+/**
+ * Drops any pending redirect target without reading it. Callers use this when
+ * a login attempt has concluded unsuccessfully (backend-reported error, or an
+ * unauthenticated refreshUser() result): a stale target must not survive to
+ * hijack the user's next, unrelated login attempt.
+ */
+export const clearPendingAuthRedirect = () => {
+  try {
+    sessionStorage.removeItem(PENDING_AUTH_REDIRECT_KEY)
+  } catch {
+    // Ignore storage failures; there is nothing to clean up if storage never worked.
   }
 }
 

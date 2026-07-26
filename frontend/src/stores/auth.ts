@@ -55,7 +55,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const refreshUser = async () => {
+  // The actual /api/auth/me round trip. Every call issues a brand-new
+  // request; callers that need de-duplication (see `ensureSessionChecked`
+  // below) are responsible for sharing the returned promise themselves.
+  const fetchAndApplyUser = async (): Promise<void> => {
     userLoading.value = true
     try {
       const fetched = await fetchAuthenticatedUser()
@@ -71,8 +74,37 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Post-mutation callers (AcceptTermsView after POSTing accept-terms,
+  // OnboardingView/ProfileView after saving a graduation year,
+  // AcceptInvitationView after accepting an invitation, App.vue when auth
+  // flips true) MUST see the server's current state, not a response some
+  // other in-flight caller happened to have kicked off before the mutation
+  // landed. So `refreshUser()` always issues a fresh request and never reuses
+  // a cached in-flight promise.
+  const refreshUser = (): Promise<void> => fetchAndApplyUser()
+
+  // Session checks (main.ts's bootstrap() and the router guard's
+  // `if (!hasCheckedSession)` branch) only need "has this browser got a
+  // session?" and both fire on cold load before either has resolved. These
+  // share a single in-flight /api/auth/me request instead of each issuing
+  // their own. The in-flight promise is cleared once the request settles
+  // (success or failure), so the next call always genuinely refetches
+  // instead of replaying a poisoned/stale result.
+  let inFlightSessionCheck: Promise<void> | null = null
+
+  const ensureSessionChecked = (): Promise<void> => {
+    if (inFlightSessionCheck) {
+      return inFlightSessionCheck
+    }
+    const request = fetchAndApplyUser().finally(() => {
+      inFlightSessionCheck = null
+    })
+    inFlightSessionCheck = request
+    return request
+  }
+
   const bootstrap = async () => {
-    await Promise.allSettled([ensureProvidersLoaded(), refreshUser()])
+    await Promise.allSettled([ensureProvidersLoaded(), ensureSessionChecked()])
   }
 
   const beginLogin = (providerId: string, redirectTarget?: string | null) => {
@@ -82,11 +114,14 @@ export const useAuthStore = defineStore('auth', () => {
         'No OAuth provider was selected. Please refresh and try again.'
       return
     }
-    savePendingAuthRedirect(redirectTarget)
     const provider = providers.value.find((item) => item.id === sanitizedId)
-    const authorizationPath =
-      provider?.authorizationUrl ?? `/oauth2/authorization/${sanitizedId}`
-    window.location.href = buildApiUrl(authorizationPath)
+    if (!provider?.authorizationUrl) {
+      providersError.value =
+        'This sign-in provider is not configured correctly. Please refresh and try again.'
+      return
+    }
+    savePendingAuthRedirect(redirectTarget)
+    window.location.href = buildApiUrl(provider.authorizationUrl)
   }
 
   const logout = async () => {
@@ -105,6 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     ensureProvidersLoaded,
     refreshUser,
+    ensureSessionChecked,
     bootstrap,
     beginLogin,
     logout,
