@@ -499,15 +499,22 @@ public class InstagramAvatarCacheService {
         if (bytes.length == 0 || bytes.length > MAX_AVATAR_BYTES) {
             throw new IOException("Avatar response size is invalid");
         }
-        MediaType mediaType = mediaTypeFromResponse(response, bytes);
+        MediaType mediaType = mediaTypeFromResponse(response, bytes)
+            .orElseThrow(() -> new IOException("Unsupported or unrecognized avatar image format"));
         return new CachedAvatar(bytes, mediaType);
     }
 
-    private MediaType mediaTypeFromResponse(HttpResponse<byte[]> response, byte[] bytes) {
+    // PNG, JPEG, GIF, and WebP are the single supported image format set shared by the
+    // download Accept header, response media-type validation below, and the on-disk
+    // extension mapping (extensionForMediaType/mediaTypeForExtension). Any format outside
+    // this set must be rejected here rather than silently mislabeled/cached, otherwise it
+    // can be written to disk under the wrong extension and served with the wrong
+    // Content-Type for the lifetime of the cache TTL.
+    private Optional<MediaType> mediaTypeFromResponse(HttpResponse<byte[]> response, byte[] bytes) {
         Optional<MediaType> headerMediaType = response.headers()
             .firstValue("content-type")
             .flatMap(this::safeImageMediaType);
-        return headerMediaType.or(() -> mediaTypeFromMagicBytes(bytes)).orElse(MediaType.IMAGE_JPEG);
+        return headerMediaType.or(() -> mediaTypeFromMagicBytes(bytes));
     }
 
     private Optional<MediaType> safeImageMediaType(String value) {
@@ -519,7 +526,14 @@ public class InstagramAvatarCacheService {
             if (Set.of("jpg", "jpeg", "pjpeg").contains(mediaType.getSubtype())) {
                 return Optional.of(MediaType.IMAGE_JPEG);
             }
-            return Optional.of(mediaType);
+            if (MediaType.IMAGE_PNG.equalsTypeAndSubtype(mediaType)
+                || MediaType.IMAGE_GIF.equalsTypeAndSubtype(mediaType)
+                || WEBP_MEDIA_TYPE.equalsTypeAndSubtype(mediaType)) {
+                return Optional.of(mediaType);
+            }
+            // Unsupported image subtype (avif, svg+xml, heic, bmp, tiff, ...): reject rather
+            // than caching it under a mismatched extension.
+            return Optional.empty();
         } catch (IllegalArgumentException ignored) {
             return Optional.empty();
         }
@@ -630,6 +644,9 @@ public class InstagramAvatarCacheService {
         if (WEBP_MEDIA_TYPE.includes(mediaType)) {
             return "webp";
         }
+        // Unreachable given upstream validation in mediaTypeFromResponse/safeImageMediaType,
+        // which only ever produce the four supported formats handled above. Not a
+        // format-mapping table entry for arbitrary media types.
         return "png";
     }
 
