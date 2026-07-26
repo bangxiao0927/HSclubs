@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { AuthUser } from '../types/auth'
+import type { AuthProvider, AuthUser } from '../types/auth'
 
 vi.mock('../services/authService', () => ({
   fetchAuthProviders: vi.fn(),
@@ -9,10 +9,21 @@ vi.mock('../services/authService', () => ({
   logout: vi.fn(),
 }))
 
-import { fetchAuthenticatedUser } from '../services/authService'
+vi.mock('../utils/authRedirect', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/authRedirect')>()
+  return {
+    ...actual,
+    savePendingAuthRedirect: vi.fn(),
+  }
+})
+
+import { fetchAuthenticatedUser, fetchAuthProviders } from '../services/authService'
+import { savePendingAuthRedirect } from '../utils/authRedirect'
 import { useAuthStore } from './auth'
 
 const fetchAuthenticatedUserMock = vi.mocked(fetchAuthenticatedUser)
+const fetchAuthProvidersMock = vi.mocked(fetchAuthProviders)
+const savePendingAuthRedirectMock = vi.mocked(savePendingAuthRedirect)
 
 const knownUser: AuthUser = {
   id: 'user-1',
@@ -171,5 +182,57 @@ describe('refreshUser vs. ensureSessionChecked concurrency (Finding-1 regression
     // must be what the store ends up reflecting, not the pre-mutation
     // response the session check happened to have in flight.
     expect(store.currentUser?.acceptedTerms).toBe(true)
+  })
+})
+
+describe('beginLogin', () => {
+  const googleProvider: AuthProvider = {
+    id: 'google',
+    name: 'Google',
+    authorizationUrl: '/api/auth/authorize/google',
+  }
+
+  let originalLocation: Location
+
+  beforeEach(() => {
+    originalLocation = window.location
+    // jsdom's real navigation throws "Not implemented"; replace `location`
+    // with a plain writable stub so `beginLogin` can assign `href` and the
+    // test can read back exactly what it navigated to.
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: '' },
+    })
+  })
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: originalLocation,
+    })
+  })
+
+  it('navigates to the authorization URL with an encoded redirect param, and still saves the pending redirect', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider])
+    const store = useAuthStore()
+    await store.ensureProvidersLoaded()
+
+    store.beginLogin('google', '/clubs/9?tab=events')
+
+    expect(window.location.href).toBe(
+      'http://localhost:8080/api/auth/authorize/google?redirect=%2Fclubs%2F9%3Ftab%3Devents',
+    )
+    expect(savePendingAuthRedirectMock).toHaveBeenCalledWith('/clubs/9?tab=events')
+  })
+
+  it('navigates to the bare authorization URL when no redirect target is supplied', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider])
+    const store = useAuthStore()
+    await store.ensureProvidersLoaded()
+
+    store.beginLogin('google', null)
+
+    expect(window.location.href).toBe('http://localhost:8080/api/auth/authorize/google')
+    expect(savePendingAuthRedirectMock).toHaveBeenCalledWith(null)
   })
 })

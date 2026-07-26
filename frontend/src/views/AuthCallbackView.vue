@@ -16,7 +16,26 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const resolveRedirectTarget = () => {
-  return normalizeAuthRedirect(route.query.redirect) ?? consumePendingAuthRedirect()
+  // Always consume (read + clear) the sessionStorage fallback, even when the
+  // server-provided `?redirect=` wins and the fallback value goes unused.
+  // Otherwise a stale value survives this callback and can hijack a later,
+  // unrelated login attempt that has no server-side target of its own (the
+  // same hijack class fixed on the failure path in PR #69).
+  const serverTarget = normalizeAuthRedirect(route.query.redirect)
+  const pendingTarget = consumePendingAuthRedirect()
+  return serverTarget ?? pendingTarget
+}
+
+// Builds the query for a failed-login redirect to /auth: the error always
+// passes through unchanged (AuthChoiceView's banner depends on it), and the
+// `redirect` key is only present when the URL carried a validated target --
+// never an unvalidated one, and never an empty/undefined placeholder. Used
+// by both failure paths below (the backend-reported failure and the
+// unauthenticated-refreshUser() case) so a student who retries after either
+// kind of failure still ends up where they originally wanted to go.
+const buildAuthFailureQuery = (error: string): Record<string, string> => {
+  const target = normalizeAuthRedirect(route.query.redirect)
+  return target ? { error, redirect: target } : { error }
 }
 
 onMounted(async () => {
@@ -27,7 +46,7 @@ onMounted(async () => {
     // A stale pending redirect must not survive a failed login and hijack
     // the user's next, unrelated login attempt.
     clearPendingAuthRedirect()
-    router.replace({ path: '/auth', query: { error: route.query.error } })
+    router.replace({ path: '/auth', query: buildAuthFailureQuery(route.query.error) })
     return
   }
 
@@ -39,7 +58,7 @@ onMounted(async () => {
     router.replace(destination ?? DEFAULT_POST_AUTH_PATH)
   } else {
     clearPendingAuthRedirect()
-    router.replace({ path: '/auth', query: { error: 'login_failed' } })
+    router.replace({ path: '/auth', query: buildAuthFailureQuery('login_failed') })
   }
 })
 </script>

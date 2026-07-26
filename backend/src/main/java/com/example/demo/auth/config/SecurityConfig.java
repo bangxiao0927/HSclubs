@@ -3,7 +3,9 @@ package com.example.demo.auth.config;
 import java.util.List;
 
 import com.example.demo.security.CustomOAuth2UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
@@ -19,7 +22,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.util.UriComponentsBuilder;
 
 @Configuration
 @EnableWebSecurity
@@ -28,11 +30,14 @@ public class SecurityConfig {
 
     private final SecurityProperties securityProperties;
     private final CustomOAuth2UserService customOAuth2UserService;
+    private final ClientRegistrationRepository clientRegistrationRepository;
 
     public SecurityConfig(SecurityProperties securityProperties,
-                          CustomOAuth2UserService customOAuth2UserService) {
+                          CustomOAuth2UserService customOAuth2UserService,
+                          ClientRegistrationRepository clientRegistrationRepository) {
         this.securityProperties = securityProperties;
         this.customOAuth2UserService = customOAuth2UserService;
+        this.clientRegistrationRepository = clientRegistrationRepository;
     }
 
     @Bean
@@ -60,19 +65,17 @@ public class SecurityConfig {
                 .anyRequest().permitAll())
             .oauth2Login(oauth2 -> oauth2
                 .authorizationEndpoint(authorization -> authorization
-                    .baseUri(resolveAuthorizationRequestBaseUri()))
+                    .baseUri(resolveAuthorizationRequestBaseUri())
+                    .authorizationRequestResolver(new RedirectCapturingAuthorizationRequestResolver(
+                        clientRegistrationRepository, resolveAuthorizationRequestBaseUri())))
                 .redirectionEndpoint(redirection -> redirection.baseUri("/api/auth/*/callback"))
                 .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
                 .successHandler((request, response, authentication) ->
-                    response.sendRedirect(resolveLoginRedirectUri()))
-                .failureHandler((request, response, exception) -> {
-                    String targetUrl = UriComponentsBuilder
-                        .fromUriString(resolveLoginRedirectUri())
-                        .queryParam("error", "oauth2_login_failed")
-                        .build()
-                        .toUriString();
-                    response.sendRedirect(targetUrl);
-                }))
+                    response.sendRedirect(PostLoginRedirectResolver.buildRedirectUri(
+                        resolveLoginRedirectUri(), consumeSessionRedirectTarget(request))))
+                .failureHandler((request, response, exception) ->
+                    response.sendRedirect(PostLoginRedirectResolver.buildRedirectUri(
+                        resolveLoginRedirectUri(), consumeSessionRedirectTarget(request), "oauth2_login_failed"))))
             .logout(logout -> logout
                 .logoutUrl("/api/auth/logout")
                 .logoutSuccessHandler((request, response, authentication) ->
@@ -108,6 +111,22 @@ public class SecurityConfig {
             return configured;
         }
         return OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI;
+    }
+
+    /**
+     * Reads back the redirect target that {@link RedirectCapturingAuthorizationRequestResolver}
+     * stashed in the session when the authorize request was first made, and
+     * removes it so it cannot leak into a later, unrelated login attempt in
+     * the same browser session.
+     */
+    private String consumeSessionRedirectTarget(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session == null) {
+            return null;
+        }
+        Object redirectTarget = session.getAttribute(RedirectCapturingAuthorizationRequestResolver.SESSION_ATTRIBUTE);
+        session.removeAttribute(RedirectCapturingAuthorizationRequestResolver.SESSION_ATTRIBUTE);
+        return redirectTarget instanceof String ? (String) redirectTarget : null;
     }
 }
 /**

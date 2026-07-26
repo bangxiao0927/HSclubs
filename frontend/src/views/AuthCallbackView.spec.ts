@@ -104,6 +104,22 @@ describe('AuthCallbackView', () => {
     expect(consumePendingAuthRedirect()).toBeNull()
   })
 
+  it('prevents a stale pending redirect from hijacking a later, unrelated login when the server-provided redirect wins', async () => {
+    // The server-provided `?redirect=` takes precedence over the stored
+    // fallback (regression check for that precedence), but the stored
+    // value must still be cleared as a side effect -- otherwise it would
+    // survive to hijack a later login attempt that has no server-side
+    // target of its own (e.g. a bookmarked/direct authorization URL that
+    // never went through beginLogin()).
+    savePendingAuthRedirect('/clubs/9')
+    fetchAuthenticatedUserMock.mockResolvedValue(buildUser())
+
+    await mountWithQuery({ redirect: '/clubs/3' })
+
+    expect(replaceMock).toHaveBeenCalledWith('/clubs/3')
+    expect(consumePendingAuthRedirect()).toBeNull()
+  })
+
   it('lands a fully-onboarded user with no redirect target at all on the default profile page', async () => {
     fetchAuthenticatedUserMock.mockResolvedValue(buildUser())
 
@@ -149,5 +165,37 @@ describe('AuthCallbackView', () => {
     await mountWithQuery({})
 
     expect(consumePendingAuthRedirect()).toBeNull()
+  })
+
+  it('forwards a valid remembered target alongside the error on a backend-reported failure, so a retry can resume', async () => {
+    await mountWithQuery({ error: 'oauth2_login_failed', redirect: '/clubs/9' })
+
+    expect(replaceMock).toHaveBeenCalledWith({
+      path: '/auth',
+      query: { error: 'oauth2_login_failed', redirect: '/clubs/9' },
+    })
+  })
+
+  it.each(['https://evil.com', '//evil.com', '/\\evil.com'])(
+    'drops a hostile remembered target (%s) on a backend-reported failure but still forwards the error',
+    async (maliciousTarget) => {
+      await mountWithQuery({ error: 'oauth2_login_failed', redirect: maliciousTarget })
+
+      expect(replaceMock).toHaveBeenCalledWith({
+        path: '/auth',
+        query: { error: 'oauth2_login_failed' },
+      })
+    },
+  )
+
+  it('forwards only the error, with no redirect key at all, when a backend-reported failure carries no remembered target', async () => {
+    await mountWithQuery({ error: 'oauth2_login_failed' })
+
+    expect(replaceMock).toHaveBeenCalledWith({
+      path: '/auth',
+      query: { error: 'oauth2_login_failed' },
+    })
+    const call = replaceMock.mock.calls[0]?.[0] as { query: Record<string, string> }
+    expect('redirect' in call.query).toBe(false)
   })
 })
