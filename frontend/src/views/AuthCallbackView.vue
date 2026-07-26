@@ -26,6 +26,18 @@ const resolveRedirectTarget = () => {
   return serverTarget ?? pendingTarget
 }
 
+// Builds the query for a failed-login redirect to /auth: the error always
+// passes through unchanged (AuthChoiceView's banner depends on it), and the
+// `redirect` key is only present when the URL carried a validated target --
+// never an unvalidated one, and never an empty/undefined placeholder. Used
+// by both failure paths below (the backend-reported failure and the
+// unauthenticated-refreshUser() case) so a student who retries after either
+// kind of failure still ends up where they originally wanted to go.
+const buildAuthFailureQuery = (error: string): Record<string, string> => {
+  const target = normalizeAuthRedirect(route.query.redirect)
+  return target ? { error, redirect: target } : { error }
+}
+
 onMounted(async () => {
   // The backend's OAuth2 failure handler redirects here with `?error=...`
   // when it already knows the login failed, so there is no session to
@@ -34,7 +46,7 @@ onMounted(async () => {
     // A stale pending redirect must not survive a failed login and hijack
     // the user's next, unrelated login attempt.
     clearPendingAuthRedirect()
-    router.replace({ path: '/auth', query: { error: route.query.error } })
+    router.replace({ path: '/auth', query: buildAuthFailureQuery(route.query.error) })
     return
   }
 
@@ -46,7 +58,7 @@ onMounted(async () => {
     router.replace(destination ?? DEFAULT_POST_AUTH_PATH)
   } else {
     clearPendingAuthRedirect()
-    router.replace({ path: '/auth', query: { error: 'login_failed' } })
+    router.replace({ path: '/auth', query: buildAuthFailureQuery('login_failed') })
   }
 })
 </script>
