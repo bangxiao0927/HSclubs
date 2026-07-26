@@ -61,14 +61,41 @@ public final class PostLoginRedirectResolver {
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(baseRedirectUri);
 
         if (isSafeInAppTarget(candidateTarget)) {
-            builder.queryParam(REDIRECT_PARAM, UriUtils.encodeQueryParam(candidateTarget, StandardCharsets.UTF_8));
+            builder.queryParam(REDIRECT_PARAM, encodeQueryParamForFrontendRouter(candidateTarget));
         }
 
         if (StringUtils.hasText(errorCode)) {
+            // errorCode is always one of our own fixed literal error codes
+            // (e.g. "oauth2_login_failed"), never attacker- or user-supplied
+            // text, so it can never contain a literal '+'. No need for the
+            // same escaping as the redirect target below.
             builder.queryParam(ERROR_PARAM, UriUtils.encodeQueryParam(errorCode, StandardCharsets.UTF_8));
         }
 
         return builder.build(true).toUriString();
+    }
+
+    /**
+     * Percent-encodes a value for use as a single query parameter, with one
+     * extra pass beyond {@link UriUtils#encodeQueryParam}: a literal
+     * {@code +} in the input is additionally escaped to {@code %2B}.
+     *
+     * <p>{@code +} is a legal, unreserved-by-RFC-3986 character inside a
+     * URI query component, so {@code encodeQueryParam} deliberately leaves
+     * it untouched. That is correct for RFC 3986 consumers, but vue-router
+     * (like most {@code application/x-www-form-urlencoded} query parsers)
+     * decodes an unescaped {@code +} in a query string as a space. Left
+     * alone, a target such as {@code /search?q=C++} would arrive at the
+     * frontend as {@code /search?q=C  }. Escaping it to {@code %2B} here
+     * keeps the value byte-for-byte round-trippable by any correct decoder
+     * without double-encoding anything else: {@code encodeQueryParam} never
+     * itself emits a literal {@code +} (it turns a literal space into
+     * {@code %20}), so every {@code +} seen after encoding came from a
+     * {@code +} in the original input.
+     */
+    private static String encodeQueryParamForFrontendRouter(String value) {
+        String encoded = UriUtils.encodeQueryParam(value, StandardCharsets.UTF_8);
+        return encoded.replace("+", "%2B");
     }
 
     /**

@@ -16,7 +16,14 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const resolveRedirectTarget = () => {
-  return normalizeAuthRedirect(route.query.redirect) ?? consumePendingAuthRedirect()
+  // Always consume (read + clear) the sessionStorage fallback, even when the
+  // server-provided `?redirect=` wins and the fallback value goes unused.
+  // Otherwise a stale value survives this callback and can hijack a later,
+  // unrelated login attempt that has no server-side target of its own (the
+  // same hijack class fixed on the failure path in PR #69).
+  const serverTarget = normalizeAuthRedirect(route.query.redirect)
+  const pendingTarget = consumePendingAuthRedirect()
+  return serverTarget ?? pendingTarget
 }
 
 onMounted(async () => {

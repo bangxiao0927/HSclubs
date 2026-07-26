@@ -104,6 +104,22 @@ describe('AuthCallbackView', () => {
     expect(consumePendingAuthRedirect()).toBeNull()
   })
 
+  it('prevents a stale pending redirect from hijacking a later, unrelated login when the server-provided redirect wins', async () => {
+    // The server-provided `?redirect=` takes precedence over the stored
+    // fallback (regression check for that precedence), but the stored
+    // value must still be cleared as a side effect -- otherwise it would
+    // survive to hijack a later login attempt that has no server-side
+    // target of its own (e.g. a bookmarked/direct authorization URL that
+    // never went through beginLogin()).
+    savePendingAuthRedirect('/clubs/9')
+    fetchAuthenticatedUserMock.mockResolvedValue(buildUser())
+
+    await mountWithQuery({ redirect: '/clubs/3' })
+
+    expect(replaceMock).toHaveBeenCalledWith('/clubs/3')
+    expect(consumePendingAuthRedirect()).toBeNull()
+  })
+
   it('lands a fully-onboarded user with no redirect target at all on the default profile page', async () => {
     fetchAuthenticatedUserMock.mockResolvedValue(buildUser())
 
