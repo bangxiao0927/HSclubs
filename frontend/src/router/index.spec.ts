@@ -133,6 +133,47 @@ describe('already-authenticated user landing on the sign-in page', () => {
     expect(router.currentRoute.value.path).toBe('/profile')
   })
 
+  it('regression: preserves the invitation token when forwarding a fully-onboarded user to a query-bearing redirect target', async () => {
+    await primeSession(onboardedUser)
+
+    // Mirrors how AcceptInvitationView and the unauthenticated guard branch
+    // build this query value: `redirect` is set from a full path that itself
+    // carries a query string, e.g. `to.fullPath` for
+    // `/accept-invitation?token=abc`.
+    await router.push({ name: 'auth-choice', query: { redirect: '/accept-invitation?token=abc' } })
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('accept-invitation')
+    expect(router.currentRoute.value.fullPath).toBe('/accept-invitation?token=abc')
+    expect(router.currentRoute.value.query.token).toBe('abc')
+  })
+
+  it('preserves multiple query params and a hash when forwarding a fully-onboarded user to the redirect target', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push({
+      name: 'auth-choice',
+      query: { redirect: '/search?q=chess&sort=name#results' },
+    })
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('club-search')
+    expect(router.currentRoute.value.fullPath).toBe('/search?q=chess&sort=name#results')
+    expect(router.currentRoute.value.query.q).toBe('chess')
+    expect(router.currentRoute.value.query.sort).toBe('name')
+    expect(router.currentRoute.value.hash).toBe('#results')
+  })
+
+  it('preserves the nested redirect query when forwarding a not-yet-onboarded user to onboarding', async () => {
+    await primeSession({ ...onboardedUser, graduationYear: null })
+
+    await router.push('/auth?redirect=/clubs/3')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('onboarding')
+    expect(router.currentRoute.value.query.redirect).toBe('/clubs/3')
+  })
+
   it('replaces the /auth history entry instead of pushing a new one, so Back does not bounce between /auth and the destination', async () => {
     await primeSession(onboardedUser)
     await router.push('/search')

@@ -159,9 +159,21 @@ router.beforeEach(async (to) => {
     // An authenticated visit to /auth must not leave /auth sitting in
     // history: forward with `replace: true` so the (now-pointless) /auth
     // entry doesn't trap the Back button behind the real destination.
+    //
+    // The destination is resolved (via `router.resolve`) before being
+    // returned rather than being returned as-is: `resolvePostAuthRoute` can
+    // return a bare string carrying its own query string and/or hash (e.g.
+    // `/accept-invitation?token=abc`), and wrapping that string directly in
+    // `{ path: destination }` would make vue-router silently drop everything
+    // after the path. Resolving first and re-expressing the result as
+    // `{ path, query, hash }` keeps the query and hash intact for both the
+    // bare-string and object-shaped (`{ path, query }`) cases.
     const destination = resolvePostAuthRoute(authStore.currentUser, to.query.redirect) ?? DEFAULT_POST_AUTH_PATH
+    const resolved = router.resolve(destination)
     return {
-      ...(typeof destination === 'string' ? { path: destination } : destination),
+      path: resolved.path,
+      query: resolved.query,
+      hash: resolved.hash,
       replace: true,
     }
   }
