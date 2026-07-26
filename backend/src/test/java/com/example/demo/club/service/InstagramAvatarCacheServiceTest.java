@@ -241,6 +241,159 @@ class InstagramAvatarCacheServiceTest {
         );
     }
 
+    @Test
+    void resolveAvatarRejectsUnsupportedContentTypeAndDoesNotCacheIt() throws Exception {
+        // Regression test for: unsupported avatar formats (e.g. AVIF) were previously
+        // cached to disk as PNG because extensionForMediaType() silently defaulted to
+        // "png" for any unrecognized media type. The fix rejects unsupported formats
+        // before they reach the cache, so resolveAvatar must fall back to the generated
+        // SVG placeholder and no file should be written for the handle.
+        byte[] bytes = { 0, 1, 2, 3, 4, 5, 6, 7 };
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/avatar.avif", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "image/avif");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        int port = server.getAddress().getPort();
+        Path script = tempDir.resolve("avif-instaloader.sh");
+        Files.writeString(
+            script,
+            "#!/bin/sh\necho \"http://127.0.0.1:%d/avatar.avif\"\n".formatted(port),
+            StandardCharsets.UTF_8
+        );
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = service(true, script.toString(), 4000);
+
+        try {
+            InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
+
+            assertThat(avatar.mediaType()).isEqualTo(MediaType.valueOf("image/svg+xml"));
+            assertThat(cachedAvatarFiles("mvhsclubs")).isEmpty();
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void resolveAvatarSniffsMagicBytesWhenContentTypeIsMisleading() throws Exception {
+        // A CDN mislabeling a real PNG as application/octet-stream should still be
+        // rescued by magic-byte sniffing, cached, and served as image/png thereafter.
+        byte[] bytes = { (byte) 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a };
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/avatar.bin", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        int port = server.getAddress().getPort();
+        Path script = tempDir.resolve("mislabeled-png-instaloader.sh");
+        Files.writeString(
+            script,
+            "#!/bin/sh\necho \"http://127.0.0.1:%d/avatar.bin\"\n".formatted(port),
+            StandardCharsets.UTF_8
+        );
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = service(true, script.toString(), 4000);
+
+        try {
+            InstagramAvatarCacheService.ResolvedAvatar first = service.resolveAvatar("mvhsclubs");
+            assertThat(first.mediaType()).isEqualTo(MediaType.IMAGE_PNG);
+            assertThat(first.bytes()).isEqualTo(bytes);
+
+            InstagramAvatarCacheService.ResolvedAvatar second = service.resolveAvatar("mvhsclubs");
+            assertThat(second.mediaType()).isEqualTo(MediaType.IMAGE_PNG);
+            assertThat(second.bytes()).isEqualTo(bytes);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void resolveAvatarRejectsSvgContentTypeAndDoesNotCacheIt() throws Exception {
+        // The reviewer's other flagged example (image/svg+xml pretending to be a
+        // cacheable avatar) must also be rejected rather than cached.
+        byte[] bytes = { 0, 1, 2, 3, 4, 5, 6, 7 };
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/avatar.svg", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "image/svg+xml");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        int port = server.getAddress().getPort();
+        Path script = tempDir.resolve("svg-instaloader.sh");
+        Files.writeString(
+            script,
+            "#!/bin/sh\necho \"http://127.0.0.1:%d/avatar.svg\"\n".formatted(port),
+            StandardCharsets.UTF_8
+        );
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = service(true, script.toString(), 4000);
+
+        try {
+            InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
+
+            assertThat(avatar.mediaType()).isEqualTo(MediaType.valueOf("image/svg+xml"));
+            assertThat(cachedAvatarFiles("mvhsclubs")).isEmpty();
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void resolveAvatarCachesAndServesSupportedWebpFormat() throws Exception {
+        // Happy-path confirmation that the four supported formats still work end to
+        // end after tightening the unsupported-format rejection.
+        byte[] bytes = { 'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P', 1, 2, 3, 4 };
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/avatar.webp", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "image/webp");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        int port = server.getAddress().getPort();
+        Path script = tempDir.resolve("webp-instaloader.sh");
+        Files.writeString(
+            script,
+            "#!/bin/sh\necho \"http://127.0.0.1:%d/avatar.webp\"\n".formatted(port),
+            StandardCharsets.UTF_8
+        );
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = service(true, script.toString(), 4000);
+
+        try {
+            InstagramAvatarCacheService.ResolvedAvatar first = service.resolveAvatar("mvhsclubs");
+            assertThat(first.mediaType()).isEqualTo(MediaType.valueOf("image/webp"));
+            assertThat(first.bytes()).isEqualTo(bytes);
+
+            InstagramAvatarCacheService.ResolvedAvatar second = service.resolveAvatar("mvhsclubs");
+            assertThat(second.mediaType()).isEqualTo(MediaType.valueOf("image/webp"));
+            assertThat(second.bytes()).isEqualTo(bytes);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private List<Path> cachedAvatarFiles(String handle) throws IOException {
+        Path cacheDir = tempDir.resolve("avatar-cache").resolve("instagram");
+        if (!Files.isDirectory(cacheDir)) {
+            return List.of();
+        }
+        try (var stream = Files.list(cacheDir)) {
+            return stream
+                .filter(path -> path.getFileName().toString().startsWith(handle + "."))
+                .toList();
+        }
+    }
+
     private InstagramAvatarCacheService service(boolean enabled) {
         return service(enabled, "python3", "http://127.0.0.1/unused?username=%s", 1000);
     }
