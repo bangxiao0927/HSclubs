@@ -3,30 +3,28 @@ import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth'
-import { consumePendingAuthRedirect, normalizeAuthRedirect } from '../utils/authRedirect'
+import {
+  consumePendingAuthRedirect,
+  DEFAULT_POST_AUTH_PATH,
+  normalizeAuthRedirect,
+  resolvePostAuthRoute,
+} from '../utils/authRedirect'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
 const resolveRedirectTarget = () => {
-  return normalizeAuthRedirect(route.query.redirect) ?? consumePendingAuthRedirect() ?? '/profile'
+  return normalizeAuthRedirect(route.query.redirect) ?? consumePendingAuthRedirect()
 }
 
 onMounted(async () => {
   await authStore.refreshUser()
 
   if (authStore.isAuthenticated) {
-    const user = authStore.currentUser
     const redirectTarget = resolveRedirectTarget()
-    if (user?.acceptedTerms === false) {
-      router.replace({ path: '/accept-terms', query: { redirect: redirectTarget } })
-    } else if (user && user.graduationYear == null) {
-      // New users without a graduation year set go to onboarding first
-      router.replace({ path: '/onboarding', query: { redirect: redirectTarget } })
-    } else {
-      router.replace(redirectTarget)
-    }
+    const destination = resolvePostAuthRoute(authStore.currentUser, redirectTarget)
+    router.replace(destination ?? DEFAULT_POST_AUTH_PATH)
   } else {
     router.replace({ path: '/auth', query: { error: 'login_failed' } })
   }

@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import { useAuthStore } from '../stores/auth'
-import { normalizeAuthRedirect } from '../utils/authRedirect'
+import { DEFAULT_POST_AUTH_PATH, resolvePostAuthRoute } from '../utils/authRedirect'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -159,7 +159,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === 'accept-terms' && authStore.currentUser?.acceptedTerms === true) {
-    return normalizeAuthRedirect(to.query.redirect) ?? { name: 'home' }
+    return resolvePostAuthRoute(authStore.currentUser, to.query.redirect) ?? DEFAULT_POST_AUTH_PATH
   }
 
   if (requiresOwner && !authStore.currentUser?.isOwner) {
