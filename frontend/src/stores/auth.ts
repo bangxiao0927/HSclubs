@@ -55,41 +55,56 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Concurrent callers (e.g. main.ts's bootstrap() and the router guard both
-  // firing on cold load, before either has resolved) must share a single
-  // /api/auth/me request instead of each issuing their own. The in-flight
-  // promise is cached here and cleared once the request settles, so a later
-  // explicit refreshUser() call still triggers a fresh request.
-  let inFlightRefresh: Promise<void> | null = null
-
-  const refreshUser = (): Promise<void> => {
-    if (inFlightRefresh) {
-      return inFlightRefresh
+  // The actual /api/auth/me round trip. Every call issues a brand-new
+  // request; callers that need de-duplication (see `ensureSessionChecked`
+  // below) are responsible for sharing the returned promise themselves.
+  const fetchAndApplyUser = async (): Promise<void> => {
+    userLoading.value = true
+    try {
+      const fetched = await fetchAuthenticatedUser()
+      currentUser.value = normalizeUser(fetched)
+      userError.value = null
+    } catch (error) {
+      userError.value =
+        error instanceof Error ? error.message : 'Unable to verify session'
+      currentUser.value = null
+    } finally {
+      userLoading.value = false
+      hasCheckedSession.value = true
     }
+  }
 
-    const request = (async () => {
-      userLoading.value = true
-      try {
-        const fetched = await fetchAuthenticatedUser()
-        currentUser.value = normalizeUser(fetched)
-        userError.value = null
-      } catch (error) {
-        userError.value =
-          error instanceof Error ? error.message : 'Unable to verify session'
-        currentUser.value = null
-      } finally {
-        userLoading.value = false
-        hasCheckedSession.value = true
-        inFlightRefresh = null
-      }
-    })()
+  // Post-mutation callers (AcceptTermsView after POSTing accept-terms,
+  // OnboardingView/ProfileView after saving a graduation year,
+  // AcceptInvitationView after accepting an invitation, App.vue when auth
+  // flips true) MUST see the server's current state, not a response some
+  // other in-flight caller happened to have kicked off before the mutation
+  // landed. So `refreshUser()` always issues a fresh request and never reuses
+  // a cached in-flight promise.
+  const refreshUser = (): Promise<void> => fetchAndApplyUser()
 
-    inFlightRefresh = request
+  // Session checks (main.ts's bootstrap() and the router guard's
+  // `if (!hasCheckedSession)` branch) only need "has this browser got a
+  // session?" and both fire on cold load before either has resolved. These
+  // share a single in-flight /api/auth/me request instead of each issuing
+  // their own. The in-flight promise is cleared once the request settles
+  // (success or failure), so the next call always genuinely refetches
+  // instead of replaying a poisoned/stale result.
+  let inFlightSessionCheck: Promise<void> | null = null
+
+  const ensureSessionChecked = (): Promise<void> => {
+    if (inFlightSessionCheck) {
+      return inFlightSessionCheck
+    }
+    const request = fetchAndApplyUser().finally(() => {
+      inFlightSessionCheck = null
+    })
+    inFlightSessionCheck = request
     return request
   }
 
   const bootstrap = async () => {
-    await Promise.allSettled([ensureProvidersLoaded(), refreshUser()])
+    await Promise.allSettled([ensureProvidersLoaded(), ensureSessionChecked()])
   }
 
   const beginLogin = (providerId: string, redirectTarget?: string | null) => {
@@ -125,6 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     ensureProvidersLoaded,
     refreshUser,
+    ensureSessionChecked,
     bootstrap,
     beginLogin,
     logout,

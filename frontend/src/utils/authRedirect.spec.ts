@@ -32,6 +32,50 @@ describe('normalizeAuthRedirect', () => {
     expect(normalizeAuthRedirect('')).toBeNull()
     expect(normalizeAuthRedirect('   ')).toBeNull()
   })
+
+  // A backslash is a path separator to a browser's URL parser, not a literal
+  // character: `new URL('/\\evil.com', 'http://localhost/')` resolves to
+  // `http://evil.com/`, the same cross-origin escape the backend's
+  // PostLoginRedirectResolver.isSafeInAppTarget already rejects.
+  it('rejects a leading-slash-then-backslash target that resolves cross-origin', () => {
+    expect(normalizeAuthRedirect('/\\evil.com')).toBeNull()
+  })
+
+  it('rejects a slash-backslash-slash target that resolves cross-origin', () => {
+    expect(normalizeAuthRedirect('/\\/evil.com')).toBeNull()
+  })
+
+  it('rejects a backslash appearing mid-path, not just at the start', () => {
+    expect(normalizeAuthRedirect('/clubs/3\\evil.com')).toBeNull()
+  })
+
+  it('still rejects a protocol-relative URL', () => {
+    expect(normalizeAuthRedirect('//evil.com')).toBeNull()
+  })
+
+  it('still rejects an absolute cross-origin URL', () => {
+    expect(normalizeAuthRedirect('https://evil.com')).toBeNull()
+  })
+
+  it('rejects a raw newline smuggled into an otherwise valid-looking target', () => {
+    expect(normalizeAuthRedirect('/clubs/3\nevil')).toBeNull()
+  })
+
+  it('still accepts a legitimate target carrying a query string', () => {
+    expect(normalizeAuthRedirect('/clubs/3?tab=members')).toBe('/clubs/3?tab=members')
+  })
+
+  it('still accepts a legitimate target carrying a fragment', () => {
+    expect(normalizeAuthRedirect('/clubs/3#officers')).toBe('/clubs/3#officers')
+  })
+
+  it('still accepts a legitimate target with encoded characters', () => {
+    expect(normalizeAuthRedirect('/search?q=chess%20club')).toBe('/search?q=chess%20club')
+  })
+
+  it('still accepts a legitimate target with a unicode club name', () => {
+    expect(normalizeAuthRedirect('/clubs/日本語クラブ')).toBe('/clubs/日本語クラブ')
+  })
 })
 
 describe('sanitizeAuthRedirectTarget', () => {

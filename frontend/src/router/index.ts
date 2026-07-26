@@ -134,7 +134,7 @@ const termsBypassRouteNames = new Set([
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
   if (!authStore.hasCheckedSession) {
-    await authStore.refreshUser()
+    await authStore.ensureSessionChecked()
   }
 
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
@@ -156,7 +156,14 @@ router.beforeEach(async (to) => {
   // real login, so a not-yet-onboarded user still lands on /accept-terms or
   // /onboarding instead of skipping those steps.
   if (authStore.isAuthenticated && to.name === 'auth-choice') {
-    return resolvePostAuthRoute(authStore.currentUser, to.query.redirect) ?? DEFAULT_POST_AUTH_PATH
+    // An authenticated visit to /auth must not leave /auth sitting in
+    // history: forward with `replace: true` so the (now-pointless) /auth
+    // entry doesn't trap the Back button behind the real destination.
+    const destination = resolvePostAuthRoute(authStore.currentUser, to.query.redirect) ?? DEFAULT_POST_AUTH_PATH
+    return {
+      ...(typeof destination === 'string' ? { path: destination } : destination),
+      replace: true,
+    }
   }
 
   if (

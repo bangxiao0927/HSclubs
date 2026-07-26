@@ -24,6 +24,8 @@ const yearOptions = computed(() => {
 
 const canSave = computed(() => graduationYear.value !== null && graduationYear.value > 0)
 
+// Deliberately bypasses resolvePostAuthRoute: at this point graduationYear is
+// still null, so the full resolver would just send us back to /onboarding.
 const resolveRedirectTarget = () => sanitizeAuthRedirectTarget(route.query.redirect)
 
 const handleSave = async () => {

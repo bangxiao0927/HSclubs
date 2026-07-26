@@ -115,6 +115,40 @@ describe('already-authenticated user landing on the sign-in page', () => {
     expect(router.currentRoute.value.path).toBe('/profile')
   })
 
+  it('does not follow a backslash redirect target that would resolve cross-origin, falling back to the default landing path', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/auth?redirect=/\\evil.com')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/profile')
+  })
+
+  it('does not follow a percent-encoded backslash redirect target, falling back to the default landing path', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/auth?redirect=%2F%5Cevil.com')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/profile')
+  })
+
+  it('replaces the /auth history entry instead of pushing a new one, so Back does not bounce between /auth and the destination', async () => {
+    await primeSession(onboardedUser)
+    await router.push('/search')
+    await router.isReady()
+    const historyLengthBeforeAuth = window.history.length
+
+    await router.push('/auth')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/profile')
+
+    // A `replace` navigation overwrites the current history entry rather
+    // than appending one, so the entry count must not have grown across the
+    // /auth -> /profile guard redirect.
+    expect(window.history.length).toBe(historyLengthBeforeAuth)
+  })
+
   it('sends a user who has not accepted the terms to accept-terms instead', async () => {
     await primeSession({ ...onboardedUser, acceptedTerms: false })
 
