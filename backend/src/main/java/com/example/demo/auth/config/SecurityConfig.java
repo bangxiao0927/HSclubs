@@ -174,6 +174,21 @@ public class SecurityConfig {
      * other method -- and every preflight asking for another method -- falls through to the
      * authenticated, first-party-only policy. A cross-origin POST to /api/clubs from an
      * arbitrary origin is never opened up, only the read.
+     *
+     * A second wrinkle, and the reason for the isFirstPartyOrigin() check below: the public
+     * policy's allowedOrigins("*") + allowCredentials(false) combination is not just "more
+     * permissive" than the authenticated one -- it is a *different, incompatible* response
+     * shape. A request whose Origin IS the first-party FRONTEND_ORIGIN must never receive it,
+     * because our own frontend's fetch() calls are made with credentials: 'include'. Per the
+     * Fetch/CORS spec, a credentialed request that gets back a wildcard
+     * Access-Control-Allow-Origin (rather than the literal origin) and no
+     * Access-Control-Allow-Credentials: true is rejected by the browser outright. Dispatching
+     * on "is this a safe method" alone (the original bug) handed the public, wildcard policy to
+     * first-party GETs too, which broke every credentialed read of public club data whenever
+     * frontend and backend are cross-origin (any non-same-host deployment, including local dev).
+     * So first-party origins are routed to the authenticated source unconditionally, before the
+     * method-based public/private split is even considered; only non-first-party origins are
+     * eligible for the public, wildcard policy.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -185,11 +200,39 @@ public class SecurityConfig {
         PUBLIC_READ_ONLY_CORS_PATTERNS.forEach(pattern -> publicReadOnlySource.registerCorsConfiguration(pattern, publicReadOnly));
 
         return request -> {
+            if (isFirstPartyOrigin(request)) {
+                return authenticatedSource.getCorsConfiguration(request);
+            }
+
             CorsConfiguration publicMatch = publicReadOnlySource.getCorsConfiguration(request);
             return (publicMatch != null && isSafeCorsRequest(request))
                 ? publicMatch
                 : authenticatedSource.getCorsConfiguration(request);
         };
+    }
+
+    /**
+     * Whether the request's Origin header is one of the configured first-party origins
+     * (app.security.allowed-origins), so it must be routed to the credentialed,
+     * exact-origin CORS policy rather than the public, wildcard one -- see the "second
+     * wrinkle" note above corsConfigurationSource().
+     *
+     * A request with no Origin header at all is not a CORS request in the first place (browsers
+     * always send Origin on cross-origin fetches, same-origin requests don't need CORS headers
+     * and are unaffected by whichever branch runs), so it's treated as not first-party and left
+     * to fall through to the existing method-based split.
+     *
+     * Comparison is case-insensitive: scheme and host in an Origin header are not
+     * case-sensitive, and treating a mismatch in case alone as "not first party" would silently
+     * degrade our own frontend to the wildcard, non-credentialed policy.
+     */
+    private boolean isFirstPartyOrigin(HttpServletRequest request) {
+        String origin = request.getHeader(HttpHeaders.ORIGIN);
+        if (!StringUtils.hasText(origin)) {
+            return false;
+        }
+        return securityProperties.getAllowedOrigins().stream()
+            .anyMatch(allowedOrigin -> allowedOrigin.equalsIgnoreCase(origin));
     }
 
     private CorsConfiguration authenticatedCorsConfiguration() {

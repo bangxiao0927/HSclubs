@@ -87,4 +87,53 @@ class SecurityConfigCorsTest {
         assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo(FIRST_PARTY_ORIGIN);
         assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)).isEqualTo("true");
     }
+
+    /**
+     * Regression coverage for the bug this test class originally missed: dispatching purely on
+     * "is this a safe method" (GET/HEAD) handed the public, wildcard, credential-less CORS
+     * policy to first-party requests too, including credentialed GETs from our own frontend.
+     * A request whose Origin is FRONTEND_ORIGIN must always get back the exact-origin,
+     * credentialed policy on the public read paths, never the wildcard one -- otherwise the
+     * browser rejects the frontend's own credentials:'include' fetch() calls to /api/clubs,
+     * /api/summary, etc. whenever frontend and backend are cross-origin (e.g. local dev).
+     */
+    @Test
+    void publicClubListGetAllowsFirstPartyOriginWithCredentials() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(get("/api/clubs").header(HttpHeaders.ORIGIN, FIRST_PARTY_ORIGIN))
+            .andReturn().getResponse();
+
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo(FIRST_PARTY_ORIGIN);
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)).isEqualTo("true");
+    }
+
+    @Test
+    void publicSummaryGetAllowsFirstPartyOriginWithCredentials() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(get("/api/summary").header(HttpHeaders.ORIGIN, FIRST_PARTY_ORIGIN))
+            .andReturn().getResponse();
+
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo(FIRST_PARTY_ORIGIN);
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)).isEqualTo("true");
+    }
+
+    @Test
+    void publicClubListPreflightAllowsFirstPartyOriginWithCredentials() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(options("/api/clubs")
+                .header(HttpHeaders.ORIGIN, FIRST_PARTY_ORIGIN)
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
+            .andReturn().getResponse();
+
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo(FIRST_PARTY_ORIGIN);
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)).isEqualTo("true");
+    }
+
+    @Test
+    void publicSummaryPreflightAllowsFirstPartyOriginWithCredentials() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(options("/api/summary")
+                .header(HttpHeaders.ORIGIN, FIRST_PARTY_ORIGIN)
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
+            .andReturn().getResponse();
+
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo(FIRST_PARTY_ORIGIN);
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)).isEqualTo("true");
+    }
 }
