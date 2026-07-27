@@ -59,9 +59,16 @@ export const invalidateClubCache = () => {
 
 const clubPath = (suffix: string, page?: number, size?: number) => {
   let path = `/api/clubs${suffix}`
-  if (page !== undefined && size !== undefined) {
+  const params: string[] = []
+  if (page !== undefined) {
+    params.push(`page=${page}`)
+  }
+  if (size !== undefined) {
+    params.push(`size=${size}`)
+  }
+  if (params.length > 0) {
     const sep = path.includes('?') ? '&' : '?'
-    path += `${sep}page=${page}&size=${size}`
+    path += `${sep}${params.join('&')}`
   }
   return path
 }
