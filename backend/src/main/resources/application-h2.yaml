@@ -9,6 +9,16 @@ spring:
     init:
       mode: always
       continue-on-error: true
+      # Reset first (h2-only destructive DROP TABLE script, never the production schema
+      # location), then build the schema fixture, so every local h2-profile startup gets a
+      # clean slate. schema.sql itself no longer drops anything, since it is also the
+      # (inert, mode: never) file the production datasource resolves by default.
+      schema-locations:
+        - classpath:db/h2/reset.sql
+        - classpath:schema.sql
+      # data.sql lives under db/h2 specifically so it is never on the production datasource's
+      # default init path -- only this profile references it.
+      data-locations: classpath:db/h2/data.sql
   h2:
     console:
       enabled: true

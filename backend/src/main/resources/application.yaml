@@ -75,7 +75,14 @@ spring:
     driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:com.mysql.cj.jdbc.Driver}
   sql:
     init:
-      mode: ${SPRING_SQL_INIT_MODE:always}
+      # Was "always" by default: schema.sql/data.sql are an H2 local-dev fixture (see
+      # schema.sql's own file header) that has never successfully run against the real
+      # production MySQL schema, and running it there would mean its old unconditional
+      # DROP TABLE statements executing on every restart. "never" matches what production
+      # already runs with in practice (backend/.env pins SPRING_SQL_INIT_MODE=never) and what
+      # actually works; the h2 profile overrides this back to "always" for local dev (see
+      # application-h2.yaml).
+      mode: ${SPRING_SQL_INIT_MODE:never}
   security:
     oauth2:
       client:

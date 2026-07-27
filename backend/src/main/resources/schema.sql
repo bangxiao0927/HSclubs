@@ -1,15 +1,29 @@
--- SET FOREIGN_KEY_CHECKS = 0; (H2)
-DROP TABLE IF EXISTS calenders;
-DROP TABLE IF EXISTS club_activities;
-DROP TABLE IF EXISTS club_member;
-DROP TABLE IF EXISTS club_membership_requests;
-DROP TABLE IF EXISTS club_tag;
-DROP TABLE IF EXISTS club_social_medias;
-DROP TABLE IF EXISTS clubs;
-DROP TABLE IF EXISTS user_profiles;
-DROP TABLE IF EXISTS oauth_users;
-DROP TABLE IF EXISTS club_category;
--- SET FOREIGN_KEY_CHECKS = 1; (H2)
+-- ============================================================================
+-- H2 LOCAL DEV FIXTURE -- NOT THE PRODUCTION SCHEMA.
+-- ============================================================================
+-- This file only runs when spring.sql.init.mode is "always", which is the case for the h2
+-- Spring profile (see application-h2.yaml) and never the case in production (backend/.env
+-- pins SPRING_SQL_INIT_MODE=never there; see also application.yaml's default). It has never
+-- successfully executed against the real production MySQL database and is not a source of
+-- truth for its schema -- most notably, clubs.achievements is CLOB here but `json NOT NULL
+-- DEFAULT (json_array())` in production. That is intentional, not a typo that needs fixing:
+--
+--   - AchievementsTypeHandler reads/writes achievements as a plain string
+--     (ps.setString / rs.getString), which is what MySQL's Connector/J driver gives back for
+--     a JSON column.
+--   - H2 2.x in MODE=MySQL DOES support a JSON column type, but it re-wraps whatever string is
+--     written into it as an opaque JSON value; rs.getString() on that column then returns the
+--     JSON-encoded *string literal* (quotes and escaping included) rather than the original
+--     array text, so AchievementsTypeHandler's Jackson parse fails on it. CLOB has no such
+--     wrapping, so it is the correct type for this fixture even though it would be wrong for
+--     the real schema. Do not "fix" this to JSON.
+--
+-- This file also no longer drops any tables (that used to happen unconditionally at the top of
+-- every one of these CREATE statements, in the same script that -- if SPRING_SQL_INIT_MODE were
+-- ever "always" in production -- would run against real data). If h2-profile local dev needs a
+-- destructive from-scratch reset on every restart, see db/h2/reset.sql, which is wired up only
+-- for that profile.
+-- ============================================================================
 
 CREATE TABLE IF NOT EXISTS oauth_users (
     uid BIGINT PRIMARY KEY AUTO_INCREMENT,

@@ -1,4 +1,9 @@
 -- H2-compatible local seed using the official MVHS clubs list.
+-- H2-PROFILE-ONLY: wired up exclusively through application-h2.yaml's
+-- spring.sql.init.data-locations. Never reachable from the production datasource --
+-- there is no default-location data.sql for Spring Boot to pick up, on purpose, so a
+-- misconfigured SPRING_SQL_INIT_MODE=always in production could at most re-run
+-- schema.sql, never re-seed these hardcoded-primary-key rows over real data.
 
 -- Local-only users for authentication and membership testing.
 INSERT INTO oauth_users (uid, provider, provider_user_id, email, display_name, avatar_url, role) VALUES
