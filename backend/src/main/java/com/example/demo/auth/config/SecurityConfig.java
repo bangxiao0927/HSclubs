@@ -39,12 +39,21 @@ public class SecurityConfig {
     private final CustomOAuth2UserService customOAuth2UserService;
     private final ClientRegistrationRepository clientRegistrationRepository;
 
+    /**
+     * Built once from {@code securityProperties} (immutable after construction) and reused by
+     * both {@link #corsConfigurationSource()} and {@link #isFirstPartyOrigin(HttpServletRequest)}
+     * so the two never disagree about what counts as a first-party origin -- see the note on
+     * {@link #isFirstPartyOrigin(HttpServletRequest)} for why that matters.
+     */
+    private final CorsConfiguration authenticatedCorsConfiguration;
+
     public SecurityConfig(SecurityProperties securityProperties,
                           CustomOAuth2UserService customOAuth2UserService,
                           ClientRegistrationRepository clientRegistrationRepository) {
         this.securityProperties = securityProperties;
         this.customOAuth2UserService = customOAuth2UserService;
         this.clientRegistrationRepository = clientRegistrationRepository;
+        this.authenticatedCorsConfiguration = buildAuthenticatedCorsConfiguration();
     }
 
     @Bean
@@ -156,7 +165,8 @@ public class SecurityConfig {
     /**
      * Two independent CORS policies, not one:
      *
-     *  - authenticatedCorsConfiguration(): first-party only (FRONTEND_ORIGIN), credentialed --
+     *  - authenticatedCorsConfiguration (built once by buildAuthenticatedCorsConfiguration()):
+     *    first-party only (FRONTEND_ORIGIN), credentialed --
      *    everything that touches a session, i.e. all of /api/** by default.
      *  - publicReadOnlyCorsConfiguration(): any origin, no credentials -- the read-only club
      *    data endpoints above, so a future off-site data-collection client (a script or a page
@@ -193,7 +203,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         UrlBasedCorsConfigurationSource authenticatedSource = new UrlBasedCorsConfigurationSource();
-        authenticatedSource.registerCorsConfiguration("/**", authenticatedCorsConfiguration());
+        authenticatedSource.registerCorsConfiguration("/**", authenticatedCorsConfiguration);
 
         UrlBasedCorsConfigurationSource publicReadOnlySource = new UrlBasedCorsConfigurationSource();
         CorsConfiguration publicReadOnly = publicReadOnlyCorsConfiguration();
@@ -222,20 +232,26 @@ public class SecurityConfig {
      * and are unaffected by whichever branch runs), so it's treated as not first-party and left
      * to fall through to the existing method-based split.
      *
-     * Comparison is case-insensitive: scheme and host in an Origin header are not
-     * case-sensitive, and treating a mismatch in case alone as "not first party" would silently
-     * degrade our own frontend to the wildcard, non-credentialed policy.
+     * Delegates to {@link CorsConfiguration#checkOrigin(String)} on the very same
+     * {@code authenticatedCorsConfiguration} instance used by {@link #corsConfigurationSource()},
+     * rather than re-implementing the comparison here. checkOrigin() strips a trailing slash from
+     * both the configured origin and the incoming Origin header before comparing (case-
+     * insensitively); a hand-rolled equalsIgnoreCase() comparison against the raw configured value
+     * would not, so an allowed-origins entry configured with a trailing slash (e.g.
+     * "https://app.example.com/") would match here but mismatch there (or vice versa), and a
+     * first-party request would silently fall through to the wildcard, non-credentialed policy --
+     * reintroducing the exact bug this method exists to prevent. Delegating keeps the two checks
+     * permanently in sync.
      */
     private boolean isFirstPartyOrigin(HttpServletRequest request) {
         String origin = request.getHeader(HttpHeaders.ORIGIN);
         if (!StringUtils.hasText(origin)) {
             return false;
         }
-        return securityProperties.getAllowedOrigins().stream()
-            .anyMatch(allowedOrigin -> allowedOrigin.equalsIgnoreCase(origin));
+        return authenticatedCorsConfiguration.checkOrigin(origin) != null;
     }
 
-    private CorsConfiguration authenticatedCorsConfiguration() {
+    private CorsConfiguration buildAuthenticatedCorsConfiguration() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(securityProperties.getAllowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
