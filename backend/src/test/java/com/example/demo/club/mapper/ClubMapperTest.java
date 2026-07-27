@@ -114,4 +114,52 @@ class ClubMapperTest {
 
         assertThat(club.getMemberCount()).isEqualTo(1);
     }
+
+    // member_count is derived from club_member (see ClubMapper.xml's BaseColumnList correlated
+    // subquery) and update()/insert() intentionally no longer write it.
+    @Test
+    void updateIgnoresAClientSuppliedMemberCountInsteadOfOverwritingTheDerivedValue() {
+        jdbcTemplate.update(
+            "INSERT INTO clubs (id, name, category, member_count, status) "
+                + "VALUES (1, 'Chess Club', 'Competition & Strategy', 0, 'active')");
+        jdbcTemplate.update("INSERT INTO oauth_users (uid, provider, provider_user_id) VALUES (10, 'google', 'g-10')");
+        jdbcTemplate.update("INSERT INTO oauth_users (uid, provider, provider_user_id) VALUES (11, 'google', 'g-11')");
+        jdbcTemplate.update("INSERT INTO club_member (club_id, oauth_user_id) VALUES (1, 10)");
+        jdbcTemplate.update("INSERT INTO club_member (club_id, oauth_user_id) VALUES (1, 11)");
+
+        Club update = clubMapper.findById(1L);
+        update.setName("Chess Club (renamed)");
+        // Simulates a stale/forged client payload trying to set the count directly;
+        // update() must not let this reach the member_count column at all.
+        update.setMemberCount(999);
+
+        clubMapper.update(update);
+
+        Club reloaded = clubMapper.findById(1L);
+        assertThat(reloaded.getName()).isEqualTo("Chess Club (renamed)");
+        assertThat(reloaded.getMemberCount()).isEqualTo(2);
+
+        Integer rawColumnValue = jdbcTemplate.queryForObject(
+            "SELECT member_count FROM clubs WHERE id = 1", Integer.class);
+        assertThat(rawColumnValue).isEqualTo(0);
+    }
+
+    @Test
+    void insertIgnoresAClientSuppliedMemberCountAndLeavesTheColumnAtItsDefault() {
+        Club club = new Club();
+        club.setName("Robotics");
+        club.setCategory("STEM & Innovation");
+        club.setStatus("active");
+        club.setVisibility("public");
+        club.setAchievements(List.of());
+        // A brand-new club has no members yet regardless of what a client sends here.
+        club.setMemberCount(500);
+
+        clubMapper.insert(club);
+
+        Integer rawColumnValue = jdbcTemplate.queryForObject(
+            "SELECT member_count FROM clubs WHERE id = " + club.getId(), Integer.class);
+        assertThat(rawColumnValue).isEqualTo(0);
+        assertThat(clubMapper.findById(club.getId()).getMemberCount()).isEqualTo(0);
+    }
 }
