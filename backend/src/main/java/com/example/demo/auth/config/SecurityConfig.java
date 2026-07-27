@@ -1,6 +1,8 @@
 package com.example.demo.auth.config;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import com.example.demo.security.CustomOAuth2UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -9,6 +11,7 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -133,17 +136,92 @@ public class SecurityConfig {
         // on), so it gets the same CSRF protection as any other write.
     }
 
+    /**
+     * Path patterns that carry a permitAll() GET in SecurityConfig's authorizeHttpRequests
+     * block above (public club data meant for future data-collection clients, plus the cached
+     * Instagram avatar images those clients would also want to fetch() rather than just
+     * <img>-load). Kept as a constant so the authorization rules and the CORS policy can't
+     * silently drift apart.
+     */
+    private static final List<String> PUBLIC_READ_ONLY_CORS_PATTERNS = List.of(
+        "/api/summary",
+        "/api/clubs",
+        "/api/clubs/calendar",
+        "/api/clubs/*",
+        "/api/clubs/recommendations",
+        "/api/avatars/instagram/*");
+
+    private static final Set<String> SAFE_CORS_METHODS = Set.of(HttpMethod.GET.name(), HttpMethod.HEAD.name());
+
+    /**
+     * Two independent CORS policies, not one:
+     *
+     *  - authenticatedCorsConfiguration(): first-party only (FRONTEND_ORIGIN), credentialed --
+     *    everything that touches a session, i.e. all of /api/** by default.
+     *  - publicReadOnlyCorsConfiguration(): any origin, no credentials -- the read-only club
+     *    data endpoints above, so a future off-site data-collection client (a script or a page
+     *    running in someone else's browser) can fetch() public club info without our backend
+     *    ever seeing a cookie for it. allowCredentials(true) + allowedOrigins("*") are mutually
+     *    exclusive by spec, which is exactly why this needs its own CorsConfiguration rather
+     *    than loosening the existing one.
+     *
+     * The wrinkle: /api/clubs and /api/clubs/{id} carry BOTH a public GET and an authenticated
+     * write (POST /api/clubs, PUT/DELETE /api/clubs/{id}) on the exact same path, and
+     * UrlBasedCorsConfigurationSource only keys its registrations by path, never by method. So
+     * path-based registration alone can't express "public for GET, first-party for POST" on one
+     * path. The method dimension is therefore resolved by hand below: the public policy is only
+     * ever handed back for GET/HEAD (and an OPTIONS preflight asking for one of those); every
+     * other method -- and every preflight asking for another method -- falls through to the
+     * authenticated, first-party-only policy. A cross-origin POST to /api/clubs from an
+     * arbitrary origin is never opened up, only the read.
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        UrlBasedCorsConfigurationSource authenticatedSource = new UrlBasedCorsConfigurationSource();
+        authenticatedSource.registerCorsConfiguration("/**", authenticatedCorsConfiguration());
+
+        UrlBasedCorsConfigurationSource publicReadOnlySource = new UrlBasedCorsConfigurationSource();
+        CorsConfiguration publicReadOnly = publicReadOnlyCorsConfiguration();
+        PUBLIC_READ_ONLY_CORS_PATTERNS.forEach(pattern -> publicReadOnlySource.registerCorsConfiguration(pattern, publicReadOnly));
+
+        return request -> {
+            CorsConfiguration publicMatch = publicReadOnlySource.getCorsConfiguration(request);
+            return (publicMatch != null && isSafeCorsRequest(request))
+                ? publicMatch
+                : authenticatedSource.getCorsConfiguration(request);
+        };
+    }
+
+    private CorsConfiguration authenticatedCorsConfiguration() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(securityProperties.getAllowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Cache-Control", "Content-Type", "X-Requested-With"));
         configuration.setAllowCredentials(true);
+        return configuration;
+    }
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
+    private CorsConfiguration publicReadOnlyCorsConfiguration() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of("*"));
+        configuration.setAllowedMethods(List.of("GET", "HEAD", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(false);
+        return configuration;
+    }
+
+    /**
+     * True for a plain GET/HEAD, or for the preflight that precedes one (identified by the
+     * Access-Control-Request-Method header a browser sends on the OPTIONS request -- the
+     * request's own HTTP method is always OPTIONS during a preflight, so that has to be
+     * consulted instead of request.getMethod()).
+     */
+    private boolean isSafeCorsRequest(HttpServletRequest request) {
+        if (HttpMethod.OPTIONS.name().equalsIgnoreCase(request.getMethod())) {
+            String requestedMethod = request.getHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD);
+            return requestedMethod == null || SAFE_CORS_METHODS.contains(requestedMethod.toUpperCase(Locale.ROOT));
+        }
+        return SAFE_CORS_METHODS.contains(request.getMethod().toUpperCase(Locale.ROOT));
     }
 
     private String resolveLoginRedirectUri() {
