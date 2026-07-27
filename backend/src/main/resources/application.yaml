@@ -51,6 +51,13 @@ app:
       max-refresh-per-run: ${APP_INSTAGRAM_AVATAR_MAX_REFRESH_PER_RUN:120}
       refresh-initial-delay-ms: ${APP_INSTAGRAM_AVATAR_REFRESH_INITIAL_DELAY_MS:30000}
       refresh-fixed-delay-ms: ${APP_INSTAGRAM_AVATAR_REFRESH_FIXED_DELAY_MS:43200000}
+      # How long a failed fetch for a given handle is remembered before it is retried again,
+      # so a persistently-broken handle can't be hammered on every request for it.
+      negative-cache-ttl-ms: ${APP_INSTAGRAM_AVATAR_NEGATIVE_CACHE_TTL_MS:900000}
+      # Caps how many distinct handles the public on-demand endpoint (GET
+      # /api/avatars/instagram/{handle}) will fetch concurrently; anything beyond this gets
+      # the placeholder immediately instead of spawning another Instaloader process.
+      max-concurrent-on-demand-refreshes: ${APP_INSTAGRAM_AVATAR_MAX_CONCURRENT_ON_DEMAND_REFRESHES:4}
   summary:
     school-name: ${APP_SUMMARY_SCHOOL_NAME:HS Clubs}
     short-name: ${APP_SUMMARY_SHORT_NAME:HS Clubs}
