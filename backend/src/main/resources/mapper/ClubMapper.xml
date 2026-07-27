@@ -37,7 +37,8 @@
          WHERE club_id = clubs.id
            AND social_type = 'instagram'
          LIMIT 1) AS instagram_url,
-        member_count, achievements, status, visibility,
+        (SELECT COUNT(*) FROM club_member WHERE club_id = clubs.id) AS member_count,
+        achievements, status, visibility,
         approved_at, approved_by_oauth_user_id, created_at, updated_at
     </sql>
 
@@ -315,7 +316,8 @@
                c.advisor, c.image_url,
                (SELECT link_url FROM club_social_medias
                 WHERE club_id = c.id AND social_type = 'instagram' LIMIT 1) AS instagram_url,
-               c.member_count, c.achievements,
+               (SELECT COUNT(*) FROM club_member WHERE club_id = c.id) AS member_count,
+               c.achievements,
                c.status, c.visibility, c.approved_at, c.approved_by_oauth_user_id,
                c.created_at, c.updated_at
         FROM clubs c
