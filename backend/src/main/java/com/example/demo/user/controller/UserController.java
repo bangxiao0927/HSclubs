@@ -1,9 +1,10 @@
 package com.example.demo.user.controller;
 
 import com.example.demo.auth.mapper.OAuthUserMapper;
-import com.example.demo.auth.model.OAuthUserRecord;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubMembershipRequest;
+import com.example.demo.security.AuthenticatedUserResolver;
+import com.example.demo.user.dto.UserSearchResult;
 import com.example.demo.user.dto.UpdateGraduationYearRequest;
 import com.example.demo.user.service.UserService;
 import jakarta.validation.Valid;
@@ -27,10 +28,14 @@ import org.springframework.web.server.ResponseStatusException;
 public class UserController {
 
     private final UserService userService;
+    private final AuthenticatedUserResolver authenticatedUserResolver;
 
-    public UserController(UserService userService, OAuthUserMapper oAuthUserMapper) {
+    public UserController(UserService userService,
+                           OAuthUserMapper oAuthUserMapper,
+                           AuthenticatedUserResolver authenticatedUserResolver) {
         this.userService = userService;
         this.oAuthUserMapper = oAuthUserMapper;
+        this.authenticatedUserResolver = authenticatedUserResolver;
     }
 
     @PatchMapping("/me/graduation-year")
@@ -68,14 +73,20 @@ public class UserController {
     }
 
     @GetMapping("/search")
-    public List<OAuthUserRecord> searchUsers(@RequestParam("q") String query,
-                                              @RequestParam(defaultValue = "10") int limit) {
+    public List<UserSearchResult> searchUsers(@RequestParam("q") String query,
+                                              @RequestParam(defaultValue = "10") int limit,
+                                              Authentication authentication) {
+        // Only platform owners may enumerate the member directory (used to locate a
+        // president candidate); every other authenticated user gets 403.
+        authenticatedUserResolver.requirePlatformOwner(authentication);
         String trimmed = query != null ? query.trim() : "";
         if (trimmed.length() < 2) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search query must be at least 2 characters");
         }
         int cappedLimit = Math.max(1, Math.min(limit, 20));
-        return oAuthUserMapper.searchByEmailOrName(trimmed, cappedLimit);
+        return oAuthUserMapper.searchByEmailOrName(trimmed, cappedLimit).stream()
+            .map(UserSearchResult::from)
+            .toList();
     }
 
     private final OAuthUserMapper oAuthUserMapper;
