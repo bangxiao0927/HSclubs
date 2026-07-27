@@ -10,7 +10,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-@SpringBootTest
+// The default test datasource ("hsclubs_test") is shared across Spring contexts in the same
+// JVM (DB_CLOSE_DELAY=-1), and setUp() below rebuilds oauth_users without the created_at /
+// last_login_at / accepted_terms_at columns that OAuthUserMapperTest and AuthServiceTest expect
+// on their oauth_users tables. Running on the shared database would leave that truncated table
+// behind for whichever of those tests runs next without re-creating it first, so this test gets
+// its own named in-memory database instead.
+@SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:club_mapper_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE")
 class ClubMapperTest {
 
     @Autowired
