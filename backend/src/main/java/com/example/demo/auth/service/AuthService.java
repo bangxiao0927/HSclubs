@@ -90,7 +90,6 @@ public class AuthService {
             user.setCreatedAt(created.toString());
         }
 
-        oAuthUserService.recordLogin(provider, attributes);
         return user;
     }
 
