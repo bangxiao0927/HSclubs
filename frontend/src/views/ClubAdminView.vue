@@ -101,7 +101,7 @@ const handleRemovePresident = async (userId: number) => {
 const form = reactive<{
   name: string; aliasName: string; description: string; category: string
   meetingSchedule: string; scheduleNote: string; location: string
-  contactEmail: string; advisor: string; memberCount: number
+  contactEmail: string; advisor: string
   achievementsText: string; imageUrl?: string
 }>({
   name: '',
@@ -113,7 +113,6 @@ const form = reactive<{
   location: '',
   contactEmail: '',
   advisor: '',
-  memberCount: 0,
   achievementsText: '',
   imageUrl: ''})
 
@@ -139,7 +138,6 @@ const hydrateForm = (data: Club) => {
   form.location = data.location ?? ''
   form.contactEmail = data.contactEmail ?? ''
   form.advisor = data.advisor ?? ''
-  form.memberCount = data.memberCount
   form.achievementsText = (data.achievements ?? []).join('\n')
   form.imageUrl = data.imageUrl ?? ''
 }
@@ -300,7 +298,6 @@ const handleSave = async () => {
       location: nullable(form.location ?? ''),
       contactEmail: nullable(form.contactEmail ?? ''),
       advisor: nullable(form.advisor ?? ''),
-      memberCount: form.memberCount,
       achievements: achievementPreview.value,
       imageUrl: form.imageUrl || null}
 
@@ -437,10 +434,6 @@ watch(
               <span>Contact email</span>
               <input v-model="form.contactEmail" type="email" placeholder="club@example.com" />
             </label>
-            <label>
-              <span>Member count</span>
-              <input v-model.number="form.memberCount" type="number" min="0" required />
-            </label>
             <label class="wide">
               <span>Achievements (one per line)</span>
               <textarea v-model="form.achievementsText" rows="4" placeholder="Add each highlight on its own line"></textarea>
@@ -456,7 +449,7 @@ watch(
           <h2>Live preview</h2>
           <div class="insight-card">
             <p class="label">Members</p>
-            <p class="value">{{ form.memberCount }}</p>
+            <p class="value">{{ club.memberCount }}</p>
           </div>
           <div class="insight-card">
             <p class="label">Contact</p>

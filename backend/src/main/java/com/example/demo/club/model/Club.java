@@ -1,5 +1,6 @@
 package com.example.demo.club.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -138,6 +139,11 @@ public class Club {
         this.instagramUrl = instagramUrl;
     }
 
+    // Derived server-side from club_member (see ClubMapper.xml's BaseColumnList); a client
+    // sending "memberCount" in a create/update request body must not be able to set it, so
+    // Jackson is told this property is read-only for deserialization. It is still emitted on
+    // every response, which is where the real, current value comes from.
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public Integer getMemberCount() {
         return memberCount;
     }
