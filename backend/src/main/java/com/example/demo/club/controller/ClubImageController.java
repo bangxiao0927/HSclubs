@@ -1,13 +1,11 @@
 package com.example.demo.club.controller;
 
-import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.security.AuthenticatedUserResolver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,14 +29,14 @@ public class ClubImageController {
     private static final long MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
     private final ClubService clubService;
-    private final SecurityProperties securityProperties;
+    private final AuthenticatedUserResolver authenticatedUserResolver;
     private final Path uploadDir;
 
     public ClubImageController(ClubService clubService,
-                                SecurityProperties securityProperties,
+                                AuthenticatedUserResolver authenticatedUserResolver,
                                 @Value("${app.upload.dir:uploads}") String uploadDirPath) {
         this.clubService = clubService;
-        this.securityProperties = securityProperties;
+        this.authenticatedUserResolver = authenticatedUserResolver;
         this.uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.uploadDir);
@@ -112,39 +110,14 @@ public class ClubImageController {
     }
 
     private Club requireManageAccess(String clubSlugOrId, Authentication authentication) {
-        String viewerEmail = resolveViewerEmail(authentication);
-        if (viewerEmail == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        String viewerEmail = authenticatedUserResolver.requireEmail(authentication);
         Club club = resolveClub(clubSlugOrId, viewerEmail);
         boolean canManage = Boolean.TRUE.equals(club.getCanManage())
-            || isPlatformOwner(authentication);
+            || authenticatedUserResolver.isPlatformOwner(authentication);
         if (!canManage) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to update this club image");
         }
         return club;
-    }
-
-    private String resolveViewerEmail(Authentication authentication) {
-        if (!(authentication instanceof OAuth2AuthenticationToken token)) {
-            return null;
-        }
-        OAuth2User principal = token.getPrincipal();
-        if (principal == null) {
-            return null;
-        }
-        Object email = principal.getAttributes().get("email");
-        return (email instanceof String str && !str.isBlank()) ? str : null;
-    }
-
-    private boolean isPlatformOwner(Authentication authentication) {
-        String email = resolveViewerEmail(authentication);
-        if (email == null || securityProperties.getOwnerEmails() == null) {
-            return false;
-        }
-        return securityProperties.getOwnerEmails().stream()
-            .filter(item -> item != null && !item.isBlank())
-            .anyMatch(item -> email.equalsIgnoreCase(item.trim()));
     }
 
     // Delete an image file from disk by its URL path (e.g. "/uploads/uuid.jpg")

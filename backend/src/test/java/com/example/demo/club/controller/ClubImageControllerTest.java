@@ -1,15 +1,15 @@
-package com.example.demo.user.controller;
+package com.example.demo.club.controller;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.demo.auth.config.SecurityProperties;
-import com.example.demo.auth.mapper.OAuthUserMapper;
-import com.example.demo.auth.model.OAuthUserRecord;
+import com.example.demo.club.model.Club;
+import com.example.demo.club.service.ClubService;
 import com.example.demo.security.AuthenticatedUserResolver;
-import com.example.demo.user.service.UserService;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -20,6 +20,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -27,13 +28,13 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(
-    controllers = UserController.class,
+    controllers = ClubImageController.class,
     excludeAutoConfiguration = {
         OAuth2ClientAutoConfiguration.class,
         OAuth2ClientWebSecurityAutoConfiguration.class
     })
 @AutoConfigureMockMvc(addFilters = false)
-class UserControllerTest {
+class ClubImageControllerTest {
 
     private static final String OWNER_EMAIL = "test-owner@example.com";
     private static final String STUDENT_EMAIL = "student@example.com";
@@ -42,8 +43,6 @@ class UserControllerTest {
     static class TestConfig {
         @Bean
         SecurityProperties securityProperties() {
-            // Rebound from src/test/resources/application.yaml's app.security.owner-emails
-            // by ConfigurationPropertiesBindingPostProcessor; OWNER_EMAIL must match that value.
             return new SecurityProperties();
         }
 
@@ -57,46 +56,36 @@ class UserControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private UserService userService;
-
-    @MockitoBean
-    private OAuthUserMapper oAuthUserMapper;
+    private ClubService clubService;
 
     @Test
-    void searchUsersReturnsForbiddenForNonOwner() throws Exception {
-        mockMvc.perform(get("/api/users/search")
-                .param("q", "al")
+    void uploadImageRequiresManageAccess() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.findById(eq(1L), any())).thenReturn(club);
+
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.png", "image/png", new byte[] {1, 2, 3});
+
+        mockMvc.perform(multipart("/api/clubs/1/image")
+                .file(file)
                 .principal(oauthToken(STUDENT_EMAIL)))
             .andExpect(status().isForbidden());
     }
 
     @Test
-    void myClubsRequiresAuthenticatedOAuthPrincipal() throws Exception {
-        mockMvc.perform(get("/api/users/me/clubs"))
-            .andExpect(status().isUnauthorized());
-    }
+    void uploadImageSucceedsForPlatformOwner() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.findById(eq(1L), any())).thenReturn(club);
 
-    @Test
-    void searchUsersReturnsNarrowedResultsForOwner() throws Exception {
-        OAuthUserRecord record = new OAuthUserRecord();
-        record.setId(7L);
-        record.setEmail("alice@example.com");
-        record.setDisplayName("Alice");
-        record.setProviderUserId("google-999");
-        record.setRole("student");
-        record.setAvatarUrl("https://example.com/avatar.png");
-        when(oAuthUserMapper.searchByEmailOrName("al", 10)).thenReturn(List.of(record));
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.png", "image/png", new byte[] {1, 2, 3});
 
-        String body = mockMvc.perform(get("/api/users/search")
-                .param("q", "al")
+        mockMvc.perform(multipart("/api/clubs/1/image")
+                .file(file)
                 .principal(oauthToken(OWNER_EMAIL)))
-            .andExpect(status().isOk())
-            .andReturn()
-            .getResponse()
-            .getContentAsString();
-
-        assertThat(body).contains("\"id\":7", "\"email\":\"alice@example.com\"", "\"displayName\":\"Alice\"");
-        assertThat(body).doesNotContain("providerUserId", "avatarUrl", "\"role\"");
+            .andExpect(status().isOk());
     }
 
     private OAuth2AuthenticationToken oauthToken(String email) {

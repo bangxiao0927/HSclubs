@@ -8,6 +8,7 @@ import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.auth.model.AuthProvider;
 import com.example.demo.auth.model.AuthUser;
 import com.example.demo.auth.mapper.OAuthUserMapper;
+import com.example.demo.security.AuthenticatedUserResolver;
 import com.example.demo.user.service.UserService;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -25,13 +26,15 @@ public class AuthService {
     private final SecurityProperties securityProperties;
     private final UserService userService;
     private final OAuthUserMapper oAuthUserMapper;
+    private final AuthenticatedUserResolver authenticatedUserResolver;
     private final String authorizationRequestBaseUri;
 
     public AuthService(ClientRegistrationRepository clientRegistrationRepository,
                        OAuthUserMapper oAuthUserMapper,
                        OAuthUserService oAuthUserService,
                        SecurityProperties securityProperties,
-                       UserService userService) {
+                       UserService userService,
+                       AuthenticatedUserResolver authenticatedUserResolver) {
         if (clientRegistrationRepository instanceof Iterable<?>) {
             this.clientRegistrations = (Iterable<ClientRegistration>) clientRegistrationRepository;
         } else {
@@ -41,6 +44,7 @@ public class AuthService {
         this.securityProperties = securityProperties;
         this.userService = userService;
         this.oAuthUserMapper = oAuthUserMapper;
+        this.authenticatedUserResolver = authenticatedUserResolver;
         this.authorizationRequestBaseUri = resolveAuthorizationRequestBaseUri(securityProperties);
     }
 
@@ -121,12 +125,7 @@ public class AuthService {
     }
 
     private boolean isPlatformOwner(String email) {
-        if (!StringUtils.hasText(email)) {
-            return false;
-        }
-        return securityProperties.getOwnerEmails().stream()
-            .filter(StringUtils::hasText)
-            .anyMatch(allowed -> email.equalsIgnoreCase(allowed.trim()));
+        return authenticatedUserResolver.isPlatformOwner(email);
     }
 
     private String buildAuthorizationPath(String registrationId) {
