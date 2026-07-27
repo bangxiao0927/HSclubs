@@ -133,19 +133,17 @@ describe('already-authenticated user landing on the sign-in page', () => {
     expect(router.currentRoute.value.path).toBe('/profile')
   })
 
-  it('regression: preserves the invitation token when forwarding a fully-onboarded user to a query-bearing redirect target', async () => {
+  it('regression: preserves a query string embedded in the redirect target when forwarding a fully-onboarded user', async () => {
     await primeSession(onboardedUser)
 
-    // Mirrors how AcceptInvitationView and the unauthenticated guard branch
-    // build this query value: `redirect` is set from a full path that itself
-    // carries a query string, e.g. `to.fullPath` for
-    // `/accept-invitation?token=abc`.
-    await router.push({ name: 'auth-choice', query: { redirect: '/accept-invitation?token=abc' } })
+    // `redirect` is set from a full path that itself carries a query string
+    // (e.g. `to.fullPath` for a bookmarked, query-bearing deep link).
+    await router.push({ name: 'auth-choice', query: { redirect: '/clubs/3?ref=email' } })
     await router.isReady()
 
-    expect(router.currentRoute.value.name).toBe('accept-invitation')
-    expect(router.currentRoute.value.fullPath).toBe('/accept-invitation?token=abc')
-    expect(router.currentRoute.value.query.token).toBe('abc')
+    expect(router.currentRoute.value.name).toBe('club-detail')
+    expect(router.currentRoute.value.fullPath).toBe('/clubs/3?ref=email')
+    expect(router.currentRoute.value.query.ref).toBe('email')
   })
 
   it('preserves multiple query params and a hash when forwarding a fully-onboarded user to the redirect target', async () => {
@@ -269,5 +267,16 @@ describe('owner gate', () => {
     await router.isReady()
 
     expect(router.currentRoute.value.name).toBe('home')
+  })
+})
+
+describe('removed multi-school invitation flow', () => {
+  it('regression: /accept-invitation is no longer a registered route, falling through to the 404 page', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/accept-invitation?token=abc')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('not-found')
   })
 })

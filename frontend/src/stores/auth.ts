@@ -75,10 +75,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Post-mutation callers (AcceptTermsView after POSTing accept-terms,
-  // OnboardingView/ProfileView after saving a graduation year,
-  // AcceptInvitationView after accepting an invitation, App.vue when auth
-  // flips true) MUST see the server's current state, not a response some
-  // other in-flight caller happened to have kicked off before the mutation
+  // OnboardingView/ProfileView after saving a graduation year, App.vue when
+  // auth flips true) MUST see the server's current state, not a response
+  // some other in-flight caller happened to have kicked off before the mutation
   // landed. So `refreshUser()` always issues a fresh request and never reuses
   // a cached in-flight promise.
   const refreshUser = (): Promise<void> => fetchAndApplyUser()
