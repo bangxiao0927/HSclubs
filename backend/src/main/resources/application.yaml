@@ -6,6 +6,14 @@ server:
       timeout: 7d
       cookie:
         max-age: 7d  # Persist JSESSIONID across browser restarts
+        # MUST stay "lax", never "strict". The Google OAuth2 callback
+        # (/api/auth/*/callback) is a cross-site top-level navigation coming back from
+        # accounts.google.com; a "strict" cookie is withheld on that first request, so
+        # Spring Security can't find the in-flight authorization request and login fails
+        # with "authorization_request_not_found". "lax" still blocks the cookie on
+        # cross-site subrequests (images, fetch, iframes), which is what CSRF actually
+        # exploits, so this is not a meaningful weakening.
+        same-site: ${SESSION_COOKIE_SAME_SITE:lax}
 
 app:
   club-location-repair:
@@ -17,6 +25,13 @@ app:
     post-login-redirect-uri: "${app.security.frontend-origin}/auth/callback"
     owner-emails: ${APP_OWNER_EMAILS}
     authorization-request-base-uri: ${APP_AUTHORIZATION_REQUEST_BASE_URI:/api/auth/authorize}
+    csrf:
+      # Server-side CSRF token enforcement, independent of and in addition to the
+      # SameSite cookie above. Defaults to false: the frontend does not yet read the
+      # XSRF-TOKEN cookie and send it back as X-XSRF-TOKEN on writes, so turning this on
+      # before that frontend change ships would 403 every write request. Flip to true
+      # once the frontend is updated.
+      enabled: ${APP_CSRF_ENABLED:false}
   upload:
     dir: ${APP_UPLOAD_DIR:uploads}
   avatar:

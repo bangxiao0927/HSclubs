@@ -13,6 +13,7 @@ public class SecurityProperties {
     private String postLoginRedirectUri;
     private List<String> ownerEmails = new ArrayList<>();
     private String authorizationRequestBaseUri;
+    private Csrf csrf = new Csrf();
 
     public String getFrontendOrigin() {
         return frontendOrigin;
@@ -57,5 +58,31 @@ public class SecurityProperties {
 
     public void setAuthorizationRequestBaseUri(String authorizationRequestBaseUri) {
         this.authorizationRequestBaseUri = authorizationRequestBaseUri;
+    }
+
+    public Csrf getCsrf() {
+        return csrf;
+    }
+
+    public void setCsrf(Csrf csrf) {
+        this.csrf = csrf == null ? new Csrf() : csrf;
+    }
+
+    /**
+     * Server-side CSRF token enforcement (app.security.csrf.enabled), separate from and in
+     * addition to the SameSite=Lax session cookie. Defaults to false so this can ship without
+     * breaking the frontend's existing fetch() calls, which don't yet send the token back;
+     * flip it on once the frontend reads the XSRF-TOKEN cookie and sends X-XSRF-TOKEN.
+     */
+    public static class Csrf {
+        private boolean enabled = false;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 }

@@ -18,6 +18,10 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.util.StringUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -43,7 +47,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.disable())
+            .csrf(this::configureCsrf)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
@@ -77,14 +81,56 @@ public class SecurityConfig {
                     response.sendRedirect(PostLoginRedirectResolver.buildRedirectUri(
                         resolveLoginRedirectUri(), consumeSessionRedirectTarget(request), "oauth2_login_failed"))))
             .logout(logout -> logout
-                .logoutUrl("/api/auth/logout")
+                // Explicit POST-only matcher: logoutUrl(String) alone degrades to matching ANY
+                // HTTP method once CSRF protection is off, which let a plain
+                // <img src="/api/auth/logout"> log out any visitor cross-site. Pinned to POST
+                // unconditionally (not just when CSRF is enabled) since the two are independent
+                // defenses against different attacks.
+                .logoutRequestMatcher(PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/logout"))
                 .logoutSuccessHandler((request, response, authentication) ->
                     response.setStatus(HttpServletResponse.SC_NO_CONTENT))
                 .deleteCookies("JSESSIONID")
                 .clearAuthentication(true)
                 .invalidateHttpSession(true));
 
+        if (securityProperties.getCsrf().isEnabled()) {
+            http.addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class);
+        }
+
         return http.build();
+    }
+
+    /**
+     * CSRF enforcement is opt-in via app.security.csrf.enabled (default false): the frontend's
+     * fetch() calls don't send the token back yet, so turning this on unconditionally would
+     * break every write request. When enabled, the token is exposed through a non-HttpOnly
+     * XSRF-TOKEN cookie (read by the SPA) and expected back as the X-XSRF-TOKEN header --
+     * Axios and several other HTTP clients do this automatically; a hand-rolled fetch()
+     * wrapper needs to do it explicitly. The plain (non-XOR) CsrfTokenRequestAttributeHandler
+     * is used deliberately: Spring's BREACH-safe handler defers token rendering in a way that
+     * assumes a server-rendered view resolves it, which never happens for a pure JSON API, so
+     * following Spring Security's own SPA guidance here instead.
+     */
+    private void configureCsrf(
+        org.springframework.security.config.annotation.web.configurers.CsrfConfigurer<HttpSecurity> csrf) {
+        if (!securityProperties.getCsrf().isEnabled()) {
+            csrf.disable();
+            return;
+        }
+        csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+            .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+            .ignoringRequestMatchers(
+                // OAuth2 handshake: these are GET redirects anyway (CSRF only ever checks
+                // unsafe methods), but excluded explicitly so a future change to the OAuth2
+                // flow can't accidentally start requiring a token the provider has no way to
+                // send back.
+                resolveAuthorizationRequestBaseUri() + "/**",
+                "/api/auth/*/callback",
+                "/oauth2/**",
+                "/login/**");
+        // Logout is intentionally NOT in the ignore list: it is a real state-changing request
+        // triggered by our own frontend (which knows how to attach the token when this flag is
+        // on), so it gets the same CSRF protection as any other write.
     }
 
     @Bean
