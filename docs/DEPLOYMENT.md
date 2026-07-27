@@ -499,10 +499,14 @@ The `/api/auth/providers` endpoint auto-discovers all configured providers.
 
 ### First-run steps
 
-1. Deploy and start the backend — tables auto-create
-2. Open the home page — should show the club directory
-3. Sign in as a platform owner (email in `APP_OWNER_EMAILS`)
-4. Visit `/admin` — create clubs and manage the directory
+1. Create the MySQL tables and seed initial club data as described in
+   [Database Setup](#database-setup) above (`SPRING_SQL_INIT_MODE=never` means the
+   backend will not create them for you) — run `mvhs_clubs_seed.sql` against the new
+   database
+2. Deploy and start the backend
+3. Open the home page — should show the club directory
+4. Sign in as a platform owner (email in `APP_OWNER_EMAILS`)
+5. Visit `/admin` — create clubs and manage the directory
 
 ---
 
@@ -545,9 +549,3 @@ Google OAuth redirect URIs must match exactly:
 
 - Dev: `http://localhost:8080/api/auth/google/callback`
 - Prod: `https://yourdomain.com/api/auth/google/callback`
-
-### Invitation link not working
-
-- Invitations expire after 7 days
-- Each invitation can only be used once
-- Recipient must be signed in with the invited email address
