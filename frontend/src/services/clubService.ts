@@ -187,14 +187,22 @@ export const fetchMembershipRequests = (id: number | string) =>
     clubPath(`/${id}/membership-requests`),
   )
 
-export const approveMembershipRequest = (
+// Approving a request increments the club's memberCount, a field that
+// travels with every cached club list entry (see setClubsCache/allClubsCache
+// above). Unlike updateClub, there is no fresh club payload here to patch
+// those caches with, so the simplest correct option is to drop them and let
+// the next read refetch.
+export const approveMembershipRequest = async (
   clubId: number | string,
   requestId: number | string,
-) =>
-  request<void>(
+) => {
+  const result = await request<void>(
     clubPath(`/${clubId}/membership-requests/${requestId}/approve`),
     { method: 'POST', body: JSON.stringify({}) },
   )
+  invalidateClubCache()
+  return result
+}
 
 export interface CalendarEvent {
   clubId: number

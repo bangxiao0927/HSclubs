@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { fetchAllClubs, fetchClubs, invalidateClubCache } from './clubService'
+import {
+  approveMembershipRequest,
+  fetchAllClubs,
+  fetchClubs,
+  invalidateClubCache,
+} from './clubService'
 
 const jsonResponse = (body: unknown) => ({
   ok: true,
@@ -65,5 +70,21 @@ describe('fetchAllClubs', () => {
 
     expect(allClubs).toHaveLength(106)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('approveMembershipRequest', () => {
+  it('invalidates the cached club list so a member-count change is visible on the next fetch', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([{ id: 1, memberCount: 3 }]))
+    await fetchAllClubs()
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({}))
+    await approveMembershipRequest(1, 42)
+
+    fetchMock.mockResolvedValueOnce(jsonResponse([{ id: 1, memberCount: 4 }]))
+    const refreshed = await fetchAllClubs()
+
+    expect(refreshed).toEqual([{ id: 1, memberCount: 4 }])
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })
