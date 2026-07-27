@@ -174,6 +174,10 @@ public class InstagramAvatarCacheService {
     private final ConcurrentMap<String, Instant> recentFailures;
     private final long negativeCacheTtlMillis;
     private final Semaphore onDemandRefreshPermits;
+    private final long knownHandlesCacheTtlMillis;
+    private final Object knownHandlesLock = new Object();
+    private volatile Set<String> knownHandlesSnapshot = Collections.emptySet();
+    private volatile Instant knownHandlesRefreshedAt = Instant.EPOCH;
 
     public InstagramAvatarCacheService(
         ClubMapper clubMapper,
@@ -189,7 +193,8 @@ public class InstagramAvatarCacheService {
         @Value("${app.avatar.instagram.cache-ttl-ms:5184000000}") long cacheTtlMillis,
         @Value("${app.avatar.instagram.max-refresh-per-run:120}") int maxRefreshPerRun,
         @Value("${app.avatar.instagram.negative-cache-ttl-ms:900000}") long negativeCacheTtlMillis,
-        @Value("${app.avatar.instagram.max-concurrent-on-demand-refreshes:4}") int maxConcurrentOnDemandRefreshes
+        @Value("${app.avatar.instagram.max-concurrent-on-demand-refreshes:4}") int maxConcurrentOnDemandRefreshes,
+        @Value("${app.avatar.instagram.known-handles-cache-ttl-ms:300000}") long knownHandlesCacheTtlMillis
     ) {
         this.clubMapper = clubMapper;
         Path uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
@@ -216,6 +221,7 @@ public class InstagramAvatarCacheService {
         this.recentFailures = new ConcurrentHashMap<>();
         this.negativeCacheTtlMillis = Math.max(0, negativeCacheTtlMillis);
         this.onDemandRefreshPermits = new Semaphore(Math.max(1, maxConcurrentOnDemandRefreshes));
+        this.knownHandlesCacheTtlMillis = Math.max(0, knownHandlesCacheTtlMillis);
         try {
             Files.createDirectories(this.instagramCacheDir);
         } catch (IOException e) {
@@ -268,7 +274,7 @@ public class InstagramAvatarCacheService {
         if (!enabled) {
             return;
         }
-        Set<String> handles = instagramHandlesFromClubs(clubMapper.findAll());
+        Set<String> handles = refreshKnownClubHandlesCache();
         int attempted = 0;
         int refreshed = 0;
         for (String handle : handles) {
@@ -307,7 +313,41 @@ public class InstagramAvatarCacheService {
         if (clubMapper == null) {
             return false;
         }
-        return instagramHandlesFromClubs(clubMapper.findAll()).contains(safeHandle);
+        return knownClubHandles().contains(safeHandle);
+    }
+
+    // The public, unauthenticated /api/avatars/instagram/{handle} endpoint calls
+    // isKnownClubHandle on every request that misses the on-disk cache -- including
+    // every request from someone probing the endpoint with random handles, which by
+    // definition never hits the disk cache. Without this cache that meant one
+    // clubMapper.findAll() (a full active-club scan with CLOB columns and two
+    // per-row correlated subqueries) per request, i.e. an unbounded DB query
+    // amplification hiding behind the negative-cache/semaphore protections that only
+    // apply *after* this check. The known-handle set changes only when an admin adds
+    // a club or edits its Instagram URL, so it is cheap to cache with a short TTL
+    // (default 5 minutes) instead of the 12-hour prewarm cadence: short enough that a
+    // newly-linked handle becomes fetchable without restarting the app or waiting for
+    // the next scheduled prewarm, long enough that a burst of requests -- legitimate
+    // or abusive -- collapses to at most one query per TTL window instead of one per
+    // request.
+    private Set<String> knownClubHandles() {
+        Instant now = Instant.now();
+        if (knownHandlesRefreshedAt.plusMillis(knownHandlesCacheTtlMillis).isAfter(now)) {
+            return knownHandlesSnapshot;
+        }
+        synchronized (knownHandlesLock) {
+            if (knownHandlesRefreshedAt.plusMillis(knownHandlesCacheTtlMillis).isAfter(Instant.now())) {
+                return knownHandlesSnapshot;
+            }
+            return refreshKnownClubHandlesCache();
+        }
+    }
+
+    private Set<String> refreshKnownClubHandlesCache() {
+        Set<String> handles = instagramHandlesFromClubs(clubMapper.findAll());
+        knownHandlesSnapshot = handles;
+        knownHandlesRefreshedAt = Instant.now();
+        return handles;
     }
 
     private boolean hasRecentFailure(String safeHandle) {

@@ -109,6 +109,38 @@ class InstagramAvatarCacheServiceTest {
     }
 
     @Test
+    void isKnownClubHandleLookupIsCachedAcrossRequestsForDifferentHandles() {
+        // Each of these handles is well-formed but not linked to any club, i.e. exactly
+        // the "attacker hammering random handles against the public endpoint" scenario
+        // the known-handles cache exists to protect against: every one of them falls
+        // through readCachedAvatar (nothing on disk) into isKnownClubHandle.
+        AtomicInteger findAllCalls = new AtomicInteger();
+        ClubMapper clubMapper = countingClubMapper(List.of(club("mvhsclubs")), findAllCalls);
+        InstagramAvatarCacheService service = serviceWithClubMapper(clubMapper, TimeUnit.DAYS.toMillis(30));
+
+        service.resolveAvatar("randomhandle1");
+        service.resolveAvatar("randomhandle2");
+        service.resolveAvatar("randomhandle3");
+
+        assertThat(findAllCalls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void isKnownClubHandleLookupRefreshesOnceCacheTtlExpires() throws InterruptedException {
+        AtomicInteger findAllCalls = new AtomicInteger();
+        ClubMapper clubMapper = countingClubMapper(List.of(club("mvhsclubs")), findAllCalls);
+        InstagramAvatarCacheService service = serviceWithClubMapper(clubMapper, 50);
+
+        service.resolveAvatar("randomhandle");
+        assertThat(findAllCalls.get()).isEqualTo(1);
+
+        Thread.sleep(150);
+        service.resolveAvatar("randomhandle");
+
+        assertThat(findAllCalls.get()).isEqualTo(2);
+    }
+
+    @Test
     void resolveAvatarSkipsRetryForRecentlyFailedHandle() throws IOException {
         Path invocations = tempDir.resolve("negative-cache-invocations.txt");
         Files.writeString(invocations, "", StandardCharsets.UTF_8);
@@ -142,7 +174,8 @@ class InstagramAvatarCacheServiceTest {
             TimeUnit.DAYS.toMillis(30),
             10,
             TimeUnit.DAYS.toMillis(30),
-            1 // only one concurrent on-demand refresh allowed
+            1, // only one concurrent on-demand refresh allowed
+            TimeUnit.DAYS.toMillis(30)
         );
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -292,7 +325,8 @@ class InstagramAvatarCacheServiceTest {
             TimeUnit.DAYS.toMillis(30),
             2,
             TimeUnit.DAYS.toMillis(30),
-            10
+            10,
+            TimeUnit.DAYS.toMillis(30)
         );
 
         service.refreshClubInstagramAvatars();
@@ -324,7 +358,8 @@ class InstagramAvatarCacheServiceTest {
             TimeUnit.DAYS.toMillis(30),
             10,
             TimeUnit.DAYS.toMillis(30),
-            10
+            10,
+            TimeUnit.DAYS.toMillis(30)
         );
 
         InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
@@ -552,7 +587,45 @@ class InstagramAvatarCacheServiceTest {
             TimeUnit.DAYS.toMillis(30),
             10,
             TimeUnit.DAYS.toMillis(30),
-            10
+            10,
+            TimeUnit.DAYS.toMillis(30)
+        );
+    }
+
+    private InstagramAvatarCacheService serviceWithClubMapper(ClubMapper clubMapper, long knownHandlesCacheTtlMillis) {
+        return new InstagramAvatarCacheService(
+            clubMapper,
+            tempDir.toString(),
+            true,
+            "python3",
+            "",
+            "",
+            "",
+            "",
+            "http://127.0.0.1/unused?username=%s",
+            1000,
+            TimeUnit.DAYS.toMillis(30),
+            10,
+            TimeUnit.DAYS.toMillis(30),
+            10,
+            knownHandlesCacheTtlMillis
+        );
+    }
+
+    private ClubMapper countingClubMapper(List<Club> clubs, AtomicInteger findAllCalls) {
+        return (ClubMapper) Proxy.newProxyInstance(
+            ClubMapper.class.getClassLoader(),
+            new Class<?>[] { ClubMapper.class },
+            (proxy, method, args) -> {
+                if (method.getName().equals("findAll")) {
+                    findAllCalls.incrementAndGet();
+                    return clubs;
+                }
+                if (method.getReturnType().equals(int.class)) {
+                    return 0;
+                }
+                return null;
+            }
         );
     }
 
