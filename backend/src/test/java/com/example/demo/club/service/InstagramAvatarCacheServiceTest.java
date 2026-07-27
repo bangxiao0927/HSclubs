@@ -92,6 +92,77 @@ class InstagramAvatarCacheServiceTest {
     }
 
     @Test
+    void resolveAvatarNeverSpawnsProcessForHandleNotLinkedToAKnownClub() throws IOException {
+        Path invocations = tempDir.resolve("unknown-handle-invocations.txt");
+        Files.writeString(invocations, "", StandardCharsets.UTF_8);
+        Path script = tempDir.resolve("would-be-invoked.sh");
+        Files.writeString(script, "#!/bin/sh\necho x >> \"%s\"\nexit 0\n".formatted(invocations), StandardCharsets.UTF_8);
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        // Only "mvhsclubs" is a known club handle -- "randomhandle" is well-formed but unknown.
+        InstagramAvatarCacheService service =
+            service(true, script.toString(), "http://127.0.0.1/unused?username=%s", 1000, List.of(club("mvhsclubs")));
+
+        InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("randomhandle");
+
+        assertThat(avatar.mediaType().toString()).isEqualTo("image/svg+xml");
+        assertThat(Files.readAllLines(invocations, StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void resolveAvatarSkipsRetryForRecentlyFailedHandle() throws IOException {
+        Path invocations = tempDir.resolve("negative-cache-invocations.txt");
+        Files.writeString(invocations, "", StandardCharsets.UTF_8);
+        Path script = tempDir.resolve("always-failing-instaloader.sh");
+        Files.writeString(script, "#!/bin/sh\necho x >> \"%s\"\nexit 1\n".formatted(invocations), StandardCharsets.UTF_8);
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = service(true, script.toString(), "http://127.0.0.1/unused?username=%s", 1000);
+
+        service.resolveAvatar("mvhsclubs");
+        service.resolveAvatar("mvhsclubs");
+
+        assertThat(Files.readAllLines(invocations, StandardCharsets.UTF_8)).hasSize(1);
+    }
+
+    @Test
+    void resolveAvatarLimitsConcurrentOnDemandRefreshesAcrossDistinctHandles() throws Exception {
+        Path script = tempDir.resolve("slow-instaloader.sh");
+        Files.writeString(script, "#!/bin/sh\nsleep 2\nexit 1\n", StandardCharsets.UTF_8);
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = new InstagramAvatarCacheService(
+            clubMapper(List.of(club("mvhsclubs"), club("otherclub"))),
+            tempDir.toString(),
+            true,
+            script.toString(),
+            "",
+            "",
+            "",
+            "",
+            "http://127.0.0.1/unused?username=%s",
+            3000,
+            TimeUnit.DAYS.toMillis(30),
+            10,
+            TimeUnit.DAYS.toMillis(30),
+            1 // only one concurrent on-demand refresh allowed
+        );
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<InstagramAvatarCacheService.ResolvedAvatar> busy =
+                executor.submit(() -> service.resolveAvatar("mvhsclubs"));
+            // Give the first call time to acquire the only permit and start sleeping.
+            Thread.sleep(300);
+
+            InstagramAvatarCacheService.ResolvedAvatar secondHandleResult = service.resolveAvatar("otherclub");
+
+            assertThat(secondHandleResult.mediaType().toString()).isEqualTo("image/svg+xml");
+            assertThat(secondHandleResult.maxAgeUnit()).isEqualTo(TimeUnit.SECONDS);
+            busy.get(5, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void resolveAvatarTimesOutHungInstaloaderProcess() throws IOException {
         Path sleeper = tempDir.resolve("sleepy-instaloader.sh");
         Files.writeString(sleeper, "#!/bin/sh\nsleep 5\n", StandardCharsets.UTF_8);
@@ -219,7 +290,9 @@ class InstagramAvatarCacheServiceTest {
             "http://127.0.0.1/unused?username=%s",
             1000,
             TimeUnit.DAYS.toMillis(30),
-            2
+            2,
+            TimeUnit.DAYS.toMillis(30),
+            10
         );
 
         service.refreshClubInstagramAvatars();
@@ -238,7 +311,7 @@ class InstagramAvatarCacheServiceTest {
         );
         assertThat(script.toFile().setExecutable(true)).isTrue();
         InstagramAvatarCacheService service = new InstagramAvatarCacheService(
-            null,
+            clubMapper(List.of(club("mvhsclubs"))),
             tempDir.toString(),
             true,
             script.toString(),
@@ -248,6 +321,8 @@ class InstagramAvatarCacheServiceTest {
             "/tmp/cookies.sqlite",
             "http://127.0.0.1/unused?username=%s",
             1000,
+            TimeUnit.DAYS.toMillis(30),
+            10,
             TimeUnit.DAYS.toMillis(30),
             10
         );
@@ -453,8 +528,18 @@ class InstagramAvatarCacheServiceTest {
         String profileApiUrlTemplate,
         long fetchTimeoutMillis
     ) {
+        return service(enabled, pythonCommand, profileApiUrlTemplate, fetchTimeoutMillis, List.of(club("mvhsclubs")));
+    }
+
+    private InstagramAvatarCacheService service(
+        boolean enabled,
+        String pythonCommand,
+        String profileApiUrlTemplate,
+        long fetchTimeoutMillis,
+        List<Club> knownClubs
+    ) {
         return new InstagramAvatarCacheService(
-            null,
+            clubMapper(knownClubs),
             tempDir.toString(),
             enabled,
             pythonCommand,
@@ -464,6 +549,8 @@ class InstagramAvatarCacheServiceTest {
             "",
             profileApiUrlTemplate,
             fetchTimeoutMillis,
+            TimeUnit.DAYS.toMillis(30),
+            10,
             TimeUnit.DAYS.toMillis(30),
             10
         );

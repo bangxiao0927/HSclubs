@@ -37,6 +37,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -170,6 +171,9 @@ public class InstagramAvatarCacheService {
     private final int maxRefreshPerRun;
     private final ObjectMapper objectMapper;
     private final ConcurrentMap<String, CompletableFuture<RefreshResult>> inFlightRefreshes;
+    private final ConcurrentMap<String, Instant> recentFailures;
+    private final long negativeCacheTtlMillis;
+    private final Semaphore onDemandRefreshPermits;
 
     public InstagramAvatarCacheService(
         ClubMapper clubMapper,
@@ -183,7 +187,9 @@ public class InstagramAvatarCacheService {
         @Value("${app.avatar.instagram.profile-api-url-template:" + INSTAGRAM_WEB_PROFILE_API + "}") String profileApiUrlTemplate,
         @Value("${app.avatar.instagram.fetch-timeout-ms:10000}") long fetchTimeoutMillis,
         @Value("${app.avatar.instagram.cache-ttl-ms:5184000000}") long cacheTtlMillis,
-        @Value("${app.avatar.instagram.max-refresh-per-run:120}") int maxRefreshPerRun
+        @Value("${app.avatar.instagram.max-refresh-per-run:120}") int maxRefreshPerRun,
+        @Value("${app.avatar.instagram.negative-cache-ttl-ms:900000}") long negativeCacheTtlMillis,
+        @Value("${app.avatar.instagram.max-concurrent-on-demand-refreshes:4}") int maxConcurrentOnDemandRefreshes
     ) {
         this.clubMapper = clubMapper;
         Path uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
@@ -207,6 +213,9 @@ public class InstagramAvatarCacheService {
         this.maxRefreshPerRun = Math.max(1, maxRefreshPerRun);
         this.objectMapper = new ObjectMapper();
         this.inFlightRefreshes = new ConcurrentHashMap<>();
+        this.recentFailures = new ConcurrentHashMap<>();
+        this.negativeCacheTtlMillis = Math.max(0, negativeCacheTtlMillis);
+        this.onDemandRefreshPermits = new Semaphore(Math.max(1, maxConcurrentOnDemandRefreshes));
         try {
             Files.createDirectories(this.instagramCacheDir);
         } catch (IOException e) {
@@ -223,6 +232,20 @@ public class InstagramAvatarCacheService {
         if (!enabled) {
             return ResolvedAvatar.fallback(fallbackSvg(safeHandle));
         }
+        if (!isKnownClubHandle(safeHandle)) {
+            // Only club-linked handles may trigger an external fetch (Instaloader subprocess /
+            // outbound HTTP call). Anything else is either a typo or someone probing the public
+            // endpoint with random handles, so it just gets the generic placeholder.
+            LOGGER.debug("Refusing to fetch Instagram avatar for handle {} not linked to a known club", safeHandle);
+            return ResolvedAvatar.fallback(fallbackSvg(safeHandle));
+        }
+        boolean joiningInFlightRefresh = inFlightRefreshes.containsKey(safeHandle);
+        if (!joiningInFlightRefresh && !onDemandRefreshPermits.tryAcquire()) {
+            // Too many distinct handles are being fetched concurrently already; fail fast
+            // instead of piling up more processes/threads.
+            LOGGER.debug("Too many concurrent on-demand Instagram avatar refreshes; skipping {}", safeHandle);
+            return ResolvedAvatar.fallback(fallbackSvg(safeHandle));
+        }
         try {
             return refreshAvatarIfNeeded(safeHandle, false).avatar()
                 .map(ResolvedAvatar::cached)
@@ -230,6 +253,10 @@ public class InstagramAvatarCacheService {
         } catch (Exception ex) {
             LOGGER.debug("Unable to fetch Instagram avatar for {}", safeHandle, ex);
             return ResolvedAvatar.fallback(fallbackSvg(safeHandle));
+        } finally {
+            if (!joiningInFlightRefresh) {
+                onDemandRefreshPermits.release();
+            }
         }
     }
 
@@ -274,6 +301,26 @@ public class InstagramAvatarCacheService {
             return "hsclubs";
         }
         return normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isKnownClubHandle(String safeHandle) {
+        if (clubMapper == null) {
+            return false;
+        }
+        return instagramHandlesFromClubs(clubMapper.findAll()).contains(safeHandle);
+    }
+
+    private boolean hasRecentFailure(String safeHandle) {
+        Instant failedAt = recentFailures.get(safeHandle);
+        return failedAt != null && failedAt.plusMillis(negativeCacheTtlMillis).isAfter(Instant.now());
+    }
+
+    private void recordFailure(String safeHandle) {
+        recentFailures.put(safeHandle, Instant.now());
+    }
+
+    private void clearFailure(String safeHandle) {
+        recentFailures.remove(safeHandle);
     }
 
     private Set<String> instagramHandlesFromClubs(List<Club> clubs) {
@@ -372,10 +419,19 @@ public class InstagramAvatarCacheService {
                 future.complete(result);
                 return result;
             }
+            if (hasRecentFailure(safeHandle)) {
+                // A recent attempt for this exact handle already failed; don't spawn another
+                // process/HTTP call until the negative-cache window expires.
+                RefreshResult result = new RefreshResult(Optional.empty(), false);
+                future.complete(result);
+                return result;
+            }
             RefreshResult result = new RefreshResult(Optional.of(refreshAvatar(safeHandle)), true);
+            clearFailure(safeHandle);
             future.complete(result);
             return result;
         } catch (IOException | InterruptedException | RuntimeException ex) {
+            recordFailure(safeHandle);
             future.completeExceptionally(ex);
             throw ex;
         } finally {
