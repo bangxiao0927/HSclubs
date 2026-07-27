@@ -53,6 +53,12 @@
         ORDER BY name ASC
     </select>
 
+    <select id="findAllRegardlessOfStatus" resultMap="ClubResultMap">
+        SELECT <include refid="BaseColumnList" />
+        FROM clubs
+        ORDER BY name ASC
+    </select>
+
     <select id="findById" resultMap="ClubResultMap" parameterType="long">
         SELECT <include refid="BaseColumnList" />
         FROM clubs
