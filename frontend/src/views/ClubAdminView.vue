@@ -2,7 +2,13 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
-import { fetchClubById, fetchClubMembers, updateClub, updateClubMemberRole } from '../services/clubService'
+import {
+  fetchClubById,
+  fetchClubMembers,
+  invalidateClubCache,
+  updateClub,
+  updateClubMemberRole,
+} from '../services/clubService'
 import { searchUsers, assignPresident, removePresident } from '../services/userService'
 import type { Club, ClubMember } from '../types/club'
 import type { UserSearchResult } from '../services/userService'
@@ -74,7 +80,8 @@ const handleAssignPresident = async (userId: number | null | undefined) => {
   presidentActionError.value = ''
   try {
     await assignPresident(club.value.id, userId)
-    await refreshMembers()
+    invalidateClubCache()
+    await Promise.all([refreshMembers(), refreshClubSnapshot()])
     presidentSearchResults.value = []
     presidentSearchQuery.value = ''
   } catch (err) {
@@ -265,6 +272,8 @@ const handleImageUpload = async (event: Event) => {
     }
     const data = await response.json()
     form.imageUrl = data.imageUrl
+    club.value = { ...club.value, imageUrl: data.imageUrl }
+    invalidateClubCache()
   } catch (err) {
     imageError.value = err instanceof Error ? err.message : 'Upload failed'
   } finally {

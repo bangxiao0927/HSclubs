@@ -255,7 +255,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(securityProperties.getAllowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Cache-Control", "Content-Type", "X-Requested-With"));
+        configuration.setAllowedHeaders(List.of(
+            "Authorization", "Cache-Control", "Content-Type", "X-Requested-With", "X-XSRF-TOKEN"));
         configuration.setAllowCredentials(true);
         return configuration;
     }

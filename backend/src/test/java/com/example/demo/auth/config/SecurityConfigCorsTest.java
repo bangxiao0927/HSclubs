@@ -88,6 +88,18 @@ class SecurityConfigCorsTest {
         assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)).isEqualTo("true");
     }
 
+    @Test
+    void authenticatedWritePreflightAllowsCsrfHeaderForFirstPartyOrigin() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(options("/api/clubs/1")
+                .header(HttpHeaders.ORIGIN, FIRST_PARTY_ORIGIN)
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PUT")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Content-Type, X-XSRF-TOKEN"))
+            .andReturn().getResponse();
+
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo(FIRST_PARTY_ORIGIN);
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS)).containsIgnoringCase("X-XSRF-TOKEN");
+    }
+
     /**
      * Regression coverage for the bug this test class originally missed: dispatching purely on
      * "is this a safe method" (GET/HEAD) handed the public, wildcard, credential-less CORS
