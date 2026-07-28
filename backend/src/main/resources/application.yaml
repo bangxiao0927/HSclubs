@@ -6,6 +6,14 @@ server:
       timeout: 7d
       cookie:
         max-age: 7d  # Persist JSESSIONID across browser restarts
+        # MUST stay "lax", never "strict". The Google OAuth2 callback
+        # (/api/auth/*/callback) is a cross-site top-level navigation coming back from
+        # accounts.google.com; a "strict" cookie is withheld on that first request, so
+        # Spring Security can't find the in-flight authorization request and login fails
+        # with "authorization_request_not_found". "lax" still blocks the cookie on
+        # cross-site subrequests (images, fetch, iframes), which is what CSRF actually
+        # exploits, so this is not a meaningful weakening.
+        same-site: ${SESSION_COOKIE_SAME_SITE:lax}
 
 app:
   club-location-repair:
@@ -17,6 +25,13 @@ app:
     post-login-redirect-uri: "${app.security.frontend-origin}/auth/callback"
     owner-emails: ${APP_OWNER_EMAILS}
     authorization-request-base-uri: ${APP_AUTHORIZATION_REQUEST_BASE_URI:/api/auth/authorize}
+    csrf:
+      # Server-side CSRF token enforcement, independent of and in addition to the
+      # SameSite cookie above. Defaults to false: the frontend does not yet read the
+      # XSRF-TOKEN cookie and send it back as X-XSRF-TOKEN on writes, so turning this on
+      # before that frontend change ships would 403 every write request. Flip to true
+      # once the frontend is updated.
+      enabled: ${APP_CSRF_ENABLED:false}
   upload:
     dir: ${APP_UPLOAD_DIR:uploads}
   avatar:
@@ -36,6 +51,23 @@ app:
       max-refresh-per-run: ${APP_INSTAGRAM_AVATAR_MAX_REFRESH_PER_RUN:120}
       refresh-initial-delay-ms: ${APP_INSTAGRAM_AVATAR_REFRESH_INITIAL_DELAY_MS:30000}
       refresh-fixed-delay-ms: ${APP_INSTAGRAM_AVATAR_REFRESH_FIXED_DELAY_MS:43200000}
+      # How long a failed fetch for a given handle is remembered before it is retried again,
+      # so a persistently-broken handle can't be hammered on every request for it.
+      negative-cache-ttl-ms: ${APP_INSTAGRAM_AVATAR_NEGATIVE_CACHE_TTL_MS:900000}
+      # Caps how many distinct handles the public on-demand endpoint (GET
+      # /api/avatars/instagram/{handle}) will fetch concurrently; anything beyond this gets
+      # the placeholder immediately instead of spawning another Instaloader process.
+      max-concurrent-on-demand-refreshes: ${APP_INSTAGRAM_AVATAR_MAX_CONCURRENT_ON_DEMAND_REFRESHES:4}
+      # How long the set of club-linked Instagram handles is cached in memory before the
+      # public on-demand endpoint (GET /api/avatars/instagram/{handle}) re-queries it. That
+      # lookup runs on EVERY request that misses the on-disk avatar cache -- including every
+      # request for a random/unknown handle, which by definition always misses -- so without
+      # this cache it was an unbounded, unauthenticated full-table club query. The handle set
+      # only changes when an admin adds a club or edits its Instagram URL, so 5 minutes trades
+      # a short staleness window (a newly-linked handle becomes fetchable within this long,
+      # without waiting for the 12-hour prewarm or a restart) for collapsing any burst of
+      # requests down to at most one query per window.
+      known-handles-cache-ttl-ms: ${APP_INSTAGRAM_AVATAR_KNOWN_HANDLES_CACHE_TTL_MS:300000}
   summary:
     school-name: ${APP_SUMMARY_SCHOOL_NAME:HS Clubs}
     short-name: ${APP_SUMMARY_SHORT_NAME:HS Clubs}
@@ -53,7 +85,14 @@ spring:
     driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:com.mysql.cj.jdbc.Driver}
   sql:
     init:
-      mode: ${SPRING_SQL_INIT_MODE:always}
+      # Was "always" by default: schema.sql/data.sql are an H2 local-dev fixture (see
+      # schema.sql's own file header) that has never successfully run against the real
+      # production MySQL schema, and running it there would mean its old unconditional
+      # DROP TABLE statements executing on every restart. "never" matches what production
+      # already runs with in practice (backend/.env pins SPRING_SQL_INIT_MODE=never) and what
+      # actually works; the h2 profile overrides this back to "always" for local dev (see
+      # application-h2.yaml).
+      mode: ${SPRING_SQL_INIT_MODE:never}
   security:
     oauth2:
       client:

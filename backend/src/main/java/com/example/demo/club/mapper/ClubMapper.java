@@ -14,6 +14,10 @@ public interface ClubMapper {
 
     List<Club> findAll();
 
+    // Same shape as findAll() but without the status = 'active' filter -- used by cleanup jobs
+    // that must not treat archived/pending clubs' images as orphaned.
+    List<Club> findAllRegardlessOfStatus();
+
     List<Club> findAllLocations();
 
     Club findById(@Param("id") Long id);

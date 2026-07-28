@@ -43,7 +43,7 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
-    const allClubs = await fetchAllClubs(true)
+    const allClubs = await fetchAllClubs()
     clubs.value = allClubs.slice(0, pageSize)
     totalClubCount.value = allClubs.length
     hasMore.value = allClubs.length > pageSize

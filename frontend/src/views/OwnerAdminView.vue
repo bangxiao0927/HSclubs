@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
-import { fetchClubCount, fetchClubs, createClub } from '../services/clubService'
+import { fetchClubCount, fetchAllClubs, createClub } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
@@ -84,8 +84,11 @@ const loadClubs = async () => {
   loading.value = true
   error.value = ''
   try {
+    // fetchAllClubs pages past the backend's single-page cap (100, see
+    // ClubService.findAllPaginated) on its own, so this always gets the
+    // complete roster instead of only the first page.
     const [clubList, clubCount] = await Promise.all([
-      fetchClubs({ force: true, size: 100 }),
+      fetchAllClubs(true),
       fetchClubCount(),
     ])
     clubs.value = clubList

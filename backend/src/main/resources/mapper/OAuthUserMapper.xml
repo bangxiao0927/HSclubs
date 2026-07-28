@@ -11,7 +11,6 @@
             email = VALUES(email),
             display_name = VALUES(display_name),
             avatar_url = VALUES(avatar_url),
-            role = VALUES(role),
             last_login_at = CURRENT_TIMESTAMP
     </insert>
 

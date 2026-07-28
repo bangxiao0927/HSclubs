@@ -1,14 +1,12 @@
 package com.example.demo.club.controller;
 
-import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubMemberView;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.security.AuthenticatedUserResolver;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,11 +30,11 @@ import java.util.Map;
 public class ClubController {
 
     private final ClubService clubService;
-    private final SecurityProperties securityProperties;
+    private final AuthenticatedUserResolver authenticatedUserResolver;
 
-    public ClubController(ClubService clubService, SecurityProperties securityProperties) {
+    public ClubController(ClubService clubService, AuthenticatedUserResolver authenticatedUserResolver) {
         this.clubService = clubService;
-        this.securityProperties = securityProperties;
+        this.authenticatedUserResolver = authenticatedUserResolver;
     }
 
     // ---- Club listing & detail ----
@@ -286,42 +284,19 @@ public class ClubController {
     }
 
     private String resolveViewerEmail(Authentication authentication) {
-        if (!(authentication instanceof OAuth2AuthenticationToken token)) {
-            return null;
-        }
-        OAuth2User principal = token.getPrincipal();
-        if (principal == null) {
-            return null;
-        }
-        Object email = principal.getAttributes().get("email");
-        return (email instanceof String str && !str.isBlank()) ? str : null;
+        return authenticatedUserResolver.resolveEmail(authentication);
     }
 
     private boolean isPlatformOwner(Authentication authentication) {
-        String email = resolveViewerEmail(authentication);
-        if (email == null || securityProperties.getOwnerEmails() == null) {
-            return false;
-        }
-        return securityProperties.getOwnerEmails().stream()
-            .filter(item -> item != null && !item.isBlank())
-            .anyMatch(item -> email.equalsIgnoreCase(item.trim()));
+        return authenticatedUserResolver.isPlatformOwner(authentication);
     }
 
     private void requirePlatformOwner(Authentication authentication) {
-        String email = resolveViewerEmail(authentication);
-        if (email == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
-        if (!isPlatformOwner(authentication)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Platform owner access required");
-        }
+        authenticatedUserResolver.requirePlatformOwner(authentication);
     }
 
     private Club requireManageAccess(String clubSlugOrId, Authentication authentication) {
-        String viewerEmail = resolveViewerEmail(authentication);
-        if (viewerEmail == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        }
+        String viewerEmail = authenticatedUserResolver.requireEmail(authentication);
         Club club = resolveClub(clubSlugOrId, viewerEmail);
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");

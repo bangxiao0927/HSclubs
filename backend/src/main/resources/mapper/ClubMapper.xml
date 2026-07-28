@@ -37,7 +37,8 @@
          WHERE club_id = clubs.id
            AND social_type = 'instagram'
          LIMIT 1) AS instagram_url,
-        member_count, achievements, status, visibility,
+        (SELECT COUNT(*) FROM club_member WHERE club_id = clubs.id) AS member_count,
+        achievements, status, visibility,
         approved_at, approved_by_oauth_user_id, created_at, updated_at
     </sql>
 
@@ -49,6 +50,12 @@
         SELECT <include refid="BaseColumnList" />
         FROM clubs
         WHERE <include refid="ActiveClause" />
+        ORDER BY name ASC
+    </select>
+
+    <select id="findAllRegardlessOfStatus" resultMap="ClubResultMap">
+        SELECT <include refid="BaseColumnList" />
+        FROM clubs
         ORDER BY name ASC
     </select>
 
@@ -114,20 +121,29 @@
 
     <insert id="insert" parameterType="com.example.demo.club.model.Club"
             useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        <!-- member_count is intentionally omitted: it is derived from club_member
+             (see BaseColumnList's correlated subquery) and the clubs table column
+             defaults to 0, which is exactly right for a brand-new club with no
+             members yet. Writing a client-supplied value here would silently be
+             thrown away on the very next read. -->
         INSERT INTO clubs (name, slug, alias_name, description, category,
                            meeting_schedule, schedule_note, location,
-                           contact_email, advisor, image_url, member_count,
+                           contact_email, advisor, image_url,
                            achievements, status, visibility,
                            approved_at, approved_by_oauth_user_id)
         VALUES (#{name}, #{slug}, #{aliasName}, #{description}, #{category},
                 #{meetingSchedule}, #{scheduleNote}, #{location},
-                #{contactEmail}, #{advisor}, #{imageUrl}, #{memberCount},
+                #{contactEmail}, #{advisor}, #{imageUrl},
                 #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
                 #{status}, #{visibility},
                 #{approvedAt}, #{approvedByOauthUserId})
     </insert>
 
     <update id="update" parameterType="com.example.demo.club.model.Club">
+        <!-- member_count is derived from club_member (see BaseColumnList's correlated
+             subquery) and is never read from this column again, so it is intentionally
+             not written here: writing it would just be silently overwritten by the
+             next SELECT and give admins a false impression that editing it does anything. -->
         UPDATE clubs
         SET name = #{name},
             slug = #{slug},
@@ -140,7 +156,6 @@
             contact_email = #{contactEmail},
             advisor = #{advisor},
             image_url = #{imageUrl},
-            member_count = #{memberCount},
             achievements = #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
             status = #{status},
             visibility = #{visibility},
@@ -315,7 +330,8 @@
                c.advisor, c.image_url,
                (SELECT link_url FROM club_social_medias
                 WHERE club_id = c.id AND social_type = 'instagram' LIMIT 1) AS instagram_url,
-               c.member_count, c.achievements,
+               (SELECT COUNT(*) FROM club_member WHERE club_id = c.id) AS member_count,
+               c.achievements,
                c.status, c.visibility, c.approved_at, c.approved_by_oauth_user_id,
                c.created_at, c.updated_at
         FROM clubs c

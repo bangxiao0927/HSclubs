@@ -92,6 +92,110 @@ class InstagramAvatarCacheServiceTest {
     }
 
     @Test
+    void resolveAvatarNeverSpawnsProcessForHandleNotLinkedToAKnownClub() throws IOException {
+        Path invocations = tempDir.resolve("unknown-handle-invocations.txt");
+        Files.writeString(invocations, "", StandardCharsets.UTF_8);
+        Path script = tempDir.resolve("would-be-invoked.sh");
+        Files.writeString(script, "#!/bin/sh\necho x >> \"%s\"\nexit 0\n".formatted(invocations), StandardCharsets.UTF_8);
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        // Only "mvhsclubs" is a known club handle -- "randomhandle" is well-formed but unknown.
+        InstagramAvatarCacheService service =
+            service(true, script.toString(), "http://127.0.0.1/unused?username=%s", 1000, List.of(club("mvhsclubs")));
+
+        InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("randomhandle");
+
+        assertThat(avatar.mediaType().toString()).isEqualTo("image/svg+xml");
+        assertThat(Files.readAllLines(invocations, StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void isKnownClubHandleLookupIsCachedAcrossRequestsForDifferentHandles() {
+        // Each of these handles is well-formed but not linked to any club, i.e. exactly
+        // the "attacker hammering random handles against the public endpoint" scenario
+        // the known-handles cache exists to protect against: every one of them falls
+        // through readCachedAvatar (nothing on disk) into isKnownClubHandle.
+        AtomicInteger findAllCalls = new AtomicInteger();
+        ClubMapper clubMapper = countingClubMapper(List.of(club("mvhsclubs")), findAllCalls);
+        InstagramAvatarCacheService service = serviceWithClubMapper(clubMapper, TimeUnit.DAYS.toMillis(30));
+
+        service.resolveAvatar("randomhandle1");
+        service.resolveAvatar("randomhandle2");
+        service.resolveAvatar("randomhandle3");
+
+        assertThat(findAllCalls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void isKnownClubHandleLookupRefreshesOnceCacheTtlExpires() throws InterruptedException {
+        AtomicInteger findAllCalls = new AtomicInteger();
+        ClubMapper clubMapper = countingClubMapper(List.of(club("mvhsclubs")), findAllCalls);
+        InstagramAvatarCacheService service = serviceWithClubMapper(clubMapper, 50);
+
+        service.resolveAvatar("randomhandle");
+        assertThat(findAllCalls.get()).isEqualTo(1);
+
+        Thread.sleep(150);
+        service.resolveAvatar("randomhandle");
+
+        assertThat(findAllCalls.get()).isEqualTo(2);
+    }
+
+    @Test
+    void resolveAvatarSkipsRetryForRecentlyFailedHandle() throws IOException {
+        Path invocations = tempDir.resolve("negative-cache-invocations.txt");
+        Files.writeString(invocations, "", StandardCharsets.UTF_8);
+        Path script = tempDir.resolve("always-failing-instaloader.sh");
+        Files.writeString(script, "#!/bin/sh\necho x >> \"%s\"\nexit 1\n".formatted(invocations), StandardCharsets.UTF_8);
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = service(true, script.toString(), "http://127.0.0.1/unused?username=%s", 1000);
+
+        service.resolveAvatar("mvhsclubs");
+        service.resolveAvatar("mvhsclubs");
+
+        assertThat(Files.readAllLines(invocations, StandardCharsets.UTF_8)).hasSize(1);
+    }
+
+    @Test
+    void resolveAvatarLimitsConcurrentOnDemandRefreshesAcrossDistinctHandles() throws Exception {
+        Path script = tempDir.resolve("slow-instaloader.sh");
+        Files.writeString(script, "#!/bin/sh\nsleep 2\nexit 1\n", StandardCharsets.UTF_8);
+        assertThat(script.toFile().setExecutable(true)).isTrue();
+        InstagramAvatarCacheService service = new InstagramAvatarCacheService(
+            clubMapper(List.of(club("mvhsclubs"), club("otherclub"))),
+            tempDir.toString(),
+            true,
+            script.toString(),
+            "",
+            "",
+            "",
+            "",
+            "http://127.0.0.1/unused?username=%s",
+            3000,
+            TimeUnit.DAYS.toMillis(30),
+            10,
+            TimeUnit.DAYS.toMillis(30),
+            1, // only one concurrent on-demand refresh allowed
+            TimeUnit.DAYS.toMillis(30)
+        );
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<InstagramAvatarCacheService.ResolvedAvatar> busy =
+                executor.submit(() -> service.resolveAvatar("mvhsclubs"));
+            // Give the first call time to acquire the only permit and start sleeping.
+            Thread.sleep(300);
+
+            InstagramAvatarCacheService.ResolvedAvatar secondHandleResult = service.resolveAvatar("otherclub");
+
+            assertThat(secondHandleResult.mediaType().toString()).isEqualTo("image/svg+xml");
+            assertThat(secondHandleResult.maxAgeUnit()).isEqualTo(TimeUnit.SECONDS);
+            busy.get(5, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void resolveAvatarTimesOutHungInstaloaderProcess() throws IOException {
         Path sleeper = tempDir.resolve("sleepy-instaloader.sh");
         Files.writeString(sleeper, "#!/bin/sh\nsleep 5\n", StandardCharsets.UTF_8);
@@ -219,7 +323,10 @@ class InstagramAvatarCacheServiceTest {
             "http://127.0.0.1/unused?username=%s",
             1000,
             TimeUnit.DAYS.toMillis(30),
-            2
+            2,
+            TimeUnit.DAYS.toMillis(30),
+            10,
+            TimeUnit.DAYS.toMillis(30)
         );
 
         service.refreshClubInstagramAvatars();
@@ -238,7 +345,7 @@ class InstagramAvatarCacheServiceTest {
         );
         assertThat(script.toFile().setExecutable(true)).isTrue();
         InstagramAvatarCacheService service = new InstagramAvatarCacheService(
-            null,
+            clubMapper(List.of(club("mvhsclubs"))),
             tempDir.toString(),
             true,
             script.toString(),
@@ -249,7 +356,10 @@ class InstagramAvatarCacheServiceTest {
             "http://127.0.0.1/unused?username=%s",
             1000,
             TimeUnit.DAYS.toMillis(30),
-            10
+            10,
+            TimeUnit.DAYS.toMillis(30),
+            10,
+            TimeUnit.DAYS.toMillis(30)
         );
 
         InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
@@ -453,8 +563,18 @@ class InstagramAvatarCacheServiceTest {
         String profileApiUrlTemplate,
         long fetchTimeoutMillis
     ) {
+        return service(enabled, pythonCommand, profileApiUrlTemplate, fetchTimeoutMillis, List.of(club("mvhsclubs")));
+    }
+
+    private InstagramAvatarCacheService service(
+        boolean enabled,
+        String pythonCommand,
+        String profileApiUrlTemplate,
+        long fetchTimeoutMillis,
+        List<Club> knownClubs
+    ) {
         return new InstagramAvatarCacheService(
-            null,
+            clubMapper(knownClubs),
             tempDir.toString(),
             enabled,
             pythonCommand,
@@ -465,7 +585,47 @@ class InstagramAvatarCacheServiceTest {
             profileApiUrlTemplate,
             fetchTimeoutMillis,
             TimeUnit.DAYS.toMillis(30),
-            10
+            10,
+            TimeUnit.DAYS.toMillis(30),
+            10,
+            TimeUnit.DAYS.toMillis(30)
+        );
+    }
+
+    private InstagramAvatarCacheService serviceWithClubMapper(ClubMapper clubMapper, long knownHandlesCacheTtlMillis) {
+        return new InstagramAvatarCacheService(
+            clubMapper,
+            tempDir.toString(),
+            true,
+            "python3",
+            "",
+            "",
+            "",
+            "",
+            "http://127.0.0.1/unused?username=%s",
+            1000,
+            TimeUnit.DAYS.toMillis(30),
+            10,
+            TimeUnit.DAYS.toMillis(30),
+            10,
+            knownHandlesCacheTtlMillis
+        );
+    }
+
+    private ClubMapper countingClubMapper(List<Club> clubs, AtomicInteger findAllCalls) {
+        return (ClubMapper) Proxy.newProxyInstance(
+            ClubMapper.class.getClassLoader(),
+            new Class<?>[] { ClubMapper.class },
+            (proxy, method, args) -> {
+                if (method.getName().equals("findAll")) {
+                    findAllCalls.incrementAndGet();
+                    return clubs;
+                }
+                if (method.getReturnType().equals(int.class)) {
+                    return 0;
+                }
+                return null;
+            }
         );
     }
 

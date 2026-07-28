@@ -39,7 +39,9 @@ public class UploadCleanupService {
         log.info("Starting orphaned upload cleanup...");
 
         // Collect all image URLs currently referenced by clubs
-        List<Club> allClubs = clubMapper.findAll();
+        // Must include every status (archived/pending too) -- findAll() only returns active
+        // clubs, which previously made this job delete images still used by non-active clubs.
+        List<Club> allClubs = clubMapper.findAllRegardlessOfStatus();
         Set<String> referencedFilenames = allClubs.stream()
             .map(Club::getImageUrl)
             .filter(url -> url != null && url.startsWith("/uploads/"))

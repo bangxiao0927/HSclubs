@@ -9,8 +9,7 @@ import { RouterLink } from 'vue-router'
       <h1>Page not found</h1>
       <p>The page you're looking for doesn't exist or has been moved.</p>
       <div class="nf-actions">
-        <RouterLink to="/schools" class="btn primary">Browse schools</RouterLink>
-        <RouterLink to="/" class="btn ghost">Go home</RouterLink>
+        <RouterLink to="/" class="btn primary">Go home</RouterLink>
       </div>
     </div>
   </div>
@@ -50,7 +49,6 @@ import { RouterLink } from 'vue-router'
   text-decoration: none;
 }
 .btn.primary { background: var(--mv-primary-bg); color: var(--mv-primary-text); }
-.btn.ghost { border: 1px solid var(--mv-ghost-border); color: var(--mv-ghost-text); }
 
 @media (max-width: 480px) {
   .nf-code {

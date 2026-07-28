@@ -32,14 +32,16 @@ jobs:
         git config --global --add safe.directory $GITHUB_WORKSPACE  # git safe directory setup
         ./mvnw test
         
+    # Use actions/setup-node instead of manually apt-installing Node inside the
+    # container: apt-get pulled in a fresh ca-certificates package that broke the
+    # image's CA bundle, which made the NodeSource `curl | bash` install fail
+    # silently (curl -fsSL swallows the TLS error, and the pipeline's exit code
+    # came from `bash` seeing empty stdin and exiting 0), leaving the distro's
+    # ancient nodejs 12 (no npm) installed instead.
     - name: Install Node.js
-      run: |
-        apt-get update
-        apt-get install -y curl ca-certificates gnupg --no-install-recommends
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-        apt-get install -y nodejs
-        node --version  # For debugging
-        npm --version   # For debugging
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
 
 
     # Test frountend

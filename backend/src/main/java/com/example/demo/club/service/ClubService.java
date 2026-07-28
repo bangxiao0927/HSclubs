@@ -26,6 +26,7 @@ public class ClubService {
         "Competition & Strategy"
     );
     private static final Set<String> ALLOWED_MEMBER_ROLES = Set.of("member", "president");
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final ClubMapper clubMapper;
     private final OAuthUserMapper oAuthUserMapper;
@@ -42,15 +43,15 @@ public class ClubService {
     }
 
     public List<Club> findAllPaginated(int page, int size) {
-        int offset = Math.max(0, page) * size;
-        int limit = Math.max(1, Math.min(size, 100));
+        int limit = clampPageSize(size);
+        int offset = clampOffset(page, limit);
         return clubMapper.findAllPaginated(offset, limit);
     }
 
     public List<Club> search(String name, String category, String alias,
                              String advisor, String query, int page, int size) {
-        int limit = Math.max(1, Math.min(size, 100));
-        int offset = Math.max(0, page) * limit;
+        int limit = clampPageSize(size);
+        int offset = clampOffset(page, limit);
         return clubMapper.search(
             cleanSearchTerm(name),
             cleanSearchTerm(category),
@@ -108,14 +109,21 @@ public class ClubService {
         normalizeClub(club);
         club.setId(null);
         clubMapper.insert(club);
-        return club;
+        // member_count (and instagram_url) are derived columns that BaseColumnList computes
+        // with correlated subqueries rather than reading back from the row this insert just
+        // wrote (see ClubMapper.xml's insert -- it never writes member_count at all), so the
+        // in-memory `club` the caller passed in is stale for those fields. Re-fetch to hand
+        // back what a subsequent GET would actually return.
+        return clubMapper.findById(club.getId());
     }
 
     public Club update(Long id, Club club) {
         normalizeClub(club);
         club.setId(id);
         clubMapper.update(club);
-        return club;
+        // Same reasoning as create(): member_count is never written by this update, so
+        // re-fetch instead of returning the caller-supplied (and now stale) `club`.
+        return clubMapper.findById(id);
     }
 
     public void delete(Long id) {
@@ -265,9 +273,6 @@ public class ClubService {
         if (club.getAchievements() == null) {
             club.setAchievements(Collections.emptyList());
         }
-        if (club.getMemberCount() == null) {
-            club.setMemberCount(0);
-        }
         if (!StringUtils.hasText(club.getStatus())) {
             club.setStatus("active");
         }
@@ -278,6 +283,17 @@ public class ClubService {
 
     private String cleanSearchTerm(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private int clampPageSize(int size) {
+        return Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+    }
+
+    // Uses long arithmetic so a huge page number can't wrap around into a negative int offset,
+    // and clamps to Integer.MAX_VALUE (the widest legal offset) rather than overflowing.
+    private int clampOffset(int page, int limit) {
+        long offset = (long) Math.max(0, page) * limit;
+        return (int) Math.min(offset, Integer.MAX_VALUE);
     }
 
     private String normalizeMemberRole(String roleName) {

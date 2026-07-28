@@ -106,13 +106,6 @@ const router = createRouter({
       component: () => import('../views/AuthCallbackView.vue'),
     },
 
-    // ---- Invitation ----
-    {
-      path: '/accept-invitation',
-      name: 'accept-invitation',
-      component: () => import('../views/AcceptInvitationView.vue'),
-    },
-
     // ---- 404 (must be last) ----
     {
       path: '/:pathMatch(.*)*',
@@ -163,7 +156,7 @@ router.beforeEach(async (to) => {
     // The destination is resolved (via `router.resolve`) before being
     // returned rather than being returned as-is: `resolvePostAuthRoute` can
     // return a bare string carrying its own query string and/or hash (e.g.
-    // `/accept-invitation?token=abc`), and wrapping that string directly in
+    // `/clubs/3?ref=email`), and wrapping that string directly in
     // `{ path: destination }` would make vue-router silently drop everything
     // after the path. Resolving first and re-expressing the result as
     // `{ path, query, hash }` keeps the query and hash intact for both the
