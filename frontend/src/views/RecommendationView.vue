@@ -285,7 +285,7 @@ onMounted(loadClubs)
           {{ isOnboardingFlow ? 'Choose your interests' : 'Club match quiz' }}
         </p>
         <h1>Find clubs that fit you</h1>
-        <p>
+        <p class="quiz-lede">
           Answer four quick questions and we will match your interests with clubs at your school.
         </p>
         <button
@@ -483,7 +483,10 @@ onMounted(loadClubs)
   font-size: clamp(2rem, 4vw, 3.2rem);
 }
 
-.quiz-header > p:last-child,
+/* Targeted by class, not `p:last-child`: the onboarding variant of this header
+   appends a "Skip for now" button after the copy, which would otherwise strip
+   this styling off the intro paragraph in exactly that flow. */
+.quiz-header > .quiz-lede,
 .results-header > div > p:last-child {
   max-width: 720px;
   color: var(--mv-text-muted);
@@ -796,7 +799,7 @@ onMounted(loadClubs)
     text-align: center;
   }
 
-  .quiz-header > p:last-child {
+  .quiz-header > .quiz-lede {
     margin-inline: auto;
   }
 }
