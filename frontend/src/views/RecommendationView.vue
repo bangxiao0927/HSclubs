@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { fetchAllClubs } from '../services/clubService'
 import type { Club } from '../types/club'
+import { sanitizeAuthRedirectTarget } from '../utils/authRedirect'
 import { clubCategoryOptions } from '../utils/clubCategories'
 import { clubImage } from '../utils/clubImages'
 import { selectWeightedClubRecommendations } from '../utils/clubRecommendations'
@@ -19,6 +20,13 @@ type QuizQuestion = {
   helper: string
   options: QuizOption[]
 }
+
+const route = useRoute()
+const router = useRouter()
+// The quiz doubles as the first step of first-time registration (linked from
+// AcceptTermsView with ?onboarding=true). In that mode it shows a way onward to
+// the graduation-year step instead of leaving the student on a dead end.
+const isOnboardingFlow = computed(() => route.query.onboarding === 'true')
 
 const questions: QuizQuestion[] = [
   {
@@ -255,6 +263,17 @@ const restartQuiz = async () => {
   await focusQuestionHeading()
 }
 
+// Hands the still-pending post-auth target on to the graduation-year step, so a
+// student who signed up from a club page still lands there once setup is done.
+// `replace` keeps the quiz out of history: Back from /onboarding must not drop
+// the student into a quiz they already finished or skipped.
+const continueOnboarding = () => {
+  void router.replace({
+    path: '/onboarding',
+    query: { redirect: sanitizeAuthRedirectTarget(route.query.redirect) },
+  })
+}
+
 onMounted(loadClubs)
 </script>
 
@@ -262,11 +281,21 @@ onMounted(loadClubs)
   <main class="quiz-page page-shell">
     <template v-if="!showResults">
       <header class="quiz-header">
-        <p class="section-label">Club match quiz</p>
+        <p class="section-label">
+          {{ isOnboardingFlow ? 'Choose your interests' : 'Club match quiz' }}
+        </p>
         <h1>Find clubs that fit you</h1>
         <p>
           Answer four quick questions and we will match your interests with clubs at your school.
         </p>
+        <button
+          v-if="isOnboardingFlow"
+          type="button"
+          class="text-link skip-quiz"
+          @click="continueOnboarding"
+        >
+          Skip for now
+        </button>
       </header>
 
       <section class="quiz-card" aria-labelledby="quiz-question">
@@ -344,6 +373,16 @@ onMounted(loadClubs)
         <button type="button" class="secondary-button" @click="restartQuiz">Retake quiz</button>
       </header>
 
+      <div v-if="isOnboardingFlow" class="onboarding-continue">
+        <div>
+          <strong>Your club matches are ready.</strong>
+          <p>Continue to finish setting up your student profile.</p>
+        </div>
+        <button type="button" class="primary-button" @click="continueOnboarding">
+          Continue profile setup
+        </button>
+      </div>
+
       <section class="match-summary" aria-label="Top category matches">
         <article
           v-for="(category, index) in topCategories"
@@ -404,6 +443,33 @@ onMounted(loadClubs)
   flex-direction: column;
   gap: 2rem;
   padding-block: clamp(2rem, 5vw, 4rem);
+}
+
+.onboarding-continue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--mv-border-strong);
+  border-radius: 22px;
+  background: var(--mv-surface-accent);
+}
+
+.onboarding-continue p {
+  margin: 0.25rem 0 0;
+  color: var(--mv-text-muted);
+}
+
+.skip-quiz {
+  margin-top: 1rem;
+}
+
+@media (max-width: 640px) {
+  .onboarding-continue {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .quiz-header,

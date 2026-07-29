@@ -70,7 +70,7 @@ afterEach(() => {
 })
 
 describe('AcceptTermsView', () => {
-  it('sends a user with no graduation year to onboarding (not the final destination) after accepting terms', async () => {
+  it('sends a first-time user to the interest quiz before onboarding after accepting terms', async () => {
     fetchMock.mockResolvedValue({ ok: true })
     fetchAuthenticatedUserMock.mockResolvedValue(buildUser({ graduationYear: null }))
     setRouteQuery({ redirect: '/clubs/5' })
@@ -79,8 +79,8 @@ describe('AcceptTermsView', () => {
     await agreeAndSubmit(wrapper)
 
     expect(replaceMock).toHaveBeenCalledWith({
-      path: '/onboarding',
-      query: { redirect: '/clubs/5' },
+      path: '/recommendations',
+      query: { onboarding: 'true', redirect: '/clubs/5' },
     })
   })
 

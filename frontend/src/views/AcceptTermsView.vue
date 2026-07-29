@@ -4,7 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { schoolTemplate } from '../config/schoolTemplate'
 import { useAuthStore } from '../stores/auth'
 import { buildApiUrl } from '../services/httpClient'
-import { DEFAULT_POST_AUTH_PATH, resolvePostAuthRoute } from '../utils/authRedirect'
+import {
+  DEFAULT_POST_AUTH_PATH,
+  resolvePostAuthRoute,
+  sanitizeAuthRedirectTarget,
+} from '../utils/authRedirect'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,6 +31,22 @@ const handleAccept = async () => {
       throw new Error('Failed to record acceptance')
     }
     await authStore.refreshUser()
+    // A first-time student goes through the interest quiz BEFORE the
+    // graduation-year step, so the very first thing they see after signing up
+    // is clubs they might like rather than a form. This deliberately bypasses
+    // resolvePostAuthRoute (which would jump straight to /onboarding); the quiz
+    // hands the same sanitized target on to /onboarding when it is done, so the
+    // originally requested destination still survives the detour.
+    if (authStore.currentUser && authStore.currentUser.graduationYear == null) {
+      router.replace({
+        path: '/recommendations',
+        query: {
+          onboarding: 'true',
+          redirect: sanitizeAuthRedirectTarget(route.query.redirect),
+        },
+      })
+      return
+    }
     const destination = resolvePostAuthRoute(authStore.currentUser, route.query.redirect)
     router.replace(destination ?? DEFAULT_POST_AUTH_PATH)
   } catch (err) {
