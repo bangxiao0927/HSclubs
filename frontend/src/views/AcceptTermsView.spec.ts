@@ -70,7 +70,7 @@ afterEach(() => {
 })
 
 describe('AcceptTermsView', () => {
-  it('sends a user with no graduation year to onboarding (not the final destination) after accepting terms', async () => {
+  it('sends a first-time user to the interest quiz before onboarding after accepting terms', async () => {
     fetchMock.mockResolvedValue({ ok: true })
     fetchAuthenticatedUserMock.mockResolvedValue(buildUser({ graduationYear: null }))
     setRouteQuery({ redirect: '/clubs/5' })
@@ -79,8 +79,8 @@ describe('AcceptTermsView', () => {
     await agreeAndSubmit(wrapper)
 
     expect(replaceMock).toHaveBeenCalledWith({
-      path: '/onboarding',
-      query: { redirect: '/clubs/5' },
+      path: '/recommendations',
+      query: { onboarding: 'true', redirect: '/clubs/5' },
     })
   })
 
@@ -93,6 +93,20 @@ describe('AcceptTermsView', () => {
     await agreeAndSubmit(wrapper)
 
     expect(replaceMock).toHaveBeenCalledWith('/clubs/5')
+  })
+
+  it('does not push a user whose session vanished mid-accept into the interest quiz', async () => {
+    // refreshUser() swallows the failure and clears currentUser, so the
+    // interest-quiz hop must not fire for what is now an unauthenticated
+    // visitor; the default landing path lets the router guard re-prompt login.
+    fetchMock.mockResolvedValue({ ok: true })
+    fetchAuthenticatedUserMock.mockRejectedValue(new Error('session expired'))
+    setRouteQuery({ redirect: '/clubs/5' })
+    const wrapper = mountView()
+
+    await agreeAndSubmit(wrapper)
+
+    expect(replaceMock).toHaveBeenCalledWith('/profile')
   })
 
   it('lands a user with no redirect target at all on the default profile page', async () => {
