@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.ClubPostComment;
 import com.example.demo.club.model.PublicClubPost;
+import com.example.demo.club.model.PublicClubPostComment;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -254,6 +255,92 @@ class ClubPostMapperTest {
             .satisfies(remaining -> assertThat(remaining.getBody()).isEqualTo("Second"));
     }
 
+    // This only proves the query returns the right id/null; a FOR UPDATE assertion here would
+    // pass vacuously without a surrounding transaction (see the issue's own warning), so the
+    // actual pessimistic-locking behavior is covered by a service-level test instead.
+    @Test
+    void lockPostIdForUpdateReturnsTheIdWhenThePostExistsInThatClub() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+
+        assertThat(clubPostMapper.lockPostIdForUpdate(1L, 1L)).isEqualTo(1L);
+    }
+
+    @Test
+    void lockPostIdForUpdateReturnsNullForAMissingPostOrAMismatchedClubId() {
+        jdbcTemplate.update("INSERT INTO clubs (id, name) VALUES (2, 'Robotics')");
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+
+        assertThat(clubPostMapper.lockPostIdForUpdate(99L, 1L)).isNull();
+        assertThat(clubPostMapper.lockPostIdForUpdate(1L, 2L)).isNull();
+    }
+
+    @Test
+    void findCommentByIdAndPostIdReturnsTheCommentWhenThePostMatches() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        ClubPostComment comment = new ClubPostComment();
+        comment.setPostId(1L);
+        comment.setAuthorOauthUserId(1L);
+        comment.setBody("Great photo!");
+        clubPostMapper.insertComment(comment);
+
+        ClubPostComment found = clubPostMapper.findCommentByIdAndPostId(comment.getId(), 1L);
+
+        assertThat(found).isNotNull();
+        assertThat(found.getAuthorOauthUserId()).isEqualTo(1L);
+        assertThat(found.getBody()).isEqualTo("Great photo!");
+    }
+
+    @Test
+    void findCommentByIdAndPostIdReturnsNullForAMismatchedPostId() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertPost(2L, 1L, "2024-01-02 10:00:00", null);
+        ClubPostComment comment = new ClubPostComment();
+        comment.setPostId(1L);
+        comment.setAuthorOauthUserId(1L);
+        comment.setBody("Great photo!");
+        clubPostMapper.insertComment(comment);
+
+        assertThat(clubPostMapper.findCommentByIdAndPostId(comment.getId(), 2L)).isNull();
+    }
+
+    @Test
+    void findPublicCommentsByPostIdReturnsOldestFirstWithAuthorDisplayNameAndAvatarUrl() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertCommentAt(1L, 1L, "First comment", "2024-01-01 10:00:00");
+        insertCommentAt(2L, 1L, "Second comment", "2024-01-02 10:00:00");
+
+        List<PublicClubPostComment> comments = clubPostMapper.findPublicCommentsByPostId(1L);
+
+        assertThat(comments).extracting(PublicClubPostComment::getBody)
+            .containsExactly("First comment", "Second comment");
+        assertThat(comments).allSatisfy(comment -> {
+            assertThat(comment.getAuthorDisplayName()).isEqualTo("Ada Lovelace");
+            assertThat(comment.getAuthorAvatarUrl()).isEqualTo("/uploads/avatar-cache/ada.jpg");
+        });
+    }
+
+    @Test
+    void findPublicCommentByIdAndPostIdReturnsTheSameSafeShapeAsTheList() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertCommentAt(1L, 1L, "Great photo!", "2024-01-01 10:00:00");
+
+        PublicClubPostComment comment = clubPostMapper.findPublicCommentByIdAndPostId(1L, 1L);
+
+        assertThat(comment).isNotNull();
+        assertThat(comment.getBody()).isEqualTo("Great photo!");
+        assertThat(comment.getAuthorDisplayName()).isEqualTo("Ada Lovelace");
+        assertThat(comment.getAuthorAvatarUrl()).isEqualTo("/uploads/avatar-cache/ada.jpg");
+    }
+
+    @Test
+    void findPublicCommentByIdAndPostIdReturnsNullForAMismatchedPostId() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertPost(2L, 1L, "2024-01-02 10:00:00", null);
+        insertCommentAt(1L, 1L, "Great photo!", "2024-01-01 10:00:00");
+
+        assertThat(clubPostMapper.findPublicCommentByIdAndPostId(1L, 2L)).isNull();
+    }
+
     @Test
     void findAllImageUrlsReturnsEveryPostsImageUrlAcrossClubs() {
         jdbcTemplate.update("INSERT INTO clubs (id, name) VALUES (2, 'Robotics')");
@@ -351,6 +438,8 @@ class ClubPostMapperTest {
         assertThat(post).isNotNull();
         assertThat(post.getId()).isEqualTo(1L);
         assertThat(post.getClubId()).isEqualTo(1L);
+        assertThat(post.getAuthorOauthUserId()).isEqualTo(1L);
+        assertThat(post.getImageUrl()).isEqualTo("/uploads/club-posts/1.jpg");
     }
 
     // Scoped the same way findPublicPostByIdAndClubId is: cross-club pinning must 404, not
@@ -377,6 +466,13 @@ class ClubPostMapperTest {
             "INSERT INTO club_post (id, club_id, author_oauth_user_id, title, image_url, created_at, pinned_at) "
                 + "VALUES (?, ?, 1, 'Post ' || ?, '/uploads/club-posts/' || ? || '.jpg', ?, ?)",
             id, clubId, id, id, createdAt, pinnedAt);
+    }
+
+    private void insertCommentAt(long id, long postId, String body, String createdAt) {
+        jdbcTemplate.update(
+            "INSERT INTO club_post_comment (id, post_id, author_oauth_user_id, body, created_at) "
+                + "VALUES (?, ?, 1, ?, ?)",
+            id, postId, body, createdAt);
     }
 
     private static List<Long> idsOf(List<ClubPost> posts) {
