@@ -126,6 +126,16 @@ public class ClubService {
         return clubMapper.findById(id);
     }
 
+    // The only path allowed to change a club's stored image URL: called from the dedicated,
+    // authenticated upload flow in ClubImageController, never from the general club-editing
+    // update() above. update() intentionally does not write image_url at all (see
+    // ClubMapper.xml), so a caller-supplied imageUrl in an ordinary PUT body can never reach
+    // the database through it.
+    public Club updateImageUrl(Long id, String imageUrl) {
+        clubMapper.updateImageUrl(id, imageUrl);
+        return clubMapper.findById(id);
+    }
+
     public void delete(Long id) {
         clubMapper.delete(id);
     }

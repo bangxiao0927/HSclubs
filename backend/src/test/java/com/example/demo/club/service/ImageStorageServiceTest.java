@@ -78,6 +78,46 @@ class ImageStorageServiceTest {
         assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
     }
 
+    // A PNG truncated right after its IHDR chunk has a fully readable header (width/height
+    // parse fine, so the sniff and megapixel-guard steps both pass) but no IDAT/IEND at all,
+    // so the *full* decode Thumbnailator performs during re-encoding throws IIOException
+    // ("Error reading PNG metadata"). That is still bad client input, not a server failure,
+    // and must surface the same way a header-read failure does: IllegalArgumentException / 400.
+    @Test
+    void rejectsAPngWithReadableHeaderButCorruptPixelDataAsAClientError() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] pngWithNoImageData = truncateAfterFirstPngChunk(solidColorPng(50, 50, Color.RED, false));
+        MockMultipartFile file = new MockMultipartFile("file", "corrupt.png", "image/png", pngWithNoImageData);
+
+        assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // The decode-failure fix must not swallow genuine server-side I/O failures into the same
+    // 400 bucket: once a file has fully and validly decoded, a failure writing it to disk is a
+    // storage problem, not a bad upload, and must remain an IOException (the controller maps
+    // that to 500).
+    @Test
+    void ioFailuresWritingTheStoredFileRemainIOExceptionsNotClientErrors() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        Path clubPostsDir = uploadDir.resolve("club-posts");
+        Files.delete(clubPostsDir);
+        Files.write(clubPostsDir, new byte[] {1});
+
+        byte[] jpegBytes = solidColorJpeg(10, 10, Color.RED);
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", jpegBytes);
+
+        assertThatThrownBy(() -> service.store(file))
+            .isInstanceOf(IOException.class)
+            .isNotInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static byte[] truncateAfterFirstPngChunk(byte[] pngBytes) {
+        int chunkDataLength = ((pngBytes[8] & 0xFF) << 24) | ((pngBytes[9] & 0xFF) << 16)
+            | ((pngBytes[10] & 0xFF) << 8) | (pngBytes[11] & 0xFF);
+        int firstChunkEnd = 8 + 4 + 4 + chunkDataLength + 4; // signature + length + type + data + crc
+        return Arrays.copyOf(pngBytes, firstChunkEnd);
+    }
+
     @Test
     void storesAJpegUploadAsAJpegFile() throws IOException {
         ImageStorageService service = service(uploadDir);

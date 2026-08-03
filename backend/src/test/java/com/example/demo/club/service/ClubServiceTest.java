@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -61,5 +62,17 @@ class ClubServiceTest {
         clubService.search(null, null, null, null, null, 2, -100);
 
         verify(clubMapper).search(eq(null), eq(null), eq(null), eq(null), eq(null), eq(2), eq(1));
+    }
+
+    // Only this dedicated method (backed by ClubMapper#updateImageUrl, a column-scoped SQL
+    // statement -- see ClubMapperTest) may change a club's stored image URL. Ordinary update()
+    // must never call it, and must never be the path that lets a caller-supplied imageUrl
+    // reach the database.
+    @Test
+    void updateImageUrlDelegatesToTheDedicatedMapperMethodNotTheGeneralUpdate() {
+        clubService.updateImageUrl(1L, "/uploads/club-posts/new-uuid.jpg");
+
+        verify(clubMapper).updateImageUrl(1L, "/uploads/club-posts/new-uuid.jpg");
+        verify(clubMapper, never()).update(any());
     }
 }

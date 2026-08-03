@@ -144,6 +144,11 @@
              subquery) and is never read from this column again, so it is intentionally
              not written here: writing it would just be silently overwritten by the
              next SELECT and give admins a false impression that editing it does anything. -->
+        <!-- image_url is also intentionally not written here; see updateImageUrl below.
+             It is only ever supposed to change through the dedicated, authenticated image
+             upload path, never through this general club-editing form: writing it from this
+             statement would let a manager set their own club's imageUrl to another club's
+             real, guessable stored image path via a PUT request body. -->
         UPDATE clubs
         SET name = #{name},
             slug = #{slug},
@@ -155,12 +160,18 @@
             location = #{location},
             contact_email = #{contactEmail},
             advisor = #{advisor},
-            image_url = #{imageUrl},
             achievements = #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
             status = #{status},
             visibility = #{visibility},
             approved_at = #{approvedAt},
             approved_by_oauth_user_id = #{approvedByOauthUserId},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateImageUrl">
+        UPDATE clubs
+        SET image_url = #{imageUrl},
             updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id}
     </update>

@@ -2,6 +2,8 @@ package com.example.demo.club.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -97,6 +99,12 @@ class ClubImageControllerTest {
                 .principal(oauthToken(OWNER_EMAIL)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.imageUrl").value("/uploads/club-posts/generated-uuid.jpg"));
+
+        // The upload path must go through the dedicated updateImageUrl() method (backed by a
+        // column-scoped SQL statement -- see ClubMapperTest), never the general update(), which
+        // no longer writes image_url at all and would silently drop this change if used here.
+        verify(clubService).updateImageUrl(1L, "/uploads/club-posts/generated-uuid.jpg");
+        verify(clubService, never()).update(any(), any());
     }
 
     // Regression coverage for the controller side of the corrupt/truncated-image fix:
@@ -117,6 +125,25 @@ class ClubImageControllerTest {
                 .file(file)
                 .principal(oauthToken(OWNER_EMAIL)))
             .andExpect(status().isBadRequest());
+    }
+
+    // The corrupt-image fix must not blur the line between bad client input and a genuine
+    // server-side failure: an IOException from store() (e.g. a real disk write failure) is
+    // still a 500, distinct from the IllegalArgumentException/400 case above.
+    @Test
+    void uploadImageReturnsServerErrorWhenStorageFailsWithAnIOException() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(imageStorageService.store(any())).thenThrow(new IOException("disk full"));
+
+        MockMultipartFile file = realPngFile();
+
+        mockMvc.perform(multipart("/api/clubs/1/image")
+                .file(file)
+                .principal(oauthToken(OWNER_EMAIL)))
+            .andExpect(status().isInternalServerError());
     }
 
     private static MockMultipartFile realPngFile() throws IOException {

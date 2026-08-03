@@ -41,6 +41,13 @@ public interface ClubMapper {
 
     int update(Club club);
 
+    // image_url is intentionally not part of the general update() statement above (see
+    // ClubMapper.xml) -- it is only ever supposed to change through this dedicated method,
+    // called from the authenticated image-upload path, never through the general club-editing
+    // form. This is the mapper-level enforcement that keeps a manager from setting their own
+    // club's imageUrl to another club's real /uploads/club-posts/<uuid>.jpg path via PUT.
+    int updateImageUrl(@Param("id") Long id, @Param("imageUrl") String imageUrl);
+
     int updateLocation(@Param("id") Long id, @Param("location") String location);
 
     int delete(@Param("id") Long id);

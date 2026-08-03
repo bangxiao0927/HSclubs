@@ -216,7 +216,17 @@ public class ImageStorageService {
     // lost that metadata. Never upscale past the original resolution: only constrain to
     // MAX_DIMENSION when the source is already larger than that.
     private byte[] reencodeToJpeg(byte[] bytes, Dimensions original) throws IOException {
-        BufferedImage decoded;
+        BufferedImage decoded = decodeFullImage(bytes, original);
+        BufferedImage flattened = flattenToWhiteBackground(decoded);
+        return encodeJpeg(flattened);
+    }
+
+    // The header/dimensions read earlier in the pipeline only parses enough of the file to find
+    // width and height; it does not guarantee the pixel data or embedded metadata (e.g. an ICC
+    // profile) that comes after is intact. A file that fails here (IIOException) still passed
+    // that earlier header read, so this is the full-decode failure mode of a corrupt or
+    // truncated upload -- bad client input, not a server failure.
+    private static BufferedImage decodeFullImage(byte[] bytes, Dimensions original) {
         try (InputStream in = new ByteArrayInputStream(bytes)) {
             Thumbnails.Builder<? extends InputStream> builder = Thumbnails.of(in).useExifOrientation(true);
             if (original.width() > MAX_DIMENSION || original.height() > MAX_DIMENSION) {
@@ -224,11 +234,10 @@ public class ImageStorageService {
             } else {
                 builder = builder.scale(1.0);
             }
-            decoded = builder.asBufferedImage();
+            return builder.asBufferedImage();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Unreadable or corrupt image", e);
         }
-
-        BufferedImage flattened = flattenToWhiteBackground(decoded);
-        return encodeJpeg(flattened);
     }
 
     // JPEG has no transparency; Thumbnailator's own JPEG writer flattens onto black (see its

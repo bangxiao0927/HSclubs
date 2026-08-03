@@ -123,6 +123,14 @@ public class Club {
         this.advisor = advisor;
     }
 
+    // Only the dedicated, authenticated image-upload endpoint (ClubImageController ->
+    // ClubService#updateImageUrl) may change this; a client sending "imageUrl" in a create/
+    // update request body must not be able to set it to another club's real, guessable stored
+    // image path, so Jackson is told this property is read-only for deserialization -- the
+    // same treatment getMemberCount() below gets for the same reason. It is still emitted on
+    // every response, which is where the real, current value comes from. ClubMapper.xml's
+    // update() statement also omits image_url entirely as defense in depth (see ClubMapperTest).
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public String getImageUrl() {
         return imageUrl;
     }

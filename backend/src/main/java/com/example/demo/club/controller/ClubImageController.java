@@ -49,8 +49,7 @@ public class ClubImageController {
         }
 
         String oldImageUrl = club.getImageUrl();
-        club.setImageUrl(imageUrl);
-        clubService.update(club.getId(), club);
+        clubService.updateImageUrl(club.getId(), imageUrl);
         imageStorageService.delete(oldImageUrl);
 
         return Map.of("imageUrl", imageUrl);
