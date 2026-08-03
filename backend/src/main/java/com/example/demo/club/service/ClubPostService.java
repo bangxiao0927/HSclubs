@@ -5,6 +5,7 @@ import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.common.PaginationClamps;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -13,9 +14,12 @@ import java.util.List;
 
 /**
  * Publishing a post and reading a club's public feed. Publishing is a single atomic operation:
- * the photo is written by {@link ImageStorageService} first, and if the subsequent row insert
- * fails for any reason, that file is deleted again so a failed publish never leaves an orphaned
- * file on disk with no corresponding row.
+ * the photo is written by {@link ImageStorageService} first, then the row is inserted and
+ * immediately read back in the same DB transaction so the response can carry the same safe
+ * shape a feed item has (author display name/avatar, {@code createdAt}, never the internal
+ * {@code author_oauth_user_id}). If the insert or the read-back fails for any reason, the
+ * transaction rolls back (no committed, unreadable row left behind) and the file is deleted
+ * again (no orphan left on disk either).
  */
 @Service
 public class ClubPostService {
@@ -30,7 +34,14 @@ public class ClubPostService {
         this.imageStorageService = imageStorageService;
     }
 
-    public ClubPost publish(Long clubId, Long authorOauthUserId, String title, MultipartFile file)
+    // @Transactional so the insert does not auto-commit before the read-back has succeeded:
+    // MyBatis auto-commits each statement on its own connection otherwise, which would leave a
+    // successfully inserted row committed even if the read-back that follows it throws. Wrapping
+    // both in one transaction means a read-back failure rolls the insert back too, not just the
+    // in-memory object -- the file cleanup in the catch block below is the other half of that
+    // same guarantee, for the disk side a DB rollback cannot touch.
+    @Transactional
+    public PublicClubPost publish(Long clubId, Long authorOauthUserId, String title, MultipartFile file)
             throws IOException {
         String trimmedTitle = validateTitle(title);
         if (file == null || file.isEmpty()) {
@@ -45,7 +56,13 @@ public class ClubPostService {
             post.setTitle(trimmedTitle);
             post.setImageUrl(imageUrl);
             clubPostMapper.insert(post);
-            return post;
+
+            PublicClubPost created = clubPostMapper.findPublicPostByIdAndClubId(post.getId(), clubId);
+            if (created == null) {
+                throw new IllegalStateException(
+                    "Post " + post.getId() + " was not found immediately after being inserted");
+            }
+            return created;
         } catch (RuntimeException e) {
             // The single-atomic-request contract: a file the row insert never ends up
             // referencing must not be left behind as an orphan.

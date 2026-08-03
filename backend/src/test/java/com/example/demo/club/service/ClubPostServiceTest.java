@@ -5,9 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,6 +33,13 @@ class ClubPostServiceTest {
         clubPostMapper = mock(ClubPostMapper.class);
         imageStorageService = mock(ImageStorageService.class);
         clubPostService = new ClubPostService(clubPostMapper, imageStorageService);
+        // Mirrors MyBatis's useGeneratedKeys behavior: insert() sets the generated id onto the
+        // same ClubPost instance it was given, which publish()'s read-back then looks up by.
+        doAnswer(invocation -> {
+            ClubPost post = invocation.getArgument(0);
+            post.setId(99L);
+            return 1;
+        }).when(clubPostMapper).insert(any());
     }
 
     private static MultipartFile aFile() {
@@ -62,8 +70,11 @@ class ClubPostServiceTest {
     void publishAcceptsATitleOfExactlyOneHundredFortyCharacters() throws IOException {
         String exactlyMax = "x".repeat(140);
         when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/uuid.jpg");
+        PublicClubPost readBack = new PublicClubPost();
+        readBack.setTitle(exactlyMax);
+        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(readBack);
 
-        ClubPost post = clubPostService.publish(1L, 10L, exactlyMax, aFile());
+        PublicClubPost post = clubPostService.publish(1L, 10L, exactlyMax, aFile());
 
         assertThat(post.getTitle()).isEqualTo(exactlyMax);
     }
@@ -85,14 +96,21 @@ class ClubPostServiceTest {
     @Test
     void publishTrimsTheTitleAndDelegatesTheFileEntirelyToImageStorageService() throws IOException {
         when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/uuid.jpg");
+        PublicClubPost readBack = new PublicClubPost();
+        readBack.setTitle("Meeting recap");
+        readBack.setImageUrl("/uploads/club-posts/uuid.jpg");
+        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(readBack);
 
-        ClubPost post = clubPostService.publish(1L, 10L, "  Meeting recap  ", aFile());
+        PublicClubPost post = clubPostService.publish(1L, 10L, "  Meeting recap  ", aFile());
 
         assertThat(post.getTitle()).isEqualTo("Meeting recap");
         assertThat(post.getImageUrl()).isEqualTo("/uploads/club-posts/uuid.jpg");
-        assertThat(post.getClubId()).isEqualTo(1L);
-        assertThat(post.getAuthorOauthUserId()).isEqualTo(10L);
-        verify(clubPostMapper).insert(post);
+
+        ArgumentCaptor<ClubPost> insertedPost = ArgumentCaptor.forClass(ClubPost.class);
+        verify(clubPostMapper).insert(insertedPost.capture());
+        assertThat(insertedPost.getValue().getClubId()).isEqualTo(1L);
+        assertThat(insertedPost.getValue().getAuthorOauthUserId()).isEqualTo(10L);
+        assertThat(insertedPost.getValue().getTitle()).isEqualTo("Meeting recap");
     }
 
     // The atomic-request contract: if the row insert fails after the file was already written,
@@ -108,6 +126,35 @@ class ClubPostServiceTest {
             .isSameAs(insertFailure);
 
         verify(imageStorageService).delete("/uploads/club-posts/uuid.jpg");
+    }
+
+    // The read-back is what actually returns the safe, feed-shaped post; if it can't find the
+    // row it just inserted (should not happen in practice, since both run in the same
+    // transaction, but this is the last line of defense), the whole publish must fail rather
+    // than return null or a half-populated object, and the file must not be left orphaned.
+    @Test
+    void publishDeletesTheStoredFileWhenTheReadBackFindsNoRow() throws IOException {
+        when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/uuid.jpg");
+        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(null);
+
+        assertThatThrownBy(() -> clubPostService.publish(1L, 10L, "Meeting recap", aFile()))
+            .isInstanceOf(IllegalStateException.class);
+
+        verify(imageStorageService).delete("/uploads/club-posts/uuid.jpg");
+    }
+
+    @Test
+    void publishReturnsExactlyWhatTheReadBackProduces() throws IOException {
+        when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/uuid.jpg");
+        PublicClubPost readBack = new PublicClubPost();
+        readBack.setId(99L);
+        readBack.setAuthorDisplayName("Ada Lovelace");
+        readBack.setAuthorAvatarUrl("/uploads/avatar-cache/ada.jpg");
+        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(readBack);
+
+        PublicClubPost post = clubPostService.publish(1L, 10L, "Meeting recap", aFile());
+
+        assertThat(post).isSameAs(readBack);
     }
 
     @Test

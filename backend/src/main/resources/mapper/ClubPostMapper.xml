@@ -57,15 +57,22 @@
         <result column="author_avatar_url" property="authorAvatarUrl" />
     </resultMap>
 
+    <!-- Shared by findPublicFeedByClubId and findPublicPostByIdAndClubId so a freshly published
+         post reads back in exactly the same safe shape a feed item has: never author_oauth_
+         user_id or any other oauth_users column. -->
+    <sql id="PublicPostColumnList">
+        cp.id, cp.club_id, cp.title, cp.image_url, cp.pinned_at, cp.created_at,
+        ou.display_name AS author_display_name,
+        ou.avatar_url   AS author_avatar_url
+    </sql>
+
     <!-- Deliberately not a wildcard select and not a reuse of ClubMemberView's/
          ClubMembershipRequest's result maps (both select ou.email and both sit behind
          requireManageAccess): this is the first anonymous, unauthenticated endpoint to join
          oauth_users, so only its display_name/avatar_url columns are selected, aliased so the
          result map above cannot accidentally widen into any other oauth_users column. -->
     <select id="findPublicFeedByClubId" resultMap="PublicClubPostResultMap">
-        SELECT cp.id, cp.club_id, cp.title, cp.image_url, cp.pinned_at, cp.created_at,
-               ou.display_name AS author_display_name,
-               ou.avatar_url   AS author_avatar_url
+        SELECT <include refid="PublicPostColumnList" />
         FROM club_post cp
             JOIN oauth_users ou ON ou.uid = cp.author_oauth_user_id
         WHERE <include refid="FeedClause" />
@@ -74,6 +81,13 @@
                  cp.created_at DESC,
                  cp.id         DESC
         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="findPublicPostByIdAndClubId" resultMap="PublicClubPostResultMap">
+        SELECT <include refid="PublicPostColumnList" />
+        FROM club_post cp
+            JOIN oauth_users ou ON ou.uid = cp.author_oauth_user_id
+        WHERE cp.id = #{id} AND cp.club_id = #{clubId}
     </select>
 
     <insert id="insert" parameterType="com.example.demo.club.model.ClubPost"

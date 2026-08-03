@@ -1,5 +1,6 @@
 package com.example.demo.club.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -12,11 +13,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.club.model.Club;
-import com.example.demo.club.model.ClubPost;
+import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
 import com.example.demo.security.AuthenticatedUserResolver;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -105,28 +107,36 @@ class ClubPostControllerTest {
     }
 
     @Test
-    void publishSucceedsForAMemberAndReturnsTheCreatedPost() throws Exception {
+    void publishSucceedsForAMemberAndReturnsTheCreatedPostInTheSameSafeShapeAsTheFeed() throws Exception {
         Club club = new Club();
         club.setId(1L);
         club.setViewerIsMember(true);
         when(clubService.findById(eq(1L), any())).thenReturn(club);
         when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
-        ClubPost created = new ClubPost();
+        PublicClubPost created = new PublicClubPost();
         created.setId(9L);
         created.setClubId(1L);
-        created.setAuthorOauthUserId(42L);
         created.setTitle("Meeting recap");
         created.setImageUrl("/uploads/club-posts/uuid.jpg");
+        created.setCreatedAt(LocalDateTime.of(2024, 1, 1, 10, 0));
+        created.setAuthorDisplayName("Ada Lovelace");
+        created.setAuthorAvatarUrl("/uploads/avatar-cache/ada.jpg");
         when(clubPostService.publish(eq(1L), eq(42L), eq("Meeting recap"), any())).thenReturn(created);
 
-        mockMvc.perform(multipart("/api/clubs/1/posts")
+        String responseBody = mockMvc.perform(multipart("/api/clubs/1/posts")
                 .file(aPhoto())
                 .param("title", "Meeting recap")
                 .principal(oauthToken(MEMBER_EMAIL)))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").value(9))
             .andExpect(jsonPath("$.title").value("Meeting recap"))
-            .andExpect(jsonPath("$.imageUrl").value("/uploads/club-posts/uuid.jpg"));
+            .andExpect(jsonPath("$.imageUrl").value("/uploads/club-posts/uuid.jpg"))
+            .andExpect(jsonPath("$.createdAt").exists())
+            .andExpect(jsonPath("$.authorDisplayName").value("Ada Lovelace"))
+            .andExpect(jsonPath("$.authorAvatarUrl").value("/uploads/avatar-cache/ada.jpg"))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(responseBody).doesNotContain("authorOauthUserId");
     }
 
     @Test
@@ -180,6 +190,27 @@ class ClubPostControllerTest {
         when(clubService.findById(eq(1L), any())).thenReturn(club);
         when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
         when(clubPostService.publish(any(), any(), any(), any())).thenThrow(new IOException("disk full"));
+
+        mockMvc.perform(multipart("/api/clubs/1/posts")
+                .file(aPhoto())
+                .param("title", "Meeting recap")
+                .principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isInternalServerError());
+    }
+
+    // ClubPostService#publish throws IllegalStateException when its post-insert read-back
+    // cannot find the row it just inserted (the transaction has already rolled back and the
+    // file has already been cleaned up by then); the controller must still translate that into
+    // a 500, not let it escape as an unhandled exception.
+    @Test
+    void publishReturnsServerErrorWhenTheReadBackCannotFindTheRow() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setViewerIsMember(true);
+        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
+        when(clubPostService.publish(any(), any(), any(), any()))
+            .thenThrow(new IllegalStateException("Post 9 was not found immediately after being inserted"));
 
         mockMvc.perform(multipart("/api/clubs/1/posts")
                 .file(aPhoto())

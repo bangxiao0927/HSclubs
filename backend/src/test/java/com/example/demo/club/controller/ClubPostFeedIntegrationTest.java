@@ -1,11 +1,16 @@
 package com.example.demo.club.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.example.demo.club.mapper.ClubPostMapper;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -45,6 +50,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -70,6 +76,12 @@ class ClubPostFeedIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    // A spy, not a mock: every test except the one that explicitly stubs
+    // findPublicPostByIdAndClubId must keep going through the real mapper against the real H2
+    // database, since this class is proving full-stack behavior.
+    @MockitoSpyBean
+    private ClubPostMapper clubPostMapperSpy;
 
     @DynamicPropertySource
     static void uploadDir(DynamicPropertyRegistry registry) {
@@ -144,6 +156,65 @@ class ClubPostFeedIntegrationTest {
         byte[] storedBytes = Files.readAllBytes(storedFile);
         assertThat(storedBytes.length).isLessThan(400 * 1024);
         assertThat(containsApp1ExifMarker(storedBytes)).isFalse();
+    }
+
+    // The POST response must carry the same safe shape a GET feed item does: real DB-generated
+    // createdAt, the author's display name/avatar, and never the internal author_oauth_user_id
+    // -- not a bare echo of what the client sent.
+    @Test
+    void publishReturnsTheSameSafeShapeAndNonNullCreatedAtAsAFeedItem() throws Exception {
+        long clubId = createActiveClubWithAMember();
+
+        String responseBody = mockMvc.perform(multipart("/api/clubs/" + clubId + "/posts")
+                .file(new MockMultipartFile("file", "photo.jpg", "image/jpeg", tinyJpeg()))
+                .param("title", "Meeting recap")
+                .with(authentication(oauthToken(MEMBER_EMAIL))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.title").value("Meeting recap"))
+            .andExpect(jsonPath("$.createdAt").exists())
+            .andExpect(jsonPath("$.authorDisplayName").value("Ada Lovelace"))
+            .andExpect(jsonPath("$.authorAvatarUrl").value("/uploads/avatar-cache/ada.jpg"))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(responseBody).doesNotContain("authorOauthUserId");
+        assertThat(responseBody).doesNotContain("\"email\"");
+        assertThat(responseBody).doesNotContain("@example.com");
+    }
+
+    // Forces the read-back ClubPostService#publish performs immediately after insert() to fail
+    // (as if the row somehow could not be found), proving the whole publish is atomic: no row
+    // left committed in club_post, and no file left behind under club-posts/.
+    @Test
+    void publishLeavesNoOrphanedRowOrFileWhenTheReadBackFails() throws Exception {
+        long clubId = createActiveClubWithAMember();
+        Path clubPostsDir = uploadDir.resolve("club-posts");
+        long filesBefore = countRegularFiles(clubPostsDir);
+        int rowsBefore = countPostRows(clubId);
+
+        doReturn(null).when(clubPostMapperSpy).findPublicPostByIdAndClubId(any(), eq(clubId));
+
+        mockMvc.perform(multipart("/api/clubs/" + clubId + "/posts")
+                .file(new MockMultipartFile("file", "photo.jpg", "image/jpeg", tinyJpeg()))
+                .param("title", "Meeting recap")
+                .with(authentication(oauthToken(MEMBER_EMAIL))))
+            .andExpect(status().is5xxServerError());
+
+        assertThat(countPostRows(clubId)).isEqualTo(rowsBefore);
+        assertThat(countRegularFiles(clubPostsDir)).isEqualTo(filesBefore);
+    }
+
+    private int countPostRows(long clubId) {
+        return jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM club_post WHERE club_id = ?", Integer.class, clubId);
+    }
+
+    private static long countRegularFiles(Path directory) throws Exception {
+        if (!Files.isDirectory(directory)) {
+            return 0L;
+        }
+        try (var entries = Files.list(directory)) {
+            return entries.filter(Files::isRegularFile).count();
+        }
     }
 
     @Test

@@ -2,7 +2,7 @@ package com.example.demo.club.controller;
 
 import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.club.model.Club;
-import com.example.demo.club.model.ClubPost;
+import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
 import com.example.demo.security.AuthenticatedUserResolver;
@@ -47,10 +47,10 @@ public class ClubPostController {
 
     @PostMapping("/{clubSlugOrId}/posts")
     @ResponseStatus(HttpStatus.CREATED)
-    public ClubPost publish(@PathVariable String clubSlugOrId,
-                            @RequestParam("title") String title,
-                            @RequestParam("file") MultipartFile file,
-                            Authentication authentication) {
+    public PublicClubPost publish(@PathVariable String clubSlugOrId,
+                                   @RequestParam("title") String title,
+                                   @RequestParam("file") MultipartFile file,
+                                   Authentication authentication) {
         String viewerEmail = authenticatedUserResolver.requireEmail(authentication);
         Club club = resolveClub(clubSlugOrId, viewerEmail);
         if (club == null) {
@@ -67,6 +67,11 @@ public class ClubPostController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store file");
+        } catch (IllegalStateException e) {
+            // The read-back immediately after insert() could not find the row (see
+            // ClubPostService#publish); the transaction has already been rolled back and the
+            // file cleaned up, so this is a genuine, if unexpected, server-side failure.
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to publish post");
         }
     }
 

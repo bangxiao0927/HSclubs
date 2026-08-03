@@ -311,6 +311,37 @@ class ClubPostMapperTest {
         assertThat(feed).hasSize(count);
     }
 
+    // The read-back ClubPostService#publish uses to return the same safe shape a feed item
+    // has: author display name/avatar, no author_oauth_user_id -- sharing PublicPostColumnList
+    // with findPublicFeedByClubId so the two can never present a different shape for the same
+    // post.
+    @Test
+    void findPublicPostByIdAndClubIdReturnsTheSameSafeShapeAsTheFeed() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+
+        PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 1L);
+
+        assertThat(post).isNotNull();
+        assertThat(post.getId()).isEqualTo(1L);
+        assertThat(post.getTitle()).isEqualTo("Post 1");
+        assertThat(post.getImageUrl()).isEqualTo("/uploads/club-posts/1.jpg");
+        assertThat(post.getCreatedAt()).isNotNull();
+        assertThat(post.getAuthorDisplayName()).isEqualTo("Ada Lovelace");
+        assertThat(post.getAuthorAvatarUrl()).isEqualTo("/uploads/avatar-cache/ada.jpg");
+    }
+
+    // Scoped to the club: a post ID that exists but under a different club must not read back,
+    // the same guard the mapper already applies everywhere else a post is looked up by ID.
+    @Test
+    void findPublicPostByIdAndClubIdReturnsNullForAMismatchedClubId() {
+        jdbcTemplate.update("INSERT INTO clubs (id, name) VALUES (2, 'Robotics')");
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+
+        PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 2L);
+
+        assertThat(post).isNull();
+    }
+
     private void insertPost(long id, long clubId, String createdAt, String pinnedAt) {
         jdbcTemplate.update(
             "INSERT INTO club_post (id, club_id, author_oauth_user_id, title, image_url, created_at, pinned_at) "
