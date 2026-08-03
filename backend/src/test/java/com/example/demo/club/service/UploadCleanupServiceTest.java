@@ -77,6 +77,42 @@ class UploadCleanupServiceTest {
         assertThat(Files.exists(nestedOrphan)).isFalse();
     }
 
+    // The upload root also holds completely unrelated subsystems -- notably
+    // avatar-cache/instagram/, managed by InstagramAvatarCacheService -- that must never be
+    // touched by a recursive walk scoped to club images. Cleanup only ever owns legacy flat
+    // files directly under the upload root plus anything under club-posts/.
+    @Test
+    void doesNotDeleteFilesUnderAvatarCacheOrOtherUnrelatedSubdirectories() throws Exception {
+        Path avatarCacheFile = ageFile(uploadDir.resolve("avatar-cache").resolve("instagram").resolve("someclub.jpg"));
+
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findAllRegardlessOfStatus()).thenReturn(List.of());
+        ClubPostMapper clubPostMapper = mock(ClubPostMapper.class);
+        when(clubPostMapper.findAllImageUrls()).thenReturn(List.of());
+
+        UploadCleanupService service = new UploadCleanupService(clubMapper, clubPostMapper, uploadDir.toString());
+
+        service.cleanOrphanedUploads();
+
+        assertThat(Files.exists(avatarCacheFile)).isTrue();
+    }
+
+    @Test
+    void stillReclaimsALegacyFlatOrphanDirectlyUnderTheUploadRoot() throws Exception {
+        Path legacyOrphan = ageFile(uploadDir.resolve("legacy-orphan.png"));
+
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findAllRegardlessOfStatus()).thenReturn(List.of());
+        ClubPostMapper clubPostMapper = mock(ClubPostMapper.class);
+        when(clubPostMapper.findAllImageUrls()).thenReturn(List.of());
+
+        UploadCleanupService service = new UploadCleanupService(clubMapper, clubPostMapper, uploadDir.toString());
+
+        service.cleanOrphanedUploads();
+
+        assertThat(Files.exists(legacyOrphan)).isFalse();
+    }
+
     // Guards the race in the issue: a file can land on disk moments before its row commits, so
     // a cleanup pass that lists files and then queries the database could still observe it as
     // unreferenced in between. A file modified within the grace period is left alone even if it

@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,6 +32,13 @@ public class UploadCleanupService {
     private static final Logger log = LoggerFactory.getLogger(UploadCleanupService.class);
 
     private static final String UPLOADS_URL_PREFIX = "/uploads/";
+
+    // Cleanup is scoped to exactly what this service is allowed to own: legacy flat files
+    // written directly under the upload root by the old (pre-ImageStorageService) controller,
+    // plus anything under club-posts/. A blanket recursive walk of the whole upload root would
+    // also sweep up completely unrelated subsystems that happen to live under the same root,
+    // notably avatar-cache/instagram/ (InstagramAvatarCacheService).
+    private static final String CLUB_POSTS_SUBDIRECTORY = "club-posts";
 
     // Files must be at least this old to be reclaimed. A file can land on disk moments before
     // its row commits; listing files before querying the database (below) already narrows that
@@ -61,7 +69,7 @@ public class UploadCleanupService {
         // List before querying the database, so a file written moments ago -- whose row may
         // not have committed yet -- is at least as likely to already be missing from this
         // snapshot as it is to be missing from the referenced set queried next.
-        List<Path> candidateFiles = listRegularFilesRecursively();
+        List<Path> candidateFiles = listCandidateFiles();
         Set<String> referencedRelativePaths = collectReferencedRelativePaths();
         Instant cutoff = Instant.now().minus(MINIMUM_ORPHAN_AGE);
 
@@ -83,11 +91,30 @@ public class UploadCleanupService {
             referencedRelativePaths.size(), deletedCount);
     }
 
-    private List<Path> listRegularFilesRecursively() {
-        try (Stream<Path> walk = Files.walk(uploadDir)) {
-            return walk.filter(Files::isRegularFile).collect(Collectors.toList());
+    private List<Path> listCandidateFiles() {
+        List<Path> candidates = new ArrayList<>(listLegacyFlatFiles());
+        candidates.addAll(listClubPostFiles());
+        return candidates;
+    }
+
+    private List<Path> listLegacyFlatFiles() {
+        try (Stream<Path> topLevel = Files.list(uploadDir)) {
+            return topLevel.filter(Files::isRegularFile).collect(Collectors.toList());
         } catch (IOException e) {
             log.error("Failed to list upload directory for cleanup", e);
+            return List.of();
+        }
+    }
+
+    private List<Path> listClubPostFiles() {
+        Path clubPostsDir = uploadDir.resolve(CLUB_POSTS_SUBDIRECTORY);
+        if (!Files.isDirectory(clubPostsDir)) {
+            return List.of();
+        }
+        try (Stream<Path> walk = Files.walk(clubPostsDir)) {
+            return walk.filter(Files::isRegularFile).collect(Collectors.toList());
+        } catch (IOException e) {
+            log.error("Failed to list club-posts directory for cleanup", e);
             return List.of();
         }
     }

@@ -56,6 +56,28 @@ class ImageStorageServiceTest {
         assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
     }
 
+    // A magic-byte prefix is enough for ImageIO to pick a candidate reader, but the reader then
+    // throws IOException trying to actually parse the (truncated) header -- e.g. real-world
+    // partial uploads from a dropped connection. That must surface as a readable 400, not an
+    // IllegalArgumentException-shaped IOException wrapper that becomes an uncaught 500.
+    @Test
+    void rejectsATruncatedPngWithAReadableErrorInsteadOfAServerError() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] truncatedPng = Arrays.copyOf(solidColorPng(50, 50, Color.RED, false), 20);
+        MockMultipartFile file = new MockMultipartFile("file", "truncated.png", "image/png", truncatedPng);
+
+        assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsATruncatedJpegWithAReadableErrorInsteadOfAServerError() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] truncatedJpeg = Arrays.copyOf(solidColorJpeg(50, 50, Color.RED), 50);
+        MockMultipartFile file = new MockMultipartFile("file", "truncated.jpg", "image/jpeg", truncatedJpeg);
+
+        assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test
     void storesAJpegUploadAsAJpegFile() throws IOException {
         ImageStorageService service = service(uploadDir);
@@ -226,6 +248,58 @@ class ImageStorageServiceTest {
 
         assertThat(Files.exists(outsideFile)).isTrue();
         Files.deleteIfExists(outsideFile);
+    }
+
+    // imageUrl is not fully trusted input: it is read back from a club's stored image_url,
+    // which a club admin can set to an arbitrary string through the general club-update
+    // endpoint (not just through this service's own store()). delete() must therefore only
+    // ever touch filenames matching what store() itself could have produced -- a UUID name
+    // under club-posts/, or a legacy flat UUID name directly under the upload root -- never an
+    // arbitrary path elsewhere under uploadDir.
+    @Test
+    void deleteRemovesALegacyFlatUuidNamedImageDirectlyUnderTheUploadRoot() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        Path legacyFile = uploadDir.resolve("3fa85f64-5717-4562-b3fc-2c963f66afa6.png");
+        Files.write(legacyFile, new byte[] {1, 2, 3});
+
+        service.delete("/uploads/3fa85f64-5717-4562-b3fc-2c963f66afa6.png");
+
+        assertThat(Files.exists(legacyFile)).isFalse();
+    }
+
+    @Test
+    void deleteDoesNotTouchFilesUnderAvatarCacheEvenIfNamedLikeAStoredImage() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        Path avatarCacheFile = uploadDir.resolve("avatar-cache").resolve("instagram").resolve("someclub.jpg");
+        Files.createDirectories(avatarCacheFile.getParent());
+        Files.write(avatarCacheFile, new byte[] {1, 2, 3});
+
+        service.delete("/uploads/avatar-cache/instagram/someclub.jpg");
+
+        assertThat(Files.exists(avatarCacheFile)).isTrue();
+    }
+
+    @Test
+    void deleteDoesNotTouchAFileUnderClubPostsWithANonGeneratedName() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        Path suspiciousFile = uploadDir.resolve("club-posts").resolve("not-a-generated-name.jpg");
+        Files.createDirectories(suspiciousFile.getParent());
+        Files.write(suspiciousFile, new byte[] {1, 2, 3});
+
+        service.delete("/uploads/club-posts/not-a-generated-name.jpg");
+
+        assertThat(Files.exists(suspiciousFile)).isTrue();
+    }
+
+    @Test
+    void deleteDoesNotTouchAFileDirectlyUnderTheUploadRootWithANonUuidName() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        Path suspiciousFile = uploadDir.resolve("not-a-uuid.png");
+        Files.write(suspiciousFile, new byte[] {1, 2, 3});
+
+        service.delete("/uploads/not-a-uuid.png");
+
+        assertThat(Files.exists(suspiciousFile)).isTrue();
     }
 
     private Path pathFor(String imageUrl) {

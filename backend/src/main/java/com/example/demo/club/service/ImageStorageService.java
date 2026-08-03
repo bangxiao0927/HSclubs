@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Iterator;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import java.util.UUID;
 
 /**
@@ -49,6 +50,24 @@ public class ImageStorageService {
     private static final long MAX_PIXELS = 50_000_000L;
     private static final int MAX_DIMENSION = 1600;
     private static final float JPEG_QUALITY = 0.82f;
+
+    // A UUID (as produced by UUID.randomUUID()) followed by an extension store() could have
+    // written: ".jpg"/".gif" under club-posts/, since that is all store() has ever produced;
+    // the wider extension set for the flat legacy pattern below matches what the pre-
+    // ImageStorageService controller used to write (jpg/jpeg/png/webp/gif).
+    private static final String UUID_PATTERN =
+        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+
+    // imageUrl passed to delete() is not fully trusted: it is read back from a club's stored
+    // image_url, which can be set to an arbitrary string through the general club-update
+    // endpoint, not only through this service's own store(). Restricting deletable relative
+    // paths to exactly what store() itself could have produced -- and nothing else under
+    // uploadDir, e.g. avatar-cache/ (a completely different subsystem) -- is what keeps that
+    // caller-controlled string from being usable to delete arbitrary files.
+    private static final Pattern GENERATED_CLUB_POST_IMAGE_PATH = Pattern.compile(
+        "^" + IMAGE_SUBDIRECTORY + "/" + UUID_PATTERN + "\\.(?:jpg|gif)$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEGACY_FLAT_IMAGE_PATH = Pattern.compile(
+        "^" + UUID_PATTERN + "\\.(?:jpg|jpeg|png|webp|gif)$", Pattern.CASE_INSENSITIVE);
 
     private final Path uploadDir;
     private final Path imageDirectory;
@@ -116,6 +135,9 @@ public class ImageStorageService {
             return;
         }
         String relativePath = imageUrl.substring(UPLOADS_URL_PREFIX.length());
+        if (!isDeletableRelativePath(relativePath)) {
+            return;
+        }
         Path target = uploadDir.resolve(relativePath).normalize();
         if (!target.startsWith(uploadDir)) {
             return;
@@ -125,6 +147,11 @@ public class ImageStorageService {
         } catch (IOException ignored) {
             // Best-effort cleanup; UploadCleanupService reclaims orphans left behind overnight.
         }
+    }
+
+    private static boolean isDeletableRelativePath(String relativePath) {
+        return GENERATED_CLUB_POST_IMAGE_PATH.matcher(relativePath).matches()
+            || LEGACY_FLAT_IMAGE_PATH.matcher(relativePath).matches();
     }
 
     private void validateSize(ImageFormat format, int byteLength) {
@@ -153,7 +180,9 @@ public class ImageStorageService {
                 reader.dispose();
             }
         } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            // A magic-byte prefix is enough to pick a candidate reader; a corrupt or truncated
+            // body is a bad *upload*, not a server failure, so this must be a 400, not a 500.
+            throw new IllegalArgumentException("Unreadable or corrupt image", e);
         }
     }
 
@@ -174,7 +203,11 @@ public class ImageStorageService {
                 reader.dispose();
             }
         } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            // A truncated/corrupt file can pass the magic-byte sniff above but still throw here
+            // when the reader actually tries to parse the header (e.g. IIOException "I/O error
+            // reading PNG header" or "JFIF not permitted in stream metadata" for a cut-off
+            // JPEG). That is bad client input, not a server failure -- a 400, not a 500.
+            throw new IllegalArgumentException("Unreadable or corrupt image", e);
         }
     }
 

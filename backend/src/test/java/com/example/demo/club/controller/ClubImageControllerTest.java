@@ -99,6 +99,26 @@ class ClubImageControllerTest {
             .andExpect(jsonPath("$.imageUrl").value("/uploads/club-posts/generated-uuid.jpg"));
     }
 
+    // Regression coverage for the controller side of the corrupt/truncated-image fix:
+    // ImageStorageService.store() rejects unreadable images with IllegalArgumentException (see
+    // ImageStorageServiceTest's truncated PNG/JPEG cases), and the controller must translate
+    // that into a 400, never let it escape as an uncaught 500.
+    @Test
+    void uploadImageReturnsBadRequestWhenTheServiceRejectsAnUnreadableFile() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(imageStorageService.store(any())).thenThrow(new IllegalArgumentException("Unreadable image"));
+
+        MockMultipartFile file = realPngFile();
+
+        mockMvc.perform(multipart("/api/clubs/1/image")
+                .file(file)
+                .principal(oauthToken(OWNER_EMAIL)))
+            .andExpect(status().isBadRequest());
+    }
+
     private static MockMultipartFile realPngFile() throws IOException {
         BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
         image.setRGB(0, 0, 0x00FF00);
