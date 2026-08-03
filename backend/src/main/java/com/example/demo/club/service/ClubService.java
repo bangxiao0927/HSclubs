@@ -6,6 +6,7 @@ import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubMemberView;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.model.ViewerMembershipStatus;
+import com.example.demo.common.PaginationClamps;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +27,6 @@ public class ClubService {
         "Competition & Strategy"
     );
     private static final Set<String> ALLOWED_MEMBER_ROLES = Set.of("member", "president");
-    private static final int MAX_PAGE_SIZE = 100;
 
     private final ClubMapper clubMapper;
     private final OAuthUserMapper oAuthUserMapper;
@@ -43,15 +43,15 @@ public class ClubService {
     }
 
     public List<Club> findAllPaginated(int page, int size) {
-        int limit = clampPageSize(size);
-        int offset = clampOffset(page, limit);
+        int limit = PaginationClamps.clampPageSize(size);
+        int offset = PaginationClamps.clampOffset(page, limit);
         return clubMapper.findAllPaginated(offset, limit);
     }
 
     public List<Club> search(String name, String category, String alias,
                              String advisor, String query, int page, int size) {
-        int limit = clampPageSize(size);
-        int offset = clampOffset(page, limit);
+        int limit = PaginationClamps.clampPageSize(size);
+        int offset = PaginationClamps.clampOffset(page, limit);
         return clubMapper.search(
             cleanSearchTerm(name),
             cleanSearchTerm(category),
@@ -123,6 +123,16 @@ public class ClubService {
         clubMapper.update(club);
         // Same reasoning as create(): member_count is never written by this update, so
         // re-fetch instead of returning the caller-supplied (and now stale) `club`.
+        return clubMapper.findById(id);
+    }
+
+    // The only path allowed to change a club's stored image URL: called from the dedicated,
+    // authenticated upload flow in ClubImageController, never from the general club-editing
+    // update() above. update() intentionally does not write image_url at all (see
+    // ClubMapper.xml), so a caller-supplied imageUrl in an ordinary PUT body can never reach
+    // the database through it.
+    public Club updateImageUrl(Long id, String imageUrl) {
+        clubMapper.updateImageUrl(id, imageUrl);
         return clubMapper.findById(id);
     }
 
@@ -283,17 +293,6 @@ public class ClubService {
 
     private String cleanSearchTerm(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
-    }
-
-    private int clampPageSize(int size) {
-        return Math.max(1, Math.min(size, MAX_PAGE_SIZE));
-    }
-
-    // Uses long arithmetic so a huge page number can't wrap around into a negative int offset,
-    // and clamps to Integer.MAX_VALUE (the widest legal offset) rather than overflowing.
-    private int clampOffset(int page, int limit) {
-        long offset = (long) Math.max(0, page) * limit;
-        return (int) Math.min(offset, Integer.MAX_VALUE);
     }
 
     private String normalizeMemberRole(String roleName) {

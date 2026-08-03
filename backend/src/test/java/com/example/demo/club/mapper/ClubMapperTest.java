@@ -162,4 +162,41 @@ class ClubMapperTest {
         assertThat(rawColumnValue).isEqualTo(0);
         assertThat(clubMapper.findById(club.getId()).getMemberCount()).isEqualTo(0);
     }
+
+    // image_url is only ever supposed to change through the dedicated, authenticated image
+    // upload path (ClubImageController -> ClubService#updateImageUrl -> updateImageUrl below),
+    // never through the general club-editing form. A club manager could otherwise set their
+    // own club's imageUrl in a PUT /api/clubs/{id} body to another club's real, guessable
+    // /uploads/club-posts/<uuid>.jpg path and have it silently adopted.
+    @Test
+    void updateIgnoresAClientSuppliedImageUrlInsteadOfOverwritingTheStoredValue() {
+        jdbcTemplate.update(
+            "INSERT INTO clubs (id, name, category, status, image_url) "
+                + "VALUES (1, 'Chess Club', 'Competition & Strategy', 'active', '/uploads/club-posts/original-uuid.jpg')");
+
+        Club update = clubMapper.findById(1L);
+        update.setName("Chess Club (renamed)");
+        // Simulates a manager's PUT body naming another club's real image path; update() must
+        // not let this reach the image_url column at all.
+        update.setImageUrl("/uploads/club-posts/attacker-guessed-uuid.jpg");
+
+        clubMapper.update(update);
+
+        Club reloaded = clubMapper.findById(1L);
+        assertThat(reloaded.getName()).isEqualTo("Chess Club (renamed)");
+        assertThat(reloaded.getImageUrl()).isEqualTo("/uploads/club-posts/original-uuid.jpg");
+    }
+
+    @Test
+    void updateImageUrlChangesOnlyTheImageUrlColumn() {
+        jdbcTemplate.update(
+            "INSERT INTO clubs (id, name, category, status, image_url) "
+                + "VALUES (1, 'Chess Club', 'Competition & Strategy', 'active', '/uploads/club-posts/original-uuid.jpg')");
+
+        clubMapper.updateImageUrl(1L, "/uploads/club-posts/new-uuid.jpg");
+
+        Club reloaded = clubMapper.findById(1L);
+        assertThat(reloaded.getImageUrl()).isEqualTo("/uploads/club-posts/new-uuid.jpg");
+        assertThat(reloaded.getName()).isEqualTo("Chess Club");
+    }
 }

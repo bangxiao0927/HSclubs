@@ -1,6 +1,11 @@
 server:
   address: 127.0.0.1
   port: 8080
+  # At the 2MB default, Tomcat aborts the connection on an oversize upload rather than
+  # delivering the error body, so the client sees a network error instead of the readable 400
+  # ImageStorageService produces. This must exceed multipart.max-request-size below.
+  tomcat:
+    max-swallow-size: 10MB
   servlet:
     session:
       timeout: 7d
@@ -76,6 +81,15 @@ app:
 spring:
   config:
     import: optional:file:.env[.properties]
+  servlet:
+    multipart:
+      # Must sit above ImageStorageService's application-level 5MB image limit -- if they were
+      # equal, Tomcat would reject an oversized upload before that readable 400 is ever reached,
+      # turning it into dead code. max-request-size leaves headroom for the multipart form's
+      # other fields alongside the file itself. The 1MB Spring Boot default is what let uploads
+      # between 1MB and the application limit fail with a 500 instead of that 400.
+      max-file-size: 6MB
+      max-request-size: 8MB
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/mydb?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}
     username: ${DB_USERNAME:root}
