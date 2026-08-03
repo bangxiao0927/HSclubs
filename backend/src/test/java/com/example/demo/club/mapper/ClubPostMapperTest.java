@@ -345,6 +345,29 @@ class ClubPostMapperTest {
         assertThat(clubPostMapper.findPublicCommentByIdAndPostId(1L, 2L)).isNull();
     }
 
+    // Mirrors findPublicPostByIdAndClubIdReturnsAnUnambiguousInstantRegardlessOfTheJvmDefaultTimeZone:
+    // PublicClubPostComment#createdAt is on the same UNIX_TIMESTAMP/EpochSecondsInstantTypeHandler
+    // contract as PublicClubPost#createdAt, so it must round-trip to the correct instant under a
+    // forced, non-UTC JVM default zone too.
+    @Test
+    void findPublicCommentByIdAndPostIdReturnsAnUnambiguousInstantRegardlessOfTheJvmDefaultTimeZone() {
+        TimeZone originalDefault = TimeZone.getDefault();
+        TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"));
+        try {
+            insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+            insertCommentAt(1L, 1L, "Great photo!", "2024-01-01 11:30:00");
+
+            PublicClubPostComment comment = clubPostMapper.findPublicCommentByIdAndPostId(1L, 1L);
+
+            Instant expected = LocalDateTime.of(2024, 1, 1, 11, 30)
+                .atZone(ZoneId.of("America/Los_Angeles"))
+                .toInstant();
+            assertThat(comment.getCreatedAt()).isEqualTo(expected);
+        } finally {
+            TimeZone.setDefault(originalDefault);
+        }
+    }
+
     @Test
     void findAllImageUrlsReturnsEveryPostsImageUrlAcrossClubs() {
         jdbcTemplate.update("INSERT INTO clubs (id, name) VALUES (2, 'Robotics')");

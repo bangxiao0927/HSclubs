@@ -26,7 +26,7 @@ import com.example.demo.club.service.ClubService;
 import com.example.demo.club.service.ClubVisibilityPolicy;
 import com.example.demo.club.service.CommentLimitExceededException;
 import com.example.demo.security.AuthenticatedUserResolver;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -220,7 +220,7 @@ class ClubPostCommentControllerTest {
         PublicClubPostComment created = new PublicClubPostComment();
         created.setId(5L);
         created.setBody("Nice!");
-        created.setCreatedAt(LocalDateTime.of(2024, 1, 1, 10, 0));
+        created.setCreatedAt(Instant.parse("2024-01-01T10:00:00Z"));
         created.setAuthorDisplayName("Ada Lovelace");
         when(clubPostCommentService.create(1L, 9L, 42L, "Nice!")).thenReturn(created);
 
@@ -231,6 +231,7 @@ class ClubPostCommentControllerTest {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").value(5))
             .andExpect(jsonPath("$.body").value("Nice!"))
+            .andExpect(jsonPath("$.createdAt").value("2024-01-01T10:00:00Z"))
             .andExpect(jsonPath("$.authorDisplayName").value("Ada Lovelace"))
             .andReturn().getResponse().getContentAsString();
 

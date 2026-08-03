@@ -154,17 +154,13 @@ const relativeTimeDivisions: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ['second', 1],
 ]
 
-// post.createdAt is a java.time.Instant on the backend (see PublicClubPost's Javadoc), always
-// serialized with an explicit UTC offset (a trailing "Z"). comment.createdAt is not: #79's
-// PublicClubPostComment still carries a plain LocalDateTime, the same timezone-naive shape
-// post.createdAt used to have before that fix. Until a future ticket gives comments the same
-// Instant contract, assume UTC for whatever string arrives without an explicit offset -- the
-// same fallback previously used for posts, kept only because comments still need it.
-const hasExplicitTimezoneOffset = /(Z|[+-]\d{2}:\d{2})$/i
-const toUtcDate = (iso: string) => new Date(hasExplicitTimezoneOffset.test(iso) ? iso : `${iso}Z`)
-
+// Both post.createdAt and comment.createdAt are java.time.Instant on the backend (see
+// PublicClubPost's and PublicClubPostComment's Javadoc), always serialized with an explicit
+// UTC offset (a trailing "Z"). That contract is what makes a plain `new Date(iso)` safe here:
+// there is no ambiguous, offset-less wall-clock string left for a browser to misparse as its
+// own local time.
 const formatRelativeTime = (iso: string) => {
-  const date = toUtcDate(iso)
+  const date = new Date(iso)
   if (Number.isNaN(date.getTime())) {
     return ''
   }

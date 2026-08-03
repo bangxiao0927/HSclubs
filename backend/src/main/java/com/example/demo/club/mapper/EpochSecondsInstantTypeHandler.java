@@ -23,9 +23,11 @@ import java.time.Instant;
  * round-trips the same way using the JVM's own default zone for both {@code CURRENT_TIMESTAMP}
  * and {@code UNIX_TIMESTAMP}, so this is correct there too without any test-only special-casing.
  *
- * <p>Only bound explicitly on {@code PublicClubPost#createdAt} (see the {@code typeHandler}
- * attribute on that one {@code <result>} mapping) rather than registered globally, so every
- * other {@code LocalDateTime}-mapped timestamp in this codebase is untouched.
+ * <p>Only bound explicitly on {@code PublicClubPost#createdAt} and
+ * {@code PublicClubPostComment#createdAt} (see the {@code typeHandler} attribute on those two
+ * {@code <result>} mappings) rather than registered globally, so every other
+ * {@code LocalDateTime}-mapped timestamp in this codebase -- including the internal
+ * {@code ClubPost}/{@code ClubPostComment} models these two DTOs project from -- is untouched.
  */
 @MappedTypes(Instant.class)
 public class EpochSecondsInstantTypeHandler extends BaseTypeHandler<Instant> {

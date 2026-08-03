@@ -1,6 +1,6 @@
 package com.example.demo.club.model;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * Public projection of a {@link ClubPostComment} for the anonymous, unauthenticated comments
@@ -9,13 +9,20 @@ import java.time.LocalDateTime;
  * {@code author_oauth_user_id}, {@code provider}, {@code provider_user_id}, {@code role},
  * {@code accepted_terms_at}, the user's {@code created_at}/{@code last_login_at}, or
  * {@code graduation_year}.
+ *
+ * <p>{@code createdAt} is an {@link Instant}, mirroring {@link PublicClubPost#getCreatedAt()}:
+ * this is the other timestamp this API exposes to anonymous, possibly cross-timezone callers,
+ * so it is serialized as an unambiguous, offset-bearing instant rather than the timezone-naive
+ * {@link java.time.LocalDateTime} {@link ClubPostComment#getCreatedAt()} still uses internally.
+ * See {@code EpochSecondsInstantTypeHandler} for how the mapper populates it correctly
+ * regardless of the JDBC driver's own timezone conversion.
  */
 public class PublicClubPostComment {
 
     private Long id;
     private Long postId;
     private String body;
-    private LocalDateTime createdAt;
+    private Instant createdAt;
     private String authorDisplayName;
     private String authorAvatarUrl;
 
@@ -43,11 +50,11 @@ public class PublicClubPostComment {
         this.body = body;
     }
 
-    public LocalDateTime getCreatedAt() {
+    public Instant getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
+    public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
     }
 
