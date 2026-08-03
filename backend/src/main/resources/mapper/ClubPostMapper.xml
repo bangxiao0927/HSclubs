@@ -19,6 +19,12 @@
         id, club_id, author_oauth_user_id, title, image_url, pinned_at, pinned_by_oauth_user_id, created_at
     </sql>
 
+    <!-- Shared by findFeedByClubId, findPublicFeedByClubId, and countFeedByClubId so the count
+         can never disagree with either items query about which rows are "this club's feed". -->
+    <sql id="FeedClause">
+        club_id = #{clubId}
+    </sql>
+
     <!-- The CASE WHEN form is required over "(pinned_at IS NOT NULL) DESC": that expression is
          1/0 in MySQL but BOOLEAN in H2 MODE=MySQL, an engine-dependent difference this repo has
          already been bitten by (see schema.sql's achievements CLOB-vs-JSON comment). The
@@ -28,7 +34,7 @@
     <select id="findFeedByClubId" resultMap="ClubPostResultMap">
         SELECT <include refid="PostColumnList" />
         FROM club_post
-        WHERE club_id = #{clubId}
+        WHERE <include refid="FeedClause" />
         ORDER BY CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC,
                  pinned_at  DESC,
                  created_at DESC,
@@ -37,7 +43,37 @@
     </select>
 
     <select id="countFeedByClubId" resultType="int">
-        SELECT COUNT(*) FROM club_post WHERE club_id = #{clubId}
+        SELECT COUNT(*) FROM club_post WHERE <include refid="FeedClause" />
+    </select>
+
+    <resultMap id="PublicClubPostResultMap" type="com.example.demo.club.model.PublicClubPost">
+        <id column="id" property="id" />
+        <result column="club_id" property="clubId" />
+        <result column="title" property="title" />
+        <result column="image_url" property="imageUrl" />
+        <result column="pinned_at" property="pinnedAt" />
+        <result column="created_at" property="createdAt" />
+        <result column="author_display_name" property="authorDisplayName" />
+        <result column="author_avatar_url" property="authorAvatarUrl" />
+    </resultMap>
+
+    <!-- Deliberately not a wildcard select and not a reuse of ClubMemberView's/
+         ClubMembershipRequest's result maps (both select ou.email and both sit behind
+         requireManageAccess): this is the first anonymous, unauthenticated endpoint to join
+         oauth_users, so only its display_name/avatar_url columns are selected, aliased so the
+         result map above cannot accidentally widen into any other oauth_users column. -->
+    <select id="findPublicFeedByClubId" resultMap="PublicClubPostResultMap">
+        SELECT cp.id, cp.club_id, cp.title, cp.image_url, cp.pinned_at, cp.created_at,
+               ou.display_name AS author_display_name,
+               ou.avatar_url   AS author_avatar_url
+        FROM club_post cp
+            JOIN oauth_users ou ON ou.uid = cp.author_oauth_user_id
+        WHERE <include refid="FeedClause" />
+        ORDER BY CASE WHEN cp.pinned_at IS NULL THEN 1 ELSE 0 END ASC,
+                 cp.pinned_at  DESC,
+                 cp.created_at DESC,
+                 cp.id         DESC
+        LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <insert id="insert" parameterType="com.example.demo.club.model.ClubPost"

@@ -73,6 +73,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/clubs").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/clubs/calendar").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/clubs/*").permitAll()
+                // Club media feed (#78): "/api/clubs/*" above does not span path segments, so
+                // it does not cover this. Deliberately its own matcher, not added to
+                // PUBLIC_READ_ONLY_CORS_PATTERNS below -- see that list's Javadoc.
+                .requestMatchers(HttpMethod.GET, "/api/clubs/*/posts").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/avatars/instagram/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/summary").permitAll()
                 // Everything else under /api requires authentication

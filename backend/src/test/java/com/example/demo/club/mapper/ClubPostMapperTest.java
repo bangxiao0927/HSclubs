@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.ClubPostComment;
+import com.example.demo.club.model.PublicClubPost;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,10 @@ class ClubPostMapperTest {
             CREATE TABLE oauth_users (
                 uid BIGINT PRIMARY KEY AUTO_INCREMENT,
                 provider VARCHAR(50) NOT NULL,
-                provider_user_id VARCHAR(150) NOT NULL
+                provider_user_id VARCHAR(150) NOT NULL,
+                email VARCHAR(200),
+                display_name VARCHAR(200),
+                avatar_url VARCHAR(500)
             )
             """);
         jdbcTemplate.execute("""
@@ -69,7 +73,9 @@ class ClubPostMapperTest {
             )
             """);
 
-        jdbcTemplate.update("INSERT INTO oauth_users (uid, provider, provider_user_id) VALUES (1, 'google', 'g-1')");
+        jdbcTemplate.update(
+            "INSERT INTO oauth_users (uid, provider, provider_user_id, email, display_name, avatar_url) "
+                + "VALUES (1, 'google', 'g-1', 'student1@example.com', 'Ada Lovelace', '/uploads/avatar-cache/ada.jpg')");
         jdbcTemplate.update("INSERT INTO clubs (id, name) VALUES (1, 'Chess Club')");
     }
 
@@ -256,6 +262,53 @@ class ClubPostMapperTest {
 
         assertThat(clubPostMapper.findAllImageUrls())
             .containsExactlyInAnyOrder("/uploads/club-posts/1.jpg", "/uploads/club-posts/2.jpg");
+    }
+
+    @Test
+    void findPublicFeedByClubIdIncludesAuthorDisplayNameAndAvatarUrl() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+
+        List<PublicClubPost> feed = clubPostMapper.findPublicFeedByClubId(1L, 0, 10);
+
+        assertThat(feed).singleElement().satisfies(post -> {
+            assertThat(post.getId()).isEqualTo(1L);
+            assertThat(post.getTitle()).isEqualTo("Post 1");
+            assertThat(post.getImageUrl()).isEqualTo("/uploads/club-posts/1.jpg");
+            assertThat(post.getAuthorDisplayName()).isEqualTo("Ada Lovelace");
+            assertThat(post.getAuthorAvatarUrl()).isEqualTo("/uploads/avatar-cache/ada.jpg");
+        });
+    }
+
+    // Same ordering contract as findFeedByClubId: pinned posts first (by pinned_at DESC), then
+    // created_at DESC, with id DESC as the same-created_at tiebreaker. Exercised here too
+    // because the public projection is a separate SQL statement, not a reuse of the internal one.
+    @Test
+    void findPublicFeedByClubIdSortsPinnedPostsFirstAndExactlyOnce() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertPost(2L, 1L, "2023-01-01 10:00:00", "2024-06-01 00:00:00");
+        insertPost(3L, 1L, "2024-01-02 10:00:00", null);
+
+        List<PublicClubPost> feed = clubPostMapper.findPublicFeedByClubId(1L, 0, 10);
+
+        assertThat(feed).extracting(PublicClubPost::getId).containsExactly(2L, 3L, 1L);
+        assertThat(feed).extracting(PublicClubPost::getId).doesNotHaveDuplicates();
+    }
+
+    // countFeedByClubId and findPublicFeedByClubId both include the shared FeedClause SQL
+    // fragment (WHERE club_id = #{clubId}), so this asserts they can never disagree on which
+    // rows are "this club's feed" -- exactly the property the issue calls out.
+    @Test
+    void countFeedByClubIdMatchesThePublicFeedSizeWhenUnpaginated() {
+        jdbcTemplate.update("INSERT INTO clubs (id, name) VALUES (2, 'Robotics')");
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertPost(2L, 1L, "2024-01-02 10:00:00", null);
+        insertPost(3L, 2L, "2024-01-03 10:00:00", null);
+
+        int count = clubPostMapper.countFeedByClubId(1L);
+        List<PublicClubPost> feed = clubPostMapper.findPublicFeedByClubId(1L, 0, 100);
+
+        assertThat(count).isEqualTo(2);
+        assertThat(feed).hasSize(count);
     }
 
     private void insertPost(long id, long clubId, String createdAt, String pinnedAt) {

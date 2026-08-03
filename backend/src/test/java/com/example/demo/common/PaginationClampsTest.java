@@ -36,4 +36,14 @@ class PaginationClampsTest {
     void clampOffsetNeverOverflowsForHugePageNumbers() {
         assertThat(PaginationClamps.clampOffset(Integer.MAX_VALUE, 100)).isEqualTo(Integer.MAX_VALUE);
     }
+
+    @Test
+    void clampPageTreatsNegativePageAsZero() {
+        assertThat(PaginationClamps.clampPage(-5)).isEqualTo(0);
+    }
+
+    @Test
+    void clampPagePassesThroughNonNegativeValues() {
+        assertThat(PaginationClamps.clampPage(3)).isEqualTo(3);
+    }
 }

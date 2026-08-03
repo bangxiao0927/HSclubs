@@ -148,4 +148,32 @@ class SecurityConfigCorsTest {
         assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo(FIRST_PARTY_ORIGIN);
         assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)).isEqualTo("true");
     }
+
+    /**
+     * The club posts feed (#78, GET .../posts) is deliberately reachable without authentication (that's what
+     * makes the public feed public) but is NOT in PUBLIC_READ_ONLY_CORS_PATTERNS: activity photos
+     * and student display names are not the kind of data the wildcard-CORS list exists to let
+     * off-site aggregators script-read. An arbitrary cross-origin caller must fall through to
+     * the authenticated, exact-origin CORS policy instead of the public wildcard one.
+     */
+    @Test
+    void postsFeedGetDoesNotRequireAuthentication() throws Exception {
+        // No Origin header: a same-origin or non-browser request, which is what actually
+        // exercises Spring Security's authorization decision -- a cross-origin Origin header
+        // from a non-permitted origin gets rejected by Spring's CORS handling itself (403)
+        // before authorization is ever considered, which would make this assertion meaningless.
+        MockHttpServletResponse response = mockMvc.perform(get("/api/clubs/1/posts"))
+            .andReturn().getResponse();
+
+        assertThat(response.getStatus()).isNotEqualTo(401);
+    }
+
+    @Test
+    void postsFeedGetIsNotOpenedToArbitraryOrigins() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(get("/api/clubs/1/posts")
+                .header(HttpHeaders.ORIGIN, ARBITRARY_ORIGIN))
+            .andReturn().getResponse();
+
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isNotEqualTo("*");
+    }
 }
