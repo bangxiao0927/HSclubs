@@ -366,6 +366,43 @@ class ClubPostMapperTest {
         });
     }
 
+    // The public feed card shows a comment count without the caller ever fetching the
+    // (separate, public) comments endpoint, so the count has to travel with the feed item
+    // itself: a correlated count against club_post_comment, never a join that could multiply
+    // the post row per comment.
+    @Test
+    void findPublicFeedByClubIdIncludesCommentCountCorrelatedToEachPost() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertPost(2L, 1L, "2024-01-02 10:00:00", null);
+        insertComment(1L, "First");
+        insertComment(1L, "Second");
+
+        List<PublicClubPost> feed = clubPostMapper.findPublicFeedByClubId(1L, 0, 10);
+
+        assertThat(feed).extracting(PublicClubPost::getId, PublicClubPost::getCommentCount)
+            .containsExactlyInAnyOrder(
+                org.assertj.core.groups.Tuple.tuple(1L, 2),
+                org.assertj.core.groups.Tuple.tuple(2L, 0));
+    }
+
+    @Test
+    void findPublicPostByIdAndClubIdIncludesCommentCount() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertComment(1L, "Nice!");
+
+        PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 1L);
+
+        assertThat(post.getCommentCount()).isEqualTo(1);
+    }
+
+    private void insertComment(long postId, String body) {
+        ClubPostComment comment = new ClubPostComment();
+        comment.setPostId(postId);
+        comment.setAuthorOauthUserId(1L);
+        comment.setBody(body);
+        clubPostMapper.insertComment(comment);
+    }
+
     // Same ordering contract as findFeedByClubId: pinned posts first (by pinned_at DESC), then
     // created_at DESC, with id DESC as the same-created_at tiebreaker. Exercised here too
     // because the public projection is a separate SQL statement, not a reuse of the internal one.

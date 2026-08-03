@@ -30,12 +30,15 @@ const error = ref('')
 
 const expandedPostIds = ref<Set<number>>(new Set())
 const commentsByPost = ref<Record<number, CommentsEntry>>({})
+let loadedClubId: string | null = null
 
 const routeClubId = computed(() => {
   const raw = route.params.id
   const value = Array.isArray(raw) ? raw[0] : raw
   return value ?? ''
 })
+
+const commentsRegionId = (postId: number) => `club-media-comments-${postId}`
 
 const backTarget = computed(() => (routeClubId.value ? `/clubs/${routeClubId.value}` : '/'))
 
@@ -62,13 +65,19 @@ const load = async () => {
 
   const requestedPage = Math.max(0, parseQueryInt(route.query.page, 0))
   const requestedSize = Math.max(1, parseQueryInt(route.query.size, DEFAULT_PAGE_SIZE))
+  // Pagination re-runs this on every page/size query change but must not re-fetch a club
+  // detail record that hasn't changed -- only the feed page itself is new.
+  const needsClub = loadedClubId !== clubIdOrSlug
 
   try {
     const [clubResponse, feed] = await Promise.all([
-      fetchClubById(clubIdOrSlug),
+      needsClub ? fetchClubById(clubIdOrSlug) : Promise.resolve(club.value),
       fetchClubMediaFeed(clubIdOrSlug, requestedPage, requestedSize),
     ])
-    club.value = clubResponse
+    if (needsClub) {
+      club.value = clubResponse
+      loadedClubId = clubIdOrSlug
+    }
     posts.value = feed.items
     page.value = feed.page
     size.value = feed.size
@@ -77,6 +86,7 @@ const load = async () => {
     error.value = err instanceof Error ? err.message : 'Failed to load club media'
     club.value = null
     posts.value = []
+    loadedClubId = null
   } finally {
     loading.value = false
   }
@@ -143,8 +153,16 @@ const relativeTimeDivisions: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ['second', 1],
 ]
 
+// Jackson serializes java.time.LocalDateTime without a zone/offset suffix (e.g.
+// "2024-01-01T10:00:00"), and the ES spec parses that exact shape as *local browser time*,
+// not UTC -- so a post created seconds ago can come back reading "in 8 hours" purely because
+// the viewer's timezone differs from the server's. The backend value is always meant to be
+// read as UTC, so append 'Z' whenever no offset is already present before parsing.
+const hasExplicitTimezoneOffset = /(Z|[+-]\d{2}:\d{2})$/i
+const toUtcDate = (iso: string) => new Date(hasExplicitTimezoneOffset.test(iso) ? iso : `${iso}Z`)
+
 const formatRelativeTime = (iso: string) => {
-  const date = new Date(iso)
+  const date = toUtcDate(iso)
   if (Number.isNaN(date.getTime())) {
     return ''
   }
@@ -235,10 +253,22 @@ watch(
                 <p class="mv-post-time">{{ formatRelativeTime(post.createdAt) }}</p>
               </div>
             </div>
-            <button type="button" class="mv-comments-toggle" @click="toggleComments(post.id)">
-              {{ isExpanded(post.id) ? 'Hide comments' : `Show comments (${post.commentCount ?? 0})` }}
+            <button
+              type="button"
+              class="mv-comments-toggle"
+              :aria-expanded="isExpanded(post.id)"
+              :aria-controls="commentsRegionId(post.id)"
+              @click="toggleComments(post.id)"
+            >
+              {{ isExpanded(post.id) ? 'Hide comments' : `Show comments (${post.commentCount})` }}
             </button>
-            <div v-if="isExpanded(post.id)" class="mv-comments">
+            <div
+              v-show="isExpanded(post.id)"
+              :id="commentsRegionId(post.id)"
+              class="mv-comments"
+              role="region"
+              :aria-label="`Comments on ${post.title}`"
+            >
               <p v-if="commentsState(post.id).loading" class="mv-status">Loading comments…</p>
               <p v-else-if="commentsState(post.id).error" class="mv-status mv-status--error">
                 {{ commentsState(post.id).error }}

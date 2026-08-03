@@ -21,6 +21,11 @@ public class PublicClubPost {
     private String authorDisplayName;
     private String authorAvatarUrl;
 
+    // A correlated COUNT(*) against club_post_comment (see ClubPostMapper.xml's
+    // PublicPostColumnList), never a join: a join against club_post_comment would multiply
+    // this row once per comment instead of contributing a single count.
+    private int commentCount;
+
     public Long getId() {
         return id;
     }
@@ -83,5 +88,13 @@ public class PublicClubPost {
 
     public void setAuthorAvatarUrl(String authorAvatarUrl) {
         this.authorAvatarUrl = authorAvatarUrl;
+    }
+
+    public int getCommentCount() {
+        return commentCount;
+    }
+
+    public void setCommentCount(int commentCount) {
+        this.commentCount = commentCount;
     }
 }

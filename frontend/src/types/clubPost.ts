@@ -7,7 +7,7 @@ export interface ClubPost {
   createdAt: string
   authorDisplayName: string
   authorAvatarUrl: string | null
-  commentCount?: number
+  commentCount: number
 }
 
 export interface ClubPostComment {

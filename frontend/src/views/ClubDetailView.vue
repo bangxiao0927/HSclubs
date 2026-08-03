@@ -587,6 +587,11 @@ watch(
     align-items: flex-start;
   }
 
+  .media-link {
+    width: 100%;
+    text-align: center;
+  }
+
   .admin-link {
     width: 100%;
     text-align: center;

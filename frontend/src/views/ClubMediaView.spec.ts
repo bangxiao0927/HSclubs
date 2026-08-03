@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../services/clubService', () => ({
   fetchClubById: vi.fn(),
@@ -242,6 +242,26 @@ describe('ClubMediaView pagination', () => {
     expect(previousButton!.attributes('disabled')).toBeDefined()
     expect(nextButton!.attributes('disabled')).toBeDefined()
   })
+
+  it('does not refetch the unchanged club detail when only the page changes', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1 })], page: 0, size: 12, total: 24 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 2 })], page: 1, size: 12, total: 24 }),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    expect(fetchClubByIdMock).toHaveBeenCalledTimes(1)
+
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
+    expect(fetchClubByIdMock).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('ClubMediaView comments', () => {
@@ -304,18 +324,45 @@ describe('ClubMediaView comments', () => {
     const wrapper = await mountAtMediaRoute()
     await flushPromises()
 
-    await wrapper.find('.mv-comments-toggle').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.mv-comment').exists()).toBe(true)
+    const isCommentsRegionHidden = () =>
+      (wrapper.find('.mv-comments').attributes('style') ?? '').includes('display: none')
 
     await wrapper.find('.mv-comments-toggle').trigger('click')
-    expect(wrapper.find('.mv-comment').exists()).toBe(false)
+    await flushPromises()
+    expect(isCommentsRegionHidden()).toBe(false)
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    expect(isCommentsRegionHidden()).toBe(true)
 
     await wrapper.find('.mv-comments-toggle').trigger('click')
     await flushPromises()
 
     expect(fetchClubPostCommentsMock).toHaveBeenCalledTimes(1)
-    expect(wrapper.find('.mv-comment').exists()).toBe(true)
+    expect(isCommentsRegionHidden()).toBe(false)
+  })
+
+  it('exposes aria-expanded and aria-controls on the toggle, pointing at a stable comment region id', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 42 })], total: 1 }))
+    fetchClubPostCommentsMock.mockResolvedValue([buildComment()])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    const toggle = wrapper.find('.mv-comments-toggle')
+    const regionId = toggle.attributes('aria-controls')
+    expect(regionId).toBeTruthy()
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+
+    const region = wrapper.find(`#${regionId}`)
+    expect(region.exists()).toBe(true)
+    expect(region.classes()).toContain('mv-comments')
+
+    await toggle.trigger('click')
+    await flushPromises()
+
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(toggle.attributes('aria-controls')).toBe(regionId)
   })
 })
 
@@ -351,5 +398,42 @@ describe('ClubMediaView robots meta', () => {
     wrapper.unmount()
 
     expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('index, follow')
+  })
+})
+
+// This file's tsconfig scope (tsconfig.app.json) has no "node" types, so `process` is declared
+// locally here rather than pulling in @types/node project-wide for one test's TZ override.
+declare const process: { env: Record<string, string | undefined> }
+
+describe('ClubMediaView relative time for offset-less timestamps', () => {
+  // Jackson serializes java.time.LocalDateTime with no zone/offset suffix (e.g.
+  // "2024-06-01T12:00:00"). Forcing a real, non-UTC host timezone here reproduces the actual
+  // bug regardless of what timezone happens to run this suite: parsed naively, that string is
+  // read as *local* wall-clock time, not UTC, so a post created seconds ago can render as
+  // hours in the future purely because of the viewer's timezone.
+  const originalTz = process.env.TZ
+
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York'
+  })
+
+  afterAll(() => {
+    process.env.TZ = originalTz
+  })
+
+  it('renders a just-created post as recent, never as being in the future, when createdAt has no timezone offset', async () => {
+    const nowUtcIso = new Date().toISOString()
+    const offsetLessRecentTimestamp = nowUtcIso.replace(/Z$/, '')
+
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ createdAt: offsetLessRecentTimestamp })], total: 1 }),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    const relativeTimeText = wrapper.find('.mv-post-time').text()
+    expect(relativeTimeText).not.toMatch(/^in /)
   })
 })

@@ -258,6 +258,23 @@ class ClubPostControllerTest {
     }
 
     @Test
+    void feedItemsCarryTheirCommentCount() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setStatus("active");
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        PublicClubPost post = new PublicClubPost();
+        post.setId(9L);
+        post.setCommentCount(3);
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
+            .thenReturn(new ClubPostService.PostFeedPage(List.of(post), 0, 12, 1));
+
+        mockMvc.perform(get("/api/clubs/1/posts"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].commentCount").value(3));
+    }
+
+    @Test
     void feedReturnsNotFoundForAnUnknownClub() throws Exception {
         when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(null);
 

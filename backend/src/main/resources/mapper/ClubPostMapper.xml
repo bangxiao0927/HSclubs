@@ -55,6 +55,7 @@
         <result column="created_at" property="createdAt" />
         <result column="author_display_name" property="authorDisplayName" />
         <result column="author_avatar_url" property="authorAvatarUrl" />
+        <result column="comment_count" property="commentCount" />
     </resultMap>
 
     <!-- Shared by findPublicFeedByClubId and findPublicPostByIdAndClubId so a freshly published
@@ -63,7 +64,8 @@
     <sql id="PublicPostColumnList">
         cp.id, cp.club_id, cp.title, cp.image_url, cp.pinned_at, cp.created_at,
         ou.display_name AS author_display_name,
-        ou.avatar_url   AS author_avatar_url
+        ou.avatar_url   AS author_avatar_url,
+        (SELECT COUNT(*) FROM club_post_comment cpc WHERE cpc.post_id = cp.id) AS comment_count
     </sql>
 
     <!-- Deliberately not a wildcard select and not a reuse of ClubMemberView's/
