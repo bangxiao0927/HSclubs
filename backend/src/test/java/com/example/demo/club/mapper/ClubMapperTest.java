@@ -87,6 +87,23 @@ class ClubMapperTest {
     }
 
     @Test
+    void lockClubIdForUpdateReturnsTheIdWhenTheClubExists() {
+        jdbcTemplate.update(
+            "INSERT INTO clubs (id, name, category, status) VALUES (1, 'Chess Club', 'Competition & Strategy', 'active')");
+
+        Long lockedId = clubMapper.lockClubIdForUpdate(1L);
+
+        assertThat(lockedId).isEqualTo(1L);
+    }
+
+    @Test
+    void lockClubIdForUpdateReturnsNullForAMissingClub() {
+        Long lockedId = clubMapper.lockClubIdForUpdate(999L);
+
+        assertThat(lockedId).isNull();
+    }
+
+    @Test
     void findAllPaginatedReportsMemberCountFromClubMemberTableNotTheStaleColumn() {
         jdbcTemplate.update(
             "INSERT INTO clubs (id, name, category, member_count, status) VALUES (1, 'Chess Club', 'Competition & Strategy', 0, 'active')");

@@ -7,10 +7,13 @@ import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
 import com.example.demo.security.AuthenticatedUserResolver;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -98,5 +101,60 @@ public class ClubPostController {
         }
 
         return clubPostService.findPublicFeed(club.getId(), page, size);
+    }
+
+    // ---- Pinning (president or platform owner only) ----
+
+    @PutMapping("/{clubSlugOrId}/posts/{postId}/pin")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void pin(@PathVariable String clubSlugOrId,
+                     @PathVariable Long postId,
+                     Authentication authentication) {
+        Club club = requireManageAccess(clubSlugOrId, authentication);
+        String viewerEmail = authenticatedUserResolver.requireEmail(authentication);
+        Long pinnedByOauthUserId = oAuthUserMapper.findIdByEmail(viewerEmail);
+        try {
+            clubPostService.pin(club.getId(), postId, pinnedByOauthUserId);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+        } catch (PessimisticLockingFailureException e) {
+            // H2's ~2s lock timeout (SQL error 50200) and InnoDB's 50s one both translate here
+            // via Spring's SQLErrorCodeSQLExceptionTranslator -- a lock held by a concurrent
+            // pin() call must read as "try again", not as a server error.
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Could not pin post right now, please try again");
+        }
+    }
+
+    @DeleteMapping("/{clubSlugOrId}/posts/{postId}/pin")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unpin(@PathVariable String clubSlugOrId,
+                       @PathVariable Long postId,
+                       Authentication authentication) {
+        Club club = requireManageAccess(clubSlugOrId, authentication);
+        try {
+            clubPostService.unpin(club.getId(), postId);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
+    }
+
+    // Same matrix as ClubController/ClubImageController's requireManageAccess: the club's own
+    // president, or a platform owner. Pinning is an editorial power, not a publishing one, so an
+    // ordinary member (even the post's own author) is not enough.
+    private Club requireManageAccess(String clubSlugOrId, Authentication authentication) {
+        String viewerEmail = authenticatedUserResolver.requireEmail(authentication);
+        Club club = clubService.resolveBySlugOrId(clubSlugOrId, viewerEmail);
+        if (club == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
+        boolean canManage = Boolean.TRUE.equals(club.getCanManage())
+            || authenticatedUserResolver.isPlatformOwner(authentication);
+        if (!canManage) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Only the club president or a platform owner can pin posts");
+        }
+        return club;
     }
 }

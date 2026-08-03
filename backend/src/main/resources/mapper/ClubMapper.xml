@@ -383,4 +383,12 @@
         LEFT JOIN club_member cm ON cm.club_id = #{clubId} AND cm.oauth_user_id = #{oauthUserId}
     </select>
 
+    <!-- ClubPostService#pin's cap-safety lock: InnoDB at REPEATABLE READ makes a plain
+         SELECT COUNT(*) a non-locking consistent read, so two presidents pinning at once could
+         each see 2 pinned posts and both commit a 3rd, over-running the cap of 3. Locking this
+         row first serializes every concurrent pin() call for the same club. -->
+    <select id="lockClubIdForUpdate" resultType="long">
+        SELECT id FROM clubs WHERE id = #{id} FOR UPDATE
+    </select>
+
 </mapper>

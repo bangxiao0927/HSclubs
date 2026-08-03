@@ -5,8 +5,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -29,6 +31,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
@@ -269,6 +272,143 @@ class ClubPostControllerTest {
 
         mockMvc.perform(get("/api/clubs/1/posts").principal(oauthToken(MEMBER_EMAIL)))
             .andExpect(status().isOk());
+    }
+
+    // ---- pin ----
+
+    @Test
+    void pinRequiresAuthentication() throws Exception {
+        mockMvc.perform(put("/api/clubs/1/posts/9/pin"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void pinReturnsNotFoundForAnUnknownClub() throws Exception {
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(null);
+
+        mockMvc.perform(put("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void pinRejectsAnOrdinaryMemberWithForbidden() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+
+        mockMvc.perform(put("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void pinSucceedsForThePresidentAndReturnsNoContent() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
+
+        mockMvc.perform(put("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void pinSucceedsForAPlatformOwnerWhoIsNotTheClubPresident() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail("test-owner@example.com")).thenReturn(7L);
+
+        mockMvc.perform(put("/api/clubs/1/posts/9/pin").principal(oauthToken("test-owner@example.com")))
+            .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void pinReturnsNotFoundWhenTheServiceReportsTheClubOrPostIsMissing() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("Post not found for this club"))
+            .when(clubPostService).pin(any(), any(), any());
+
+        mockMvc.perform(put("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void pinReturnsConflictWhenTheServiceReportsTheCapIsReached() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
+        org.mockito.Mockito.doThrow(new IllegalStateException("At most 3 posts can be pinned. Unpin one first."))
+            .when(clubPostService).pin(any(), any(), any());
+
+        mockMvc.perform(put("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isConflict())
+            .andExpect(status().reason("At most 3 posts can be pinned. Unpin one first."));
+    }
+
+    @Test
+    void pinReturnsConflictWhenTheServiceReportsALockTimeout() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
+        org.mockito.Mockito.doThrow(new CannotAcquireLockException("lock wait timeout"))
+            .when(clubPostService).pin(any(), any(), any());
+
+        mockMvc.perform(put("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isConflict());
+    }
+
+    // ---- unpin ----
+
+    @Test
+    void unpinRequiresAuthentication() throws Exception {
+        mockMvc.perform(delete("/api/clubs/1/posts/9/pin"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void unpinRejectsAnOrdinaryMemberWithForbidden() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void unpinSucceedsForThePresidentAndReturnsNoContent() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void unpinReturnsNotFoundWhenTheServiceReportsThePostIsMissing() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("Post not found for this club"))
+            .when(clubPostService).unpin(any(), any());
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isNotFound());
     }
 
     private static MockMultipartFile aPhoto() {

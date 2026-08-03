@@ -95,4 +95,9 @@ public interface ClubMapper {
 
     ViewerMembershipStatus findMembershipStatusByUserId(@Param("clubId") Long clubId,
                                                          @Param("oauthUserId") Long oauthUserId);
+
+    // Pessimistic row lock for the pin cap (see ClubPostService#pin): a FOR UPDATE matching
+    // zero rows takes no lock at all, so callers must treat a null result as "club not found"
+    // rather than falling through to an unguarded write.
+    Long lockClubIdForUpdate(@Param("id") Long id);
 }

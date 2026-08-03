@@ -1,9 +1,12 @@
 package com.example.demo.club.service;
 
+import com.example.demo.club.mapper.ClubMapper;
 import com.example.demo.club.mapper.ClubPostMapper;
+import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.common.PaginationClamps;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -24,14 +27,17 @@ import java.util.List;
 public class ClubPostService {
 
     private static final int MAX_TITLE_LENGTH = 140;
+    private static final int MAX_PINNED_POSTS_PER_CLUB = 3;
 
     private final ClubPostMapper clubPostMapper;
+    private final ClubMapper clubMapper;
     private final ImageStorageService imageStorageService;
     private final ClubPostWriter clubPostWriter;
 
-    public ClubPostService(ClubPostMapper clubPostMapper, ImageStorageService imageStorageService,
-                            ClubPostWriter clubPostWriter) {
+    public ClubPostService(ClubPostMapper clubPostMapper, ClubMapper clubMapper,
+                            ImageStorageService imageStorageService, ClubPostWriter clubPostWriter) {
         this.clubPostMapper = clubPostMapper;
+        this.clubMapper = clubMapper;
         this.imageStorageService = imageStorageService;
         this.clubPostWriter = clubPostWriter;
     }
@@ -63,6 +69,40 @@ public class ClubPostService {
         int total = clubPostMapper.countFeedByClubId(clubId);
 
         return new PostFeedPage(items, clampedPage, limit, total);
+    }
+
+    // The cap is not safe as a plain count-then-update: at REPEATABLE READ, SELECT COUNT(*) is
+    // a non-locking consistent read, so two presidents pinning at once could each see 2 and
+    // both commit a 3rd pin. Locking the parent club row first serializes every concurrent call
+    // for that club, so the count that follows is always accurate. Lock, count and update all
+    // live in this one @Transactional method -- called only from the controller, so the Spring
+    // proxy is always in play (see ClubPostWriter's Javadoc for why self-invocation would
+    // silently drop this).
+    @Transactional
+    public void pin(Long clubId, Long postId, Long pinnedByOauthUserId) {
+        Long lockedClubId = clubMapper.lockClubIdForUpdate(clubId);
+        if (lockedClubId == null) {
+            throw new IllegalArgumentException("Club not found");
+        }
+        ClubPost post = clubPostMapper.findByIdAndClubId(postId, clubId);
+        if (post == null) {
+            throw new IllegalArgumentException("Post not found for this club");
+        }
+        boolean alreadyPinned = post.getPinnedAt() != null;
+        int pinnedCount = clubPostMapper.countPinnedByClubId(clubId);
+        if (!alreadyPinned && pinnedCount >= MAX_PINNED_POSTS_PER_CLUB) {
+            throw new IllegalStateException(
+                "At most " + MAX_PINNED_POSTS_PER_CLUB + " posts can be pinned. Unpin one first.");
+        }
+        clubPostMapper.pin(postId, pinnedByOauthUserId);
+    }
+
+    public void unpin(Long clubId, Long postId) {
+        ClubPost post = clubPostMapper.findByIdAndClubId(postId, clubId);
+        if (post == null) {
+            throw new IllegalArgumentException("Post not found for this club");
+        }
+        clubPostMapper.unpin(postId);
     }
 
     private static String validateTitle(String title) {

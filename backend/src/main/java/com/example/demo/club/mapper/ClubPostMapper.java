@@ -30,6 +30,11 @@ public interface ClubPostMapper {
     // by-ID lookup in this codebase.
     PublicClubPost findPublicPostByIdAndClubId(@Param("id") Long id, @Param("clubId") Long clubId);
 
+    // Scoped lookup for the pin/unpin path (ClubPostService#pin/#unpin): a post ID that exists
+    // but under a different club must read back null, exactly like every other by-ID lookup in
+    // this mapper, so cross-club pinning 404s instead of silently touching someone else's post.
+    ClubPost findByIdAndClubId(@Param("id") Long id, @Param("clubId") Long clubId);
+
     int insert(ClubPost post);
 
     int delete(@Param("id") Long id);
