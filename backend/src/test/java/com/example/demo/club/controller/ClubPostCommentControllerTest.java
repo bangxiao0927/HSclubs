@@ -18,10 +18,12 @@ import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.ClubPostComment;
 import com.example.demo.club.model.PublicClubPostComment;
+import com.example.demo.club.service.ClubContentModerationPolicy;
 import com.example.demo.club.service.ClubPostCommentService;
 import com.example.demo.club.service.ClubPostNotFoundException;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.club.service.ClubVisibilityPolicy;
 import com.example.demo.club.service.CommentLimitExceededException;
 import com.example.demo.security.AuthenticatedUserResolver;
 import java.time.LocalDateTime;
@@ -68,6 +70,16 @@ class ClubPostCommentControllerTest {
         @Bean
         AuthenticatedUserResolver authenticatedUserResolver(SecurityProperties securityProperties) {
             return new AuthenticatedUserResolver(securityProperties);
+        }
+
+        @Bean
+        ClubVisibilityPolicy clubVisibilityPolicy(AuthenticatedUserResolver authenticatedUserResolver) {
+            return new ClubVisibilityPolicy(authenticatedUserResolver);
+        }
+
+        @Bean
+        ClubContentModerationPolicy clubContentModerationPolicy(AuthenticatedUserResolver authenticatedUserResolver) {
+            return new ClubContentModerationPolicy(authenticatedUserResolver);
         }
     }
 

@@ -5,10 +5,12 @@ import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.ClubPostComment;
 import com.example.demo.club.model.PublicClubPostComment;
+import com.example.demo.club.service.ClubContentModerationPolicy;
 import com.example.demo.club.service.ClubPostCommentService;
 import com.example.demo.club.service.ClubPostNotFoundException;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.club.service.ClubVisibilityPolicy;
 import com.example.demo.club.service.CommentLimitExceededException;
 import com.example.demo.security.AuthenticatedUserResolver;
 import org.springframework.dao.CannotAcquireLockException;
@@ -28,7 +30,8 @@ import java.util.List;
 
 /**
  * Discussion on a club post (see #79): public read, member-only write, deletable by the
- * comment's own author, the club president, or a platform owner -- the same matrix
+ * comment's own author, the club president, or a platform owner -- see
+ * {@link ClubContentModerationPolicy}, the same moderation decision
  * {@link ClubPostController#deletePost} applies to the post itself.
  */
 @RestController
@@ -40,22 +43,28 @@ public class ClubPostCommentController {
     private final ClubPostCommentService clubPostCommentService;
     private final OAuthUserMapper oAuthUserMapper;
     private final AuthenticatedUserResolver authenticatedUserResolver;
+    private final ClubVisibilityPolicy clubVisibilityPolicy;
+    private final ClubContentModerationPolicy clubContentModerationPolicy;
 
     public ClubPostCommentController(ClubService clubService,
                                       ClubPostService clubPostService,
                                       ClubPostCommentService clubPostCommentService,
                                       OAuthUserMapper oAuthUserMapper,
-                                      AuthenticatedUserResolver authenticatedUserResolver) {
+                                      AuthenticatedUserResolver authenticatedUserResolver,
+                                      ClubVisibilityPolicy clubVisibilityPolicy,
+                                      ClubContentModerationPolicy clubContentModerationPolicy) {
         this.clubService = clubService;
         this.clubPostService = clubPostService;
         this.clubPostCommentService = clubPostCommentService;
         this.oAuthUserMapper = oAuthUserMapper;
         this.authenticatedUserResolver = authenticatedUserResolver;
+        this.clubVisibilityPolicy = clubVisibilityPolicy;
+        this.clubContentModerationPolicy = clubContentModerationPolicy;
     }
 
-    // Gated on clubs.status = 'active', matching ClubPostController#feed: comments belong to a
-    // post on a club's feed, so they must not be visible to anyone the feed itself hides them
-    // from.
+    // Visibility decision delegated to ClubVisibilityPolicy, shared with
+    // ClubPostController#feed: comments belong to a post on a club's feed, so they must not be
+    // visible to anyone the feed itself hides them from.
     @GetMapping("/{clubSlugOrId}/posts/{postId}/comments")
     public List<PublicClubPostComment> list(@PathVariable String clubSlugOrId, @PathVariable Long postId,
                                              Authentication authentication) {
@@ -65,11 +74,7 @@ public class ClubPostCommentController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
 
-        boolean isActive = "active".equalsIgnoreCase(club.getStatus());
-        boolean canViewNonActiveClub = Boolean.TRUE.equals(club.getViewerIsMember())
-            || Boolean.TRUE.equals(club.getCanManage())
-            || authenticatedUserResolver.isPlatformOwner(authentication);
-        if (!isActive && !canViewNonActiveClub) {
+        if (!clubVisibilityPolicy.isVisibleTo(club, authentication)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
 
@@ -126,10 +131,9 @@ public class ClubPostCommentController {
         }
 
         Long viewerOauthUserId = oAuthUserMapper.findIdByEmail(viewerEmail);
-        boolean isAuthor = viewerOauthUserId != null && viewerOauthUserId.equals(comment.getAuthorOauthUserId());
-        boolean canModerate = Boolean.TRUE.equals(club.getCanManage())
-            || authenticatedUserResolver.isPlatformOwner(authentication);
-        if (!isAuthor && !canModerate) {
+        boolean canModerate = clubContentModerationPolicy.canModerate(
+            viewerOauthUserId, comment.getAuthorOauthUserId(), club, authentication);
+        if (!canModerate) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to delete this comment");
         }
 

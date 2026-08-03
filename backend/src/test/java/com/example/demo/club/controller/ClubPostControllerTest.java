@@ -19,8 +19,10 @@ import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
+import com.example.demo.club.service.ClubContentModerationPolicy;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.club.service.ClubVisibilityPolicy;
 import com.example.demo.security.AuthenticatedUserResolver;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -67,6 +69,16 @@ class ClubPostControllerTest {
         @Bean
         AuthenticatedUserResolver authenticatedUserResolver(SecurityProperties securityProperties) {
             return new AuthenticatedUserResolver(securityProperties);
+        }
+
+        @Bean
+        ClubVisibilityPolicy clubVisibilityPolicy(AuthenticatedUserResolver authenticatedUserResolver) {
+            return new ClubVisibilityPolicy(authenticatedUserResolver);
+        }
+
+        @Bean
+        ClubContentModerationPolicy clubContentModerationPolicy(AuthenticatedUserResolver authenticatedUserResolver) {
+            return new ClubContentModerationPolicy(authenticatedUserResolver);
         }
     }
 
