@@ -342,6 +342,36 @@ class ClubPostMapperTest {
         assertThat(post).isNull();
     }
 
+    @Test
+    void findByIdAndClubIdReturnsThePostWhenItBelongsToTheClub() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+
+        ClubPost post = clubPostMapper.findByIdAndClubId(1L, 1L);
+
+        assertThat(post).isNotNull();
+        assertThat(post.getId()).isEqualTo(1L);
+        assertThat(post.getClubId()).isEqualTo(1L);
+    }
+
+    // Scoped the same way findPublicPostByIdAndClubId is: cross-club pinning must 404, not
+    // silently touch someone else's post.
+    @Test
+    void findByIdAndClubIdReturnsNullForAMismatchedClubId() {
+        jdbcTemplate.update("INSERT INTO clubs (id, name) VALUES (2, 'Robotics')");
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+
+        ClubPost post = clubPostMapper.findByIdAndClubId(1L, 2L);
+
+        assertThat(post).isNull();
+    }
+
+    @Test
+    void findByIdAndClubIdReturnsNullForANonExistentPost() {
+        ClubPost post = clubPostMapper.findByIdAndClubId(999L, 1L);
+
+        assertThat(post).isNull();
+    }
+
     private void insertPost(long id, long clubId, String createdAt, String pinnedAt) {
         jdbcTemplate.update(
             "INSERT INTO club_post (id, club_id, author_oauth_user_id, title, image_url, created_at, pinned_at) "

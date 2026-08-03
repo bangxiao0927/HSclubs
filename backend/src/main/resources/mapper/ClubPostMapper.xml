@@ -90,6 +90,12 @@
         WHERE cp.id = #{id} AND cp.club_id = #{clubId}
     </select>
 
+    <select id="findByIdAndClubId" resultMap="ClubPostResultMap">
+        SELECT <include refid="PostColumnList" />
+        FROM club_post
+        WHERE id = #{id} AND club_id = #{clubId}
+    </select>
+
     <insert id="insert" parameterType="com.example.demo.club.model.ClubPost"
             useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         INSERT INTO club_post (club_id, author_oauth_user_id, title, image_url)

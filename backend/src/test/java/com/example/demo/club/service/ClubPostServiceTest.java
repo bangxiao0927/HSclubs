@@ -12,6 +12,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.demo.club.mapper.ClubPostMapper;
+import com.example.demo.club.mapper.ClubMapper;
+import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import java.io.IOException;
 import java.util.List;
@@ -24,6 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 class ClubPostServiceTest {
 
     private ClubPostMapper clubPostMapper;
+    private ClubMapper clubMapper;
     private ImageStorageService imageStorageService;
     private ClubPostWriter clubPostWriter;
     private ClubPostService clubPostService;
@@ -31,9 +34,10 @@ class ClubPostServiceTest {
     @BeforeEach
     void setUp() {
         clubPostMapper = mock(ClubPostMapper.class);
+        clubMapper = mock(ClubMapper.class);
         imageStorageService = mock(ImageStorageService.class);
         clubPostWriter = mock(ClubPostWriter.class);
-        clubPostService = new ClubPostService(clubPostMapper, imageStorageService, clubPostWriter);
+        clubPostService = new ClubPostService(clubPostMapper, clubMapper, imageStorageService, clubPostWriter);
     }
 
     private static MultipartFile aFile() {
@@ -217,5 +221,104 @@ class ClubPostServiceTest {
         assertThat(feedPage.total()).isEqualTo(57);
         assertThat(feedPage.page()).isEqualTo(0);
         assertThat(feedPage.size()).isEqualTo(12);
+    }
+
+    // ---- pin ----
+
+    @Test
+    void pinLocksTheClubRowCountsAndUpdatesInsideOnePinCall() {
+        when(clubMapper.lockClubIdForUpdate(1L)).thenReturn(1L);
+        ClubPost post = new ClubPost();
+        post.setId(10L);
+        post.setClubId(1L);
+        when(clubPostMapper.findByIdAndClubId(10L, 1L)).thenReturn(post);
+        when(clubPostMapper.countPinnedByClubId(1L)).thenReturn(0);
+
+        clubPostService.pin(1L, 10L, 42L);
+
+        InOrder inOrder = inOrder(clubMapper, clubPostMapper);
+        inOrder.verify(clubMapper).lockClubIdForUpdate(1L);
+        inOrder.verify(clubPostMapper).countPinnedByClubId(1L);
+        inOrder.verify(clubPostMapper).pin(10L, 42L);
+    }
+
+    @Test
+    void pinThrowsWhenTheClubDoesNotExist() {
+        when(clubMapper.lockClubIdForUpdate(1L)).thenReturn(null);
+
+        assertThatThrownBy(() -> clubPostService.pin(1L, 10L, 42L))
+            .isInstanceOf(IllegalArgumentException.class);
+
+        verify(clubPostMapper, never()).pin(any(), any());
+    }
+
+    @Test
+    void pinThrowsWhenThePostBelongsToAnotherClub() {
+        when(clubMapper.lockClubIdForUpdate(1L)).thenReturn(1L);
+        when(clubPostMapper.findByIdAndClubId(10L, 1L)).thenReturn(null);
+
+        assertThatThrownBy(() -> clubPostService.pin(1L, 10L, 42L))
+            .isInstanceOf(IllegalArgumentException.class);
+
+        verify(clubPostMapper, never()).pin(any(), any());
+    }
+
+    // The cap the whole feature exists to enforce: a fourth pin must not silently evict the
+    // oldest one, so it is a 409-worthy failure, not a 400.
+    @Test
+    void pinThrowsWhenTheClubAlreadyHasThreePinnedPosts() {
+        when(clubMapper.lockClubIdForUpdate(1L)).thenReturn(1L);
+        ClubPost post = new ClubPost();
+        post.setId(10L);
+        post.setClubId(1L);
+        when(clubPostMapper.findByIdAndClubId(10L, 1L)).thenReturn(post);
+        when(clubPostMapper.countPinnedByClubId(1L)).thenReturn(3);
+
+        assertThatThrownBy(() -> clubPostService.pin(1L, 10L, 42L))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("3");
+
+        verify(clubPostMapper, never()).pin(any(), any());
+    }
+
+    // Re-pinning an already-pinned post (e.g. to bump it to the front again) must not be
+    // blocked by the cap: it is already one of the (at most) three, not a fourth.
+    @Test
+    void pinDoesNotCountAnAlreadyPinnedPostAgainstItsOwnCap() {
+        when(clubMapper.lockClubIdForUpdate(1L)).thenReturn(1L);
+        ClubPost post = new ClubPost();
+        post.setId(10L);
+        post.setClubId(1L);
+        post.setPinnedAt(java.time.LocalDateTime.of(2024, 1, 1, 0, 0));
+        when(clubPostMapper.findByIdAndClubId(10L, 1L)).thenReturn(post);
+        when(clubPostMapper.countPinnedByClubId(1L)).thenReturn(3);
+
+        clubPostService.pin(1L, 10L, 42L);
+
+        verify(clubPostMapper).pin(10L, 42L);
+    }
+
+    // ---- unpin ----
+
+    @Test
+    void unpinClearsThePinOnAnExistingPost() {
+        ClubPost post = new ClubPost();
+        post.setId(10L);
+        post.setClubId(1L);
+        when(clubPostMapper.findByIdAndClubId(10L, 1L)).thenReturn(post);
+
+        clubPostService.unpin(1L, 10L);
+
+        verify(clubPostMapper).unpin(10L);
+    }
+
+    @Test
+    void unpinThrowsWhenThePostBelongsToAnotherClub() {
+        when(clubPostMapper.findByIdAndClubId(10L, 1L)).thenReturn(null);
+
+        assertThatThrownBy(() -> clubPostService.unpin(1L, 10L))
+            .isInstanceOf(IllegalArgumentException.class);
+
+        verify(clubPostMapper, never()).unpin(any());
     }
 }
