@@ -21,6 +21,11 @@ export interface ClubPostComment {
   authorDisplayName: string
   authorAvatarUrl: string | null
   body: string
+  /**
+   * A timezone-naive ISO-8601 string (the backend's PublicClubPostComment#createdAt is a plain
+   * java.time.LocalDateTime, not an Instant like ClubPost#createdAt), so formatRelativeTime
+   * assumes UTC when no offset is present rather than parsing this straight into `new Date(...)`.
+   */
   createdAt: string
 }
 

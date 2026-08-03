@@ -427,12 +427,14 @@ describe('ClubMediaView robots meta', () => {
 // locally here rather than pulling in @types/node project-wide for one test's TZ override.
 declare const process: { env: Record<string, string | undefined> }
 
-describe('ClubMediaView relative time for the backend\'s offset-bearing instant', () => {
-  // post.createdAt is now a java.time.Instant on the backend, always serialized with an
-  // explicit "Z" (see PublicClubPost's Javadoc and EpochSecondsInstantTypeHandler). Forcing a
-  // real, non-UTC host timezone here proves the frontend's plain `new Date(iso)` -- no more
-  // "guess the offset" workaround -- still can't misread a just-created post as being in the
-  // future purely because of the viewer's own timezone.
+describe('ClubMediaView relative time under a non-UTC browser timezone', () => {
+  // post.createdAt is a java.time.Instant on the backend, always serialized with an explicit
+  // "Z" (see PublicClubPost's Javadoc and EpochSecondsInstantTypeHandler); comment.createdAt is
+  // not (#79's PublicClubPostComment still carries a plain, timezone-naive LocalDateTime).
+  // Forcing a real, non-UTC host timezone here proves both cases render a just-created
+  // item as recent, never in the future: the guaranteed-offset post value parses correctly
+  // as-is, and the offset-less comment value falls back to the same "assume UTC" rule
+  // formatRelativeTime still carries for exactly this reason.
   const originalTz = process.env.TZ
 
   beforeAll(() => {
@@ -456,6 +458,23 @@ describe('ClubMediaView relative time for the backend\'s offset-bearing instant'
     await flushPromises()
 
     const relativeTimeText = wrapper.find('.mv-post-time').text()
+    expect(relativeTimeText).not.toMatch(/^in /)
+  })
+
+  it('renders a just-posted comment as recent, never as being in the future, given the backend\'s offset-less LocalDateTime', async () => {
+    const justPostedTimestamp = new Date().toISOString().replace(/Z$/, '')
+
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7 })], total: 1 }))
+    fetchClubPostCommentsMock.mockResolvedValue([buildComment({ createdAt: justPostedTimestamp })])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    const relativeTimeText = wrapper.find('.mv-comment-time').text()
     expect(relativeTimeText).not.toMatch(/^in /)
   })
 })
