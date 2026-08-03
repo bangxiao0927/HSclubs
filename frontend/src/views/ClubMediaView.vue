@@ -137,7 +137,8 @@ const toggleComments = (postId: number) => {
   }
   next.add(postId)
   expandedPostIds.value = next
-  if (!commentsByPost.value[postId]) {
+  const existing = commentsByPost.value[postId]
+  if (!existing || existing.error) {
     void loadComments(postId)
   }
 }
@@ -153,16 +154,12 @@ const relativeTimeDivisions: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ['second', 1],
 ]
 
-// Jackson serializes java.time.LocalDateTime without a zone/offset suffix (e.g.
-// "2024-01-01T10:00:00"), and the ES spec parses that exact shape as *local browser time*,
-// not UTC -- so a post created seconds ago can come back reading "in 8 hours" purely because
-// the viewer's timezone differs from the server's. The backend value is always meant to be
-// read as UTC, so append 'Z' whenever no offset is already present before parsing.
-const hasExplicitTimezoneOffset = /(Z|[+-]\d{2}:\d{2})$/i
-const toUtcDate = (iso: string) => new Date(hasExplicitTimezoneOffset.test(iso) ? iso : `${iso}Z`)
-
+// post.createdAt is a java.time.Instant on the backend (see PublicClubPost's Javadoc), which
+// Jackson always serializes with an explicit UTC offset (a trailing "Z"). That contract is what
+// makes a plain `new Date(iso)` safe here: there is no ambiguous, offset-less wall-clock string
+// left for a browser to misparse as its own local time.
 const formatRelativeTime = (iso: string) => {
-  const date = toUtcDate(iso)
+  const date = new Date(iso)
   if (Number.isNaN(date.getTime())) {
     return ''
   }

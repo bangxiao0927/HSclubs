@@ -302,6 +302,28 @@ describe('ClubMediaView comments', () => {
     expect(wrapper.find('.mv-comment-list').exists()).toBe(false)
   })
 
+  it('retries the comments fetch when a post is collapsed and re-expanded after a failed load', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7 })], total: 1 }))
+    fetchClubPostCommentsMock.mockRejectedValueOnce(new Error('Network error'))
+    fetchClubPostCommentsMock.mockResolvedValueOnce([buildComment({ body: 'Loaded on retry' })])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Network error')
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubPostCommentsMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Loaded on retry')
+    expect(wrapper.text()).not.toContain('Network error')
+  })
+
   it('shows a comments empty state when a post has no comments', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub())
     fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7 })], total: 1 }))
@@ -405,12 +427,12 @@ describe('ClubMediaView robots meta', () => {
 // locally here rather than pulling in @types/node project-wide for one test's TZ override.
 declare const process: { env: Record<string, string | undefined> }
 
-describe('ClubMediaView relative time for offset-less timestamps', () => {
-  // Jackson serializes java.time.LocalDateTime with no zone/offset suffix (e.g.
-  // "2024-06-01T12:00:00"). Forcing a real, non-UTC host timezone here reproduces the actual
-  // bug regardless of what timezone happens to run this suite: parsed naively, that string is
-  // read as *local* wall-clock time, not UTC, so a post created seconds ago can render as
-  // hours in the future purely because of the viewer's timezone.
+describe('ClubMediaView relative time for the backend\'s offset-bearing instant', () => {
+  // post.createdAt is now a java.time.Instant on the backend, always serialized with an
+  // explicit "Z" (see PublicClubPost's Javadoc and EpochSecondsInstantTypeHandler). Forcing a
+  // real, non-UTC host timezone here proves the frontend's plain `new Date(iso)` -- no more
+  // "guess the offset" workaround -- still can't misread a just-created post as being in the
+  // future purely because of the viewer's own timezone.
   const originalTz = process.env.TZ
 
   beforeAll(() => {
@@ -421,13 +443,13 @@ describe('ClubMediaView relative time for offset-less timestamps', () => {
     process.env.TZ = originalTz
   })
 
-  it('renders a just-created post as recent, never as being in the future, when createdAt has no timezone offset', async () => {
-    const nowUtcIso = new Date().toISOString()
-    const offsetLessRecentTimestamp = nowUtcIso.replace(/Z$/, '')
+  it('renders a just-created post as recent, never as being in the future, given the backend\'s offset-bearing instant', async () => {
+    const justCreatedInstant = new Date().toISOString()
+    expect(justCreatedInstant).toMatch(/Z$/)
 
     fetchClubByIdMock.mockResolvedValue(buildClub())
     fetchClubMediaFeedMock.mockResolvedValue(
-      buildFeed({ items: [buildPost({ createdAt: offsetLessRecentTimestamp })], total: 1 }),
+      buildFeed({ items: [buildPost({ createdAt: justCreatedInstant })], total: 1 }),
     )
 
     const wrapper = await mountAtMediaRoute()

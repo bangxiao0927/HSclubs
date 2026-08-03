@@ -52,7 +52,8 @@
         <result column="title" property="title" />
         <result column="image_url" property="imageUrl" />
         <result column="pinned_at" property="pinnedAt" />
-        <result column="created_at" property="createdAt" />
+        <result column="created_at" property="createdAt"
+                typeHandler="com.example.demo.club.mapper.EpochSecondsInstantTypeHandler" />
         <result column="author_display_name" property="authorDisplayName" />
         <result column="author_avatar_url" property="authorAvatarUrl" />
         <result column="comment_count" property="commentCount" />
@@ -60,9 +61,16 @@
 
     <!-- Shared by findPublicFeedByClubId and findPublicPostByIdAndClubId so a freshly published
          post reads back in exactly the same safe shape a feed item has: never author_oauth_
-         user_id or any other oauth_users column. -->
+         user_id or any other oauth_users column.
+
+         cp.created_at is deliberately read through UNIX_TIMESTAMP(...) rather than passed
+         through as-is: see EpochSecondsInstantTypeHandler's Javadoc for why that (not the raw
+         column) is what makes PublicClubPost#createdAt an unambiguous instant instead of a
+         wall-clock reading a browser in a different timezone could misread as its own local
+         time. -->
     <sql id="PublicPostColumnList">
-        cp.id, cp.club_id, cp.title, cp.image_url, cp.pinned_at, cp.created_at,
+        cp.id, cp.club_id, cp.title, cp.image_url, cp.pinned_at,
+        UNIX_TIMESTAMP(cp.created_at) AS created_at,
         ou.display_name AS author_display_name,
         ou.avatar_url   AS author_avatar_url,
         (SELECT COUNT(*) FROM club_post_comment cpc WHERE cpc.post_id = cp.id) AS comment_count

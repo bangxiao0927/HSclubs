@@ -25,7 +25,7 @@ import com.example.demo.club.service.ClubService;
 import com.example.demo.club.service.ClubVisibilityPolicy;
 import com.example.demo.security.AuthenticatedUserResolver;
 import java.io.IOException;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -139,7 +139,7 @@ class ClubPostControllerTest {
         created.setClubId(1L);
         created.setTitle("Meeting recap");
         created.setImageUrl("/uploads/club-posts/uuid.jpg");
-        created.setCreatedAt(LocalDateTime.of(2024, 1, 1, 10, 0));
+        created.setCreatedAt(Instant.parse("2024-01-01T10:00:00Z"));
         created.setAuthorDisplayName("Ada Lovelace");
         created.setAuthorAvatarUrl("/uploads/avatar-cache/ada.jpg");
         when(clubPostService.publish(eq(1L), eq(42L), eq("Meeting recap"), any())).thenReturn(created);
@@ -152,7 +152,7 @@ class ClubPostControllerTest {
             .andExpect(jsonPath("$.id").value(9))
             .andExpect(jsonPath("$.title").value("Meeting recap"))
             .andExpect(jsonPath("$.imageUrl").value("/uploads/club-posts/uuid.jpg"))
-            .andExpect(jsonPath("$.createdAt").exists())
+            .andExpect(jsonPath("$.createdAt").value("2024-01-01T10:00:00Z"))
             .andExpect(jsonPath("$.authorDisplayName").value("Ada Lovelace"))
             .andExpect(jsonPath("$.authorAvatarUrl").value("/uploads/avatar-cache/ada.jpg"))
             .andReturn().getResponse().getContentAsString();

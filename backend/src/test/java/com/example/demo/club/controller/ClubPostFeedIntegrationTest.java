@@ -1,6 +1,7 @@
 package com.example.demo.club.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -23,11 +24,14 @@ import java.nio.file.Path;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.imageio.IIOImage;
@@ -295,6 +299,31 @@ class ClubPostFeedIntegrationTest {
 
         assertThat(responseBody).contains("\"commentCount\":2");
         assertThat(responseBody).contains("\"commentCount\":0");
+    }
+
+    // Full-stack regression for the same bug ClubPostMapperTest guards at the mapper layer: a
+    // post created "just now" (DB default CURRENT_TIMESTAMP, no literal override) must serialize
+    // as an instant close to the real Instant.now(), never shifted hours away, even when the
+    // JVM's own default timezone is a real, non-UTC one -- proving the whole mapper-to-JSON
+    // pipeline, not just the mapper in isolation.
+    @Test
+    void justCreatedPostsCreatedAtIsCloseToNowRegardlessOfTheJvmDefaultTimeZone() throws Exception {
+        TimeZone originalDefault = TimeZone.getDefault();
+        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
+        try {
+            long clubId = createActiveClubWithAMember();
+            insertPost(clubId, "Fresh post", null);
+
+            String responseBody = mockMvc.perform(get("/api/clubs/" + clubId + "/posts"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+            String createdAt = extractJsonStringField(responseBody, "createdAt");
+            assertThat(createdAt).endsWith("Z");
+            assertThat(Instant.parse(createdAt)).isCloseTo(Instant.now(), within(5, ChronoUnit.SECONDS));
+        } finally {
+            TimeZone.setDefault(originalDefault);
+        }
     }
 
     @Test

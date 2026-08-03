@@ -6,7 +6,11 @@ import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.ClubPostComment;
 import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.club.model.PublicClubPostComment;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.TimeZone;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -464,6 +468,31 @@ class ClubPostMapperTest {
         PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 2L);
 
         assertThat(post).isNull();
+    }
+
+    // The regression this guards: PublicClubPost#createdAt used to be a bare LocalDateTime, a
+    // timezone-naive wall-clock reading a browser could misparse as its own local time, making a
+    // just-created post appear hours in the future. Forcing a real, non-UTC JVM default zone here
+    // (rather than relying on whichever zone happens to run this suite) proves the mapper's
+    // UNIX_TIMESTAMP round-trip produces the correct instant regardless of that zone: the DB
+    // write is a literal wall-clock string, so the only zone-dependent step is the read, and
+    // EpochSecondsInstantTypeHandler must invert it correctly.
+    @Test
+    void findPublicPostByIdAndClubIdReturnsAnUnambiguousInstantRegardlessOfTheJvmDefaultTimeZone() {
+        TimeZone originalDefault = TimeZone.getDefault();
+        TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"));
+        try {
+            insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+
+            PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 1L);
+
+            Instant expected = LocalDateTime.of(2024, 1, 1, 10, 0)
+                .atZone(ZoneId.of("America/Los_Angeles"))
+                .toInstant();
+            assertThat(post.getCreatedAt()).isEqualTo(expected);
+        } finally {
+            TimeZone.setDefault(originalDefault);
+        }
     }
 
     @Test

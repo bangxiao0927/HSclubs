@@ -1,5 +1,6 @@
 package com.example.demo.club.model;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 /**
@@ -9,6 +10,14 @@ import java.time.LocalDateTime;
  * {@code role}, {@code accepted_terms_at}, the user's {@code created_at}/{@code last_login_at},
  * or {@code graduation_year}. See ClubPostMapperTest for the regression test that a wildcard
  * select or a copied result map cannot silently reintroduce one of those columns here.
+ *
+ * <p>{@code createdAt} is an {@link Instant}, not a {@link LocalDateTime} like every other
+ * timestamp in this codebase: it is the one timestamp this API exposes to anonymous, possibly
+ * cross-timezone callers, so it is serialized as an unambiguous, offset-bearing instant (Jackson
+ * writes {@code Instant} as ISO-8601 with a trailing {@code Z}) rather than a timezone-naive
+ * wall-clock string a browser could misinterpret as its own local time. See
+ * {@code EpochSecondsInstantTypeHandler} for how the mapper populates it correctly regardless of
+ * the JDBC driver's own timezone conversion.
  */
 public class PublicClubPost {
 
@@ -17,7 +26,7 @@ public class PublicClubPost {
     private String title;
     private String imageUrl;
     private LocalDateTime pinnedAt;
-    private LocalDateTime createdAt;
+    private Instant createdAt;
     private String authorDisplayName;
     private String authorAvatarUrl;
 
@@ -66,11 +75,11 @@ public class PublicClubPost {
         this.pinnedAt = pinnedAt;
     }
 
-    public LocalDateTime getCreatedAt() {
+    public Instant getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
+    public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
     }
 

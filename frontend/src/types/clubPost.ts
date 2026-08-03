@@ -4,6 +4,11 @@ export interface ClubPost {
   title: string
   imageUrl: string
   pinnedAt: string | null
+  /**
+   * An unambiguous, offset-bearing ISO-8601 instant (the backend serializes this as a
+   * java.time.Instant, always ending in "Z"), not a timezone-naive wall-clock string --
+   * safe to hand straight to `new Date(...)`.
+   */
   createdAt: string
   authorDisplayName: string
   authorAvatarUrl: string | null
