@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -15,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.club.model.Club;
+import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
@@ -50,6 +53,9 @@ class ClubPostControllerTest {
 
     private static final String MEMBER_EMAIL = "member@example.com";
     private static final String NON_MEMBER_EMAIL = "outsider@example.com";
+    private static final String OWNER_EMAIL = "test-owner@example.com";
+    private static final String PRESIDENT_EMAIL = "president@example.com";
+    private static final String AUTHOR_EMAIL = "author@example.com";
 
     @TestConfiguration
     static class TestConfig {
@@ -413,6 +419,137 @@ class ClubPostControllerTest {
 
     private static MockMultipartFile aPhoto() {
         return new MockMultipartFile("file", "photo.jpg", "image/jpeg", new byte[] {1, 2, 3});
+    }
+
+    @Test
+    void deletePostRequiresAuthentication() throws Exception {
+        mockMvc.perform(delete("/api/clubs/1/posts/9"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deletePostReturnsNotFoundForAnUnknownClub() throws Exception {
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(null);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9").principal(oauthToken(AUTHOR_EMAIL)))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deletePostReturnsNotFoundWhenThePostDoesNotBelongToTheClub() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(null);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9").principal(oauthToken(AUTHOR_EMAIL)))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deletePostRejectsANonAuthorNonPresidentNonOwnerWithForbidden() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(NON_MEMBER_EMAIL)).thenReturn(77L);
+        ClubPost post = new ClubPost();
+        post.setId(9L);
+        post.setAuthorOauthUserId(42L);
+        when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(post);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9").principal(oauthToken(NON_MEMBER_EMAIL)))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deletePostSucceedsForThePostsAuthor() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(AUTHOR_EMAIL)).thenReturn(42L);
+        ClubPost post = new ClubPost();
+        post.setId(9L);
+        post.setAuthorOauthUserId(42L);
+        when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(post);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9").principal(oauthToken(AUTHOR_EMAIL)))
+            .andExpect(status().isNoContent());
+
+        verify(clubPostService).delete(post);
+    }
+
+    @Test
+    void deletePostSucceedsForTheClubPresident() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(PRESIDENT_EMAIL)).thenReturn(7L);
+        ClubPost post = new ClubPost();
+        post.setId(9L);
+        post.setAuthorOauthUserId(42L);
+        when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(post);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9").principal(oauthToken(PRESIDENT_EMAIL)))
+            .andExpect(status().isNoContent());
+
+        verify(clubPostService).delete(post);
+    }
+
+    @Test
+    void deletePostSucceedsForAPlatformOwner() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(OWNER_EMAIL)).thenReturn(99L);
+        ClubPost post = new ClubPost();
+        post.setId(9L);
+        post.setAuthorOauthUserId(42L);
+        when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(post);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9").principal(oauthToken(OWNER_EMAIL)))
+            .andExpect(status().isNoContent());
+
+        verify(clubPostService).delete(post);
+    }
+
+    @Test
+    void deletePostNeverDeletesWhenAuthorizationFails() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(NON_MEMBER_EMAIL)).thenReturn(77L);
+        ClubPost post = new ClubPost();
+        post.setId(9L);
+        post.setAuthorOauthUserId(42L);
+        when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(post);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9").principal(oauthToken(NON_MEMBER_EMAIL)))
+            .andExpect(status().isForbidden());
+
+        verify(clubPostService, never()).delete(any());
+    }
+
+    @Test
+    void deletePostReturnsServerErrorWhenTheServiceReportsAStaleRead() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(AUTHOR_EMAIL)).thenReturn(42L);
+        ClubPost post = new ClubPost();
+        post.setId(9L);
+        post.setAuthorOauthUserId(42L);
+        when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(post);
+        org.mockito.Mockito.doThrow(new IllegalStateException("Post 9 was not found when deleting"))
+            .when(clubPostService).delete(post);
+
+        mockMvc.perform(delete("/api/clubs/1/posts/9").principal(oauthToken(AUTHOR_EMAIL)))
+            .andExpect(status().isInternalServerError());
     }
 
     private OAuth2AuthenticationToken oauthToken(String email) {

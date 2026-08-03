@@ -11,8 +11,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.example.demo.club.mapper.ClubPostMapper;
 import com.example.demo.club.mapper.ClubMapper;
+import com.example.demo.club.mapper.ClubPostMapper;
 import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import java.io.IOException;
@@ -320,5 +320,26 @@ class ClubPostServiceTest {
             .isInstanceOf(IllegalArgumentException.class);
 
         verify(clubPostMapper, never()).unpin(any());
+    }
+
+    @Test
+    void findByIdAndClubIdDelegatesToTheMapper() {
+        ClubPost post = new ClubPost();
+        post.setId(9L);
+        when(clubPostMapper.findByIdAndClubId(9L, 1L)).thenReturn(post);
+
+        ClubPost result = clubPostService.findByIdAndClubId(9L, 1L);
+
+        assertThat(result).isSameAs(post);
+    }
+
+    @Test
+    void deleteDelegatesToTheWriter() {
+        ClubPost post = new ClubPost();
+        post.setId(9L);
+
+        clubPostService.delete(post);
+
+        verify(clubPostWriter).delete(post);
     }
 }

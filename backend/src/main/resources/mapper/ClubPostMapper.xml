@@ -124,6 +124,14 @@
         SELECT COUNT(*) FROM club_post WHERE club_id = #{clubId} AND pinned_at IS NOT NULL
     </select>
 
+    <!-- Pessimistic lock for the comment cap (see #79): must sit inside the same @Transactional
+         method as the count and the insert that follow it, or the lock is released before the
+         count even runs (see ClubPostCommentWriter's Javadoc). Returns no row (so no lock is
+         taken) when the post does not exist or belongs to a different club. -->
+    <select id="lockPostIdForUpdate" resultType="long">
+        SELECT id FROM club_post WHERE id = #{id} AND club_id = #{clubId} FOR UPDATE
+    </select>
+
     <resultMap id="ClubPostCommentResultMap" type="com.example.demo.club.model.ClubPostComment">
         <id column="id" property="id" />
         <result column="post_id" property="postId" />
@@ -137,6 +145,46 @@
         FROM club_post_comment
         WHERE post_id = #{postId}
         ORDER BY created_at ASC, id ASC
+    </select>
+
+    <select id="findCommentByIdAndPostId" resultMap="ClubPostCommentResultMap">
+        SELECT id, post_id, author_oauth_user_id, body, created_at
+        FROM club_post_comment
+        WHERE id = #{id} AND post_id = #{postId}
+    </select>
+
+    <resultMap id="PublicClubPostCommentResultMap" type="com.example.demo.club.model.PublicClubPostComment">
+        <id column="id" property="id" />
+        <result column="post_id" property="postId" />
+        <result column="body" property="body" />
+        <result column="created_at" property="createdAt" />
+        <result column="author_display_name" property="authorDisplayName" />
+        <result column="author_avatar_url" property="authorAvatarUrl" />
+    </resultMap>
+
+    <!-- Shared by findPublicCommentsByPostId and findPublicCommentByIdAndPostId, mirroring
+         PublicPostColumnList: never author_oauth_user_id or any other oauth_users column. -->
+    <sql id="PublicCommentColumnList">
+        cpc.id, cpc.post_id, cpc.body, cpc.created_at,
+        ou.display_name AS author_display_name,
+        ou.avatar_url   AS author_avatar_url
+    </sql>
+
+    <!-- Oldest first, flat, uncapped by pagination (the 50-comment cap makes it unnecessary,
+         see #79). "id ASC" is the same same-second tiebreaker findFeedByClubId relies on. -->
+    <select id="findPublicCommentsByPostId" resultMap="PublicClubPostCommentResultMap">
+        SELECT <include refid="PublicCommentColumnList" />
+        FROM club_post_comment cpc
+            JOIN oauth_users ou ON ou.uid = cpc.author_oauth_user_id
+        WHERE cpc.post_id = #{postId}
+        ORDER BY cpc.created_at ASC, cpc.id ASC
+    </select>
+
+    <select id="findPublicCommentByIdAndPostId" resultMap="PublicClubPostCommentResultMap">
+        SELECT <include refid="PublicCommentColumnList" />
+        FROM club_post_comment cpc
+            JOIN oauth_users ou ON ou.uid = cpc.author_oauth_user_id
+        WHERE cpc.id = #{id} AND cpc.post_id = #{postId}
     </select>
 
     <insert id="insertComment" parameterType="com.example.demo.club.model.ClubPostComment"

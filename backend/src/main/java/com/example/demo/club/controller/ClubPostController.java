@@ -2,6 +2,7 @@ package com.example.demo.club.controller;
 
 import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.club.model.Club;
+import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
@@ -137,6 +138,43 @@ public class ClubPostController {
             clubPostService.unpin(club.getId(), postId);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
+    }
+
+    // Same authorization matrix as comment deletion (see ClubPostCommentController): the
+    // post's own author, the club president, or a platform owner. Hard delete; the photo file
+    // and comment cascade are ClubPostService#delete's responsibility, not this controller's.
+    @DeleteMapping("/{clubSlugOrId}/posts/{postId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deletePost(@PathVariable String clubSlugOrId, @PathVariable Long postId,
+                            Authentication authentication) {
+        String viewerEmail = authenticatedUserResolver.requireEmail(authentication);
+        Club club = clubService.resolveBySlugOrId(clubSlugOrId, viewerEmail);
+        if (club == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
+
+        ClubPost post = clubPostService.findByIdAndClubId(postId, club.getId());
+        if (post == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Post not found");
+        }
+
+        Long viewerOauthUserId = oAuthUserMapper.findIdByEmail(viewerEmail);
+        boolean isAuthor = viewerOauthUserId != null && viewerOauthUserId.equals(post.getAuthorOauthUserId());
+        boolean canModerate = Boolean.TRUE.equals(club.getCanManage())
+            || authenticatedUserResolver.isPlatformOwner(authentication);
+        if (!isAuthor && !canModerate) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to delete this post");
+        }
+
+        try {
+            clubPostService.delete(post);
+        } catch (IllegalStateException e) {
+            // ClubPostWriter#delete's own guard against a stale read (the row was already gone
+            // by the time the DELETE statement ran); the transaction has already rolled back,
+            // so this is a genuine, if unexpected, server-side failure -- same translation
+            // publish() applies to its own post-insert read-back guard.
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to delete post");
         }
     }
 

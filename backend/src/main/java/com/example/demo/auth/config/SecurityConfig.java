@@ -77,6 +77,9 @@ public class SecurityConfig {
                 // it does not cover this. Deliberately its own matcher, not added to
                 // PUBLIC_READ_ONLY_CORS_PATTERNS below -- see that list's Javadoc.
                 .requestMatchers(HttpMethod.GET, "/api/clubs/*/posts").permitAll()
+                // Club post comments (#79): public read, same reasoning and same exclusion
+                // from PUBLIC_READ_ONLY_CORS_PATTERNS as the post feed line above.
+                .requestMatchers(HttpMethod.GET, "/api/clubs/*/posts/*/comments").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/avatars/instagram/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/summary").permitAll()
                 // Everything else under /api requires authentication

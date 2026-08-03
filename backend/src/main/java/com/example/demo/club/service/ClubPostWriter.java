@@ -5,6 +5,8 @@ import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * The database half of {@link ClubPostService#publish}: insert the row and immediately read
@@ -14,14 +16,22 @@ import org.springframework.transaction.annotation.Transactional;
  * silently run without a transaction. Deliberately does not touch {@link ImageStorageService}:
  * the photo is validated and written by the caller before this runs, so this method never holds
  * a JDBC connection open during image decode/re-encode/write.
+ * <p>
+ * Also owns {@link ClubPostService#delete}'s database half: delete the row, then register the
+ * photo's removal to run only {@link TransactionSynchronization#afterCommit() after the
+ * transaction commits}. Registering it eagerly (or calling {@link ImageStorageService#delete}
+ * directly) would destroy a photo that still has a row on a rolled-back delete; registering it
+ * here, inside the same proxied transactional method, is what ties the two together correctly.
  */
 @Service
 class ClubPostWriter {
 
     private final ClubPostMapper clubPostMapper;
+    private final ImageStorageService imageStorageService;
 
-    ClubPostWriter(ClubPostMapper clubPostMapper) {
+    ClubPostWriter(ClubPostMapper clubPostMapper, ImageStorageService imageStorageService) {
         this.clubPostMapper = clubPostMapper;
+        this.imageStorageService = imageStorageService;
     }
 
     // @Transactional so the insert does not auto-commit before the read-back has succeeded:
@@ -42,5 +52,21 @@ class ClubPostWriter {
                 "Post " + post.getId() + " was not found immediately after being inserted");
         }
         return created;
+    }
+
+    @Transactional
+    void delete(ClubPost post) {
+        int deletedRows = clubPostMapper.delete(post.getId());
+        if (deletedRows == 0) {
+            throw new IllegalStateException("Post " + post.getId() + " was not found when deleting");
+        }
+
+        String imageUrl = post.getImageUrl();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                imageStorageService.delete(imageUrl);
+            }
+        });
     }
 }

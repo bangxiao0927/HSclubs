@@ -105,6 +105,15 @@ public class ClubPostService {
         clubPostMapper.unpin(postId);
     }
 
+    /** Raw (author-identifying) read-back for the delete endpoint's own authorization check. */
+    public ClubPost findByIdAndClubId(Long postId, Long clubId) {
+        return clubPostMapper.findByIdAndClubId(postId, clubId);
+    }
+
+    public void delete(ClubPost post) {
+        clubPostWriter.delete(post);
+    }
+
     private static String validateTitle(String title) {
         if (!StringUtils.hasText(title)) {
             throw new IllegalArgumentException("Title is required");
