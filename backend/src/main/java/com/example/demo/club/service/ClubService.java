@@ -85,6 +85,19 @@ public class ClubService {
         return club;
     }
 
+    // The one place every controller with a {clubSlugOrId} path variable resolves it: a purely
+    // numeric segment is looked up by id, anything else by slug. Returns null, like findById()
+    // and findBySlug() themselves, when neither lookup finds a club -- callers decide how to
+    // report that (404, permission checks, etc.).
+    public Club resolveBySlugOrId(String clubSlugOrId, String viewerEmail) {
+        try {
+            Long numericId = Long.valueOf(clubSlugOrId);
+            return findById(numericId, viewerEmail);
+        } catch (NumberFormatException e) {
+            return findBySlug(clubSlugOrId, viewerEmail);
+        }
+    }
+
     // ---- Members ----
 
     public List<ClubMemberView> findMembers(Long clubId) {

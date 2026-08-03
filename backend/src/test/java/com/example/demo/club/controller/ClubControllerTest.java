@@ -71,7 +71,7 @@ class ClubControllerTest {
     void deleteClubSucceedsForPlatformOwner() throws Exception {
         Club club = new Club();
         club.setId(1L);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
 
         mockMvc.perform(delete("/api/clubs/1").principal(oauthToken(OWNER_EMAIL)))
             .andExpect(status().isNoContent());
@@ -82,7 +82,7 @@ class ClubControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setCanManage(false);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
 
         mockMvc.perform(put("/api/clubs/1")
                 .principal(oauthToken(STUDENT_EMAIL))
@@ -97,7 +97,7 @@ class ClubControllerTest {
         club.setId(1L);
         club.setCategory("STEM & Innovation");
         club.setCanManage(true);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(clubService.update(anyLong(), any())).thenReturn(club);
 
         mockMvc.perform(put("/api/clubs/1")

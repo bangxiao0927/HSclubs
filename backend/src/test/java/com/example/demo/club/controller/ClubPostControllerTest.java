@@ -83,7 +83,7 @@ class ClubPostControllerTest {
 
     @Test
     void publishReturnsNotFoundForAnUnknownClub() throws Exception {
-        when(clubService.findById(eq(1L), any())).thenReturn(null);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(null);
 
         mockMvc.perform(multipart("/api/clubs/1/posts")
                 .file(aPhoto())
@@ -97,7 +97,7 @@ class ClubPostControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setViewerIsMember(false);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
 
         mockMvc.perform(multipart("/api/clubs/1/posts")
                 .file(aPhoto())
@@ -111,7 +111,7 @@ class ClubPostControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setViewerIsMember(true);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
         PublicClubPost created = new PublicClubPost();
         created.setId(9L);
@@ -144,7 +144,7 @@ class ClubPostControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setViewerIsMember(true);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
         when(clubPostService.publish(any(), any(), any(), any()))
             .thenThrow(new IllegalArgumentException("Title is required"));
@@ -161,7 +161,7 @@ class ClubPostControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setViewerIsMember(true);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
 
         mockMvc.perform(multipart("/api/clubs/1/posts")
                 .file(aPhoto())
@@ -174,7 +174,7 @@ class ClubPostControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setViewerIsMember(true);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
 
         mockMvc.perform(multipart("/api/clubs/1/posts")
                 .param("title", "Meeting recap")
@@ -187,7 +187,7 @@ class ClubPostControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setViewerIsMember(true);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
         when(clubPostService.publish(any(), any(), any(), any())).thenThrow(new IOException("disk full"));
 
@@ -207,7 +207,7 @@ class ClubPostControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setViewerIsMember(true);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
         when(clubPostService.publish(any(), any(), any(), any()))
             .thenThrow(new IllegalStateException("Post 9 was not found immediately after being inserted"));
@@ -224,7 +224,7 @@ class ClubPostControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setStatus("active");
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
             .thenReturn(new ClubPostService.PostFeedPage(List.of(), 0, 12, 0));
 
@@ -238,7 +238,7 @@ class ClubPostControllerTest {
 
     @Test
     void feedReturnsNotFoundForAnUnknownClub() throws Exception {
-        when(clubService.findById(eq(1L), any())).thenReturn(null);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(null);
 
         mockMvc.perform(get("/api/clubs/1/posts"))
             .andExpect(status().isNotFound());
@@ -251,7 +251,7 @@ class ClubPostControllerTest {
         club.setStatus("pending");
         club.setViewerIsMember(false);
         club.setCanManage(false);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
 
         mockMvc.perform(get("/api/clubs/1/posts"))
             .andExpect(status().isNotFound());
@@ -263,7 +263,7 @@ class ClubPostControllerTest {
         club.setId(1L);
         club.setStatus("pending");
         club.setViewerIsMember(true);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
             .thenReturn(new ClubPostService.PostFeedPage(List.of(), 0, 12, 0));
 

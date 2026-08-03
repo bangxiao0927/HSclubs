@@ -3,6 +3,7 @@ package com.example.demo.club.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -11,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.demo.club.mapper.ClubPostMapper;
+import com.example.demo.club.service.ImageStorageService;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -52,6 +55,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Full-stack acceptance coverage for #78: real DB, real security filter chain, real
@@ -82,6 +86,9 @@ class ClubPostFeedIntegrationTest {
     // database, since this class is proving full-stack behavior.
     @MockitoSpyBean
     private ClubPostMapper clubPostMapperSpy;
+
+    @MockitoSpyBean
+    private ImageStorageService imageStorageServiceSpy;
 
     @DynamicPropertySource
     static void uploadDir(DynamicPropertyRegistry registry) {
@@ -201,6 +208,28 @@ class ClubPostFeedIntegrationTest {
 
         assertThat(countPostRows(clubId)).isEqualTo(rowsBefore);
         assertThat(countRegularFiles(clubPostsDir)).isEqualTo(filesBefore);
+    }
+
+    // The transaction-boundary fix this test guards: ImageStorageService.store() -- the
+    // CPU-bound image decode/re-encode/write -- must run to completion before the DB
+    // transaction that inserts the row and reads it back even starts, so it never holds a JDBC
+    // connection open. Publishing must still succeed; this only asserts where the boundary is.
+    @Test
+    void publishStoresTheImageBeforeAnyDatabaseTransactionIsActive() throws Exception {
+        long clubId = createActiveClubWithAMember();
+        AtomicBoolean transactionActiveDuringStore = new AtomicBoolean(true);
+        doAnswer(invocation -> {
+            transactionActiveDuringStore.set(TransactionSynchronizationManager.isActualTransactionActive());
+            return invocation.callRealMethod();
+        }).when(imageStorageServiceSpy).store(any());
+
+        mockMvc.perform(multipart("/api/clubs/" + clubId + "/posts")
+                .file(new MockMultipartFile("file", "photo.jpg", "image/jpeg", tinyJpeg()))
+                .param("title", "Meeting recap")
+                .with(authentication(oauthToken(MEMBER_EMAIL))))
+            .andExpect(status().isCreated());
+
+        assertThat(transactionActiveDuringStore.get()).isFalse();
     }
 
     private int countPostRows(long clubId) {

@@ -52,7 +52,7 @@ public class ClubPostController {
                                    @RequestParam("file") MultipartFile file,
                                    Authentication authentication) {
         String viewerEmail = authenticatedUserResolver.requireEmail(authentication);
-        Club club = resolveClub(clubSlugOrId, viewerEmail);
+        Club club = clubService.resolveBySlugOrId(clubSlugOrId, viewerEmail);
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
@@ -69,8 +69,8 @@ public class ClubPostController {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store file");
         } catch (IllegalStateException e) {
             // The read-back immediately after insert() could not find the row (see
-            // ClubPostService#publish); the transaction has already been rolled back and the
-            // file cleaned up, so this is a genuine, if unexpected, server-side failure.
+            // ClubPostWriter#insertAndReadBack); the transaction has already been rolled back
+            // and the file cleaned up, so this is a genuine, if unexpected, server-side failure.
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to publish post");
         }
     }
@@ -84,7 +84,7 @@ public class ClubPostController {
                                              @RequestParam(defaultValue = "12") int size,
                                              Authentication authentication) {
         String viewerEmail = authenticatedUserResolver.resolveEmail(authentication);
-        Club club = resolveClub(clubSlugOrId, viewerEmail);
+        Club club = clubService.resolveBySlugOrId(clubSlugOrId, viewerEmail);
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
@@ -98,14 +98,5 @@ public class ClubPostController {
         }
 
         return clubPostService.findPublicFeed(club.getId(), page, size);
-    }
-
-    private Club resolveClub(String clubSlugOrId, String viewerEmail) {
-        try {
-            Long numericId = Long.valueOf(clubSlugOrId);
-            return clubService.findById(numericId, viewerEmail);
-        } catch (NumberFormatException e) {
-            return clubService.findBySlug(clubSlugOrId, viewerEmail);
-        }
     }
 }

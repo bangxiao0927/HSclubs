@@ -5,20 +5,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.demo.club.mapper.ClubPostMapper;
-import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import java.io.IOException;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -26,20 +25,15 @@ class ClubPostServiceTest {
 
     private ClubPostMapper clubPostMapper;
     private ImageStorageService imageStorageService;
+    private ClubPostWriter clubPostWriter;
     private ClubPostService clubPostService;
 
     @BeforeEach
     void setUp() {
         clubPostMapper = mock(ClubPostMapper.class);
         imageStorageService = mock(ImageStorageService.class);
-        clubPostService = new ClubPostService(clubPostMapper, imageStorageService);
-        // Mirrors MyBatis's useGeneratedKeys behavior: insert() sets the generated id onto the
-        // same ClubPost instance it was given, which publish()'s read-back then looks up by.
-        doAnswer(invocation -> {
-            ClubPost post = invocation.getArgument(0);
-            post.setId(99L);
-            return 1;
-        }).when(clubPostMapper).insert(any());
+        clubPostWriter = mock(ClubPostWriter.class);
+        clubPostService = new ClubPostService(clubPostMapper, imageStorageService, clubPostWriter);
     }
 
     private static MultipartFile aFile() {
@@ -72,7 +66,8 @@ class ClubPostServiceTest {
         when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/uuid.jpg");
         PublicClubPost readBack = new PublicClubPost();
         readBack.setTitle(exactlyMax);
-        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(readBack);
+        when(clubPostWriter.insertAndReadBack(1L, 10L, exactlyMax, "/uploads/club-posts/uuid.jpg"))
+            .thenReturn(readBack);
 
         PublicClubPost post = clubPostService.publish(1L, 10L, exactlyMax, aFile());
 
@@ -99,43 +94,39 @@ class ClubPostServiceTest {
         PublicClubPost readBack = new PublicClubPost();
         readBack.setTitle("Meeting recap");
         readBack.setImageUrl("/uploads/club-posts/uuid.jpg");
-        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(readBack);
+        when(clubPostWriter.insertAndReadBack(1L, 10L, "Meeting recap", "/uploads/club-posts/uuid.jpg"))
+            .thenReturn(readBack);
 
         PublicClubPost post = clubPostService.publish(1L, 10L, "  Meeting recap  ", aFile());
 
         assertThat(post.getTitle()).isEqualTo("Meeting recap");
         assertThat(post.getImageUrl()).isEqualTo("/uploads/club-posts/uuid.jpg");
-
-        ArgumentCaptor<ClubPost> insertedPost = ArgumentCaptor.forClass(ClubPost.class);
-        verify(clubPostMapper).insert(insertedPost.capture());
-        assertThat(insertedPost.getValue().getClubId()).isEqualTo(1L);
-        assertThat(insertedPost.getValue().getAuthorOauthUserId()).isEqualTo(10L);
-        assertThat(insertedPost.getValue().getTitle()).isEqualTo("Meeting recap");
+        verify(clubPostWriter).insertAndReadBack(1L, 10L, "Meeting recap", "/uploads/club-posts/uuid.jpg");
     }
 
-    // The atomic-request contract: if the row insert fails after the file was already written,
+    // The atomic-request contract: if the DB write fails after the file was already written,
     // the file must not become an orphan (nor should it be silently kept if the post never
     // actually got created).
     @Test
-    void publishDeletesTheStoredFileWhenTheRowInsertFails() throws IOException {
+    void publishDeletesTheStoredFileWhenTheDatabaseWriteFails() throws IOException {
         when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/uuid.jpg");
-        RuntimeException insertFailure = new RuntimeException("constraint violation");
-        org.mockito.Mockito.doThrow(insertFailure).when(clubPostMapper).insert(any());
+        RuntimeException writeFailure = new RuntimeException("constraint violation");
+        when(clubPostWriter.insertAndReadBack(any(), any(), any(), any())).thenThrow(writeFailure);
 
         assertThatThrownBy(() -> clubPostService.publish(1L, 10L, "Meeting recap", aFile()))
-            .isSameAs(insertFailure);
+            .isSameAs(writeFailure);
 
         verify(imageStorageService).delete("/uploads/club-posts/uuid.jpg");
     }
 
-    // The read-back is what actually returns the safe, feed-shaped post; if it can't find the
-    // row it just inserted (should not happen in practice, since both run in the same
-    // transaction, but this is the last line of defense), the whole publish must fail rather
-    // than return null or a half-populated object, and the file must not be left orphaned.
+    // ClubPostWriter is the last line of defense against an unreadable just-inserted row (see
+    // ClubPostWriterTest); this proves publish() reacts to that failure the same way it reacts
+    // to any other database failure -- by cleaning up the file it already wrote.
     @Test
-    void publishDeletesTheStoredFileWhenTheReadBackFindsNoRow() throws IOException {
+    void publishDeletesTheStoredFileWhenClubPostWriterReportsAnUnreadableRow() throws IOException {
         when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/uuid.jpg");
-        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(null);
+        when(clubPostWriter.insertAndReadBack(any(), any(), any(), any()))
+            .thenThrow(new IllegalStateException("Post 99 was not found immediately after being inserted"));
 
         assertThatThrownBy(() -> clubPostService.publish(1L, 10L, "Meeting recap", aFile()))
             .isInstanceOf(IllegalStateException.class);
@@ -150,7 +141,7 @@ class ClubPostServiceTest {
         readBack.setId(99L);
         readBack.setAuthorDisplayName("Ada Lovelace");
         readBack.setAuthorAvatarUrl("/uploads/avatar-cache/ada.jpg");
-        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(readBack);
+        when(clubPostWriter.insertAndReadBack(any(), any(), any(), any())).thenReturn(readBack);
 
         PublicClubPost post = clubPostService.publish(1L, 10L, "Meeting recap", aFile());
 
@@ -158,13 +149,29 @@ class ClubPostServiceTest {
     }
 
     @Test
-    void publishNeverInsertsARowWhenImageStorageServiceRejectsTheFile() throws IOException {
+    void publishNeverWritesToTheDatabaseWhenImageStorageServiceRejectsTheFile() throws IOException {
         when(imageStorageService.store(any())).thenThrow(new IllegalArgumentException("Unsupported image type"));
 
         assertThatThrownBy(() -> clubPostService.publish(1L, 10L, "Meeting recap", aFile()))
             .isInstanceOf(IllegalArgumentException.class);
 
-        verify(clubPostMapper, never()).insert(any());
+        verify(clubPostWriter, never()).insertAndReadBack(any(), any(), any(), any());
+    }
+
+    // The transaction-boundary regression this refactor exists for: ClubPostWriter must never
+    // be invoked until ImageStorageService.store() has already completed, since store() is the
+    // CPU-bound image decode/re-encode/write that must not run inside ClubPostWriter's DB
+    // transaction (see ClubPostWriter's Javadoc).
+    @Test
+    void publishStoresTheImageBeforeWritingToTheDatabase() throws IOException {
+        when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/uuid.jpg");
+        when(clubPostWriter.insertAndReadBack(any(), any(), any(), any())).thenReturn(new PublicClubPost());
+
+        clubPostService.publish(1L, 10L, "Meeting recap", aFile());
+
+        InOrder inOrder = inOrder(imageStorageService, clubPostWriter);
+        inOrder.verify(imageStorageService).store(any());
+        inOrder.verify(clubPostWriter).insertAndReadBack(any(), any(), any(), any());
     }
 
     @Test
