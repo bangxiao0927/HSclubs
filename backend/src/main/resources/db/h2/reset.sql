@@ -10,6 +10,8 @@ DROP TABLE IF EXISTS club_member;
 DROP TABLE IF EXISTS club_membership_requests;
 DROP TABLE IF EXISTS club_tag;
 DROP TABLE IF EXISTS club_social_medias;
+DROP TABLE IF EXISTS club_post_comment;
+DROP TABLE IF EXISTS club_post;
 DROP TABLE IF EXISTS clubs;
 DROP TABLE IF EXISTS user_profiles;
 DROP TABLE IF EXISTS oauth_users;
