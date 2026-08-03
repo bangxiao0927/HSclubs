@@ -1,4 +1,5 @@
 import type { Club } from '../types/club'
+import type { ClubPost } from '../types/clubPost'
 import { buildApiUrl } from '../services/httpClient'
 import { localAvatar } from './avatarImages'
 
@@ -63,3 +64,8 @@ export const clubImage = (club: ClubImageSource): string => {
   }
   return cachedInstagramAvatar(club) ?? localAvatar(club.name)
 }
+
+// club_post.image_url is always server-relative (see ClubPostService's Javadoc); routing it
+// through buildApiUrl keeps photos loading when VITE_API_BASE_URL is an absolute, different
+// origin than the SPA itself.
+export const clubPostImage = (post: Pick<ClubPost, 'imageUrl'>): string => buildApiUrl(post.imageUrl)

@@ -84,6 +84,15 @@ describe('authentication gate', () => {
 
     expect(router.currentRoute.value.name).toBe('club-search')
   })
+
+  it('leaves the club media route reachable for an unauthenticated visitor', async () => {
+    await primeSession(null)
+
+    await router.push('/clubs/3/media')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('club-media')
+  })
 })
 
 describe('already-authenticated user landing on the sign-in page', () => {

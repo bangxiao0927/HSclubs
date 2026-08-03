@@ -163,6 +163,7 @@ watch(
           </div>
         </div>
         <div class="hero-side">
+          <RouterLink :to="`/clubs/${club.id}/media`" class="media-link"> View club media </RouterLink>
           <RouterLink
             v-if="club.canManage || isOwner"
             :to="`/clubs/${club.id}/admin`"
@@ -368,6 +369,16 @@ watch(
   color: var(--mv-gold);
   font-weight: 600;
   background: var(--mv-surface-muted);
+}
+
+.media-link {
+  border: 1px solid var(--mv-border);
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  text-decoration: none;
+  color: var(--mv-text-soft);
+  font-weight: 600;
+  background: var(--mv-surface-card);
 }
 
 .club-hero h1 {
