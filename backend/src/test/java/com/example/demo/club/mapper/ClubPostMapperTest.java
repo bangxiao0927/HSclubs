@@ -255,25 +255,6 @@ class ClubPostMapperTest {
             .satisfies(remaining -> assertThat(remaining.getBody()).isEqualTo("Second"));
     }
 
-    @Test
-    void findByIdAndClubIdReturnsThePostWhenTheClubMatches() {
-        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
-
-        ClubPost post = clubPostMapper.findByIdAndClubId(1L, 1L);
-
-        assertThat(post).isNotNull();
-        assertThat(post.getAuthorOauthUserId()).isEqualTo(1L);
-        assertThat(post.getImageUrl()).isEqualTo("/uploads/club-posts/1.jpg");
-    }
-
-    @Test
-    void findByIdAndClubIdReturnsNullForAMismatchedClubId() {
-        jdbcTemplate.update("INSERT INTO clubs (id, name) VALUES (2, 'Robotics')");
-        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
-
-        assertThat(clubPostMapper.findByIdAndClubId(1L, 2L)).isNull();
-    }
-
     // This only proves the query returns the right id/null; a FOR UPDATE assertion here would
     // pass vacuously without a surrounding transaction (see the issue's own warning), so the
     // actual pessimistic-locking behavior is covered by a service-level test instead.
@@ -457,6 +438,8 @@ class ClubPostMapperTest {
         assertThat(post).isNotNull();
         assertThat(post.getId()).isEqualTo(1L);
         assertThat(post.getClubId()).isEqualTo(1L);
+        assertThat(post.getAuthorOauthUserId()).isEqualTo(1L);
+        assertThat(post.getImageUrl()).isEqualTo("/uploads/club-posts/1.jpg");
     }
 
     // Scoped the same way findPublicPostByIdAndClubId is: cross-club pinning must 404, not
