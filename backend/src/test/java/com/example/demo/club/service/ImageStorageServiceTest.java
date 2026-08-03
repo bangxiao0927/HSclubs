@@ -1,0 +1,442 @@
+package com.example.demo.club.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.ImageTypeSpecifier;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.ImageOutputStream;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.mock.web.MockMultipartFile;
+
+class ImageStorageServiceTest {
+
+    @TempDir
+    Path uploadDir;
+
+    private ImageStorageService service(Path dir) {
+        return new ImageStorageService(dir.toString());
+    }
+
+    @Test
+    void rejectsAnEmptyFile() {
+        ImageStorageService service = service(uploadDir);
+        MockMultipartFile file = new MockMultipartFile("file", "empty.jpg", "image/jpeg", new byte[0]);
+
+        assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsBytesThatAreNotARecognizedImageFormatRegardlessOfDeclaredContentType() {
+        ImageStorageService service = service(uploadDir);
+        byte[] pdfBytes = "%PDF-1.4 not actually an image".getBytes();
+        MockMultipartFile file = new MockMultipartFile("file", "fake.gif", "image/gif", pdfBytes);
+
+        assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void storesAJpegUploadAsAJpegFile() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] jpegBytes = solidColorJpeg(20, 20, Color.RED);
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", jpegBytes);
+
+        String imageUrl = service.store(file);
+
+        assertThat(imageUrl).startsWith("/uploads/club-posts/").endsWith(".jpg");
+        byte[] stored = readStoredFile(imageUrl);
+        assertThat(isJpeg(stored)).isTrue();
+    }
+
+    @Test
+    void storesAPngUploadAsARealJpegFile() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] pngBytes = solidColorPng(20, 20, Color.BLUE, false);
+        MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", pngBytes);
+
+        String imageUrl = service.store(file);
+
+        assertThat(imageUrl).endsWith(".jpg");
+        byte[] stored = readStoredFile(imageUrl);
+        assertThat(isJpeg(stored)).isTrue();
+        assertThat(isPng(stored)).isFalse();
+    }
+
+    @Test
+    void storesAWebpUploadAsAJpegFile() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] webpBytes = new ClassPathResource("images/tiny.webp").getContentAsByteArray();
+        MockMultipartFile file = new MockMultipartFile("file", "photo.webp", "image/webp", webpBytes);
+
+        String imageUrl = service.store(file);
+
+        assertThat(imageUrl).endsWith(".jpg");
+        assertThat(isJpeg(readStoredFile(imageUrl))).isTrue();
+    }
+
+    @Test
+    void storesAGifUnchangedWithAGifExtension() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] gifBytes = solidColorGif(10, 10, Color.GREEN);
+        MockMultipartFile file = new MockMultipartFile("file", "photo.gif", "image/gif", gifBytes);
+
+        String imageUrl = service.store(file);
+
+        assertThat(imageUrl).endsWith(".gif");
+        assertThat(readStoredFile(imageUrl)).isEqualTo(gifBytes);
+    }
+
+    @Test
+    void animatedGifStaysAnimatedAfterStorage() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] animatedGifBytes = animatedGif(10, 10);
+        MockMultipartFile file = new MockMultipartFile("file", "animated.gif", "image/gif", animatedGifBytes);
+
+        String imageUrl = service.store(file);
+
+        assertThat(frameCount(readStoredFile(imageUrl))).isEqualTo(2);
+    }
+
+    @Test
+    void rejectsAGifLargerThanTwoMegabytes() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] oversizedGif = padTo(solidColorGif(10, 10, Color.GREEN), 2 * 1024 * 1024 + 1);
+        MockMultipartFile file = new MockMultipartFile("file", "big.gif", "image/gif", oversizedGif);
+
+        assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsANonGifLargerThanFiveMegabytes() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] oversizedJpeg = padTo(solidColorJpeg(20, 20, Color.RED), 5 * 1024 * 1024 + 1);
+        MockMultipartFile file = new MockMultipartFile("file", "big.jpg", "image/jpeg", oversizedJpeg);
+
+        assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsAnImageOverFiftyMegapixelsBeforeFullDecode() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] hugeHeaderPng = solidColorPng(8000, 7000, Color.BLACK, false);
+        MockMultipartFile file = new MockMultipartFile("file", "huge.png", "image/png", hugeHeaderPng);
+
+        assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void neverUpscalesAnImageSmallerThanTheTargetBoundingBox() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] smallJpeg = solidColorJpeg(40, 30, Color.RED);
+        MockMultipartFile file = new MockMultipartFile("file", "small.jpg", "image/jpeg", smallJpeg);
+
+        String imageUrl = service.store(file);
+
+        BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(readStoredFile(imageUrl)));
+        assertThat(decoded.getWidth()).isEqualTo(40);
+        assertThat(decoded.getHeight()).isEqualTo(30);
+    }
+
+    @Test
+    void flattensTransparentPixelsToWhite() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] transparentPng = solidColorPng(10, 10, new Color(255, 0, 0, 0), true);
+        MockMultipartFile file = new MockMultipartFile("file", "transparent.png", "image/png", transparentPng);
+
+        String imageUrl = service.store(file);
+
+        BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(readStoredFile(imageUrl)));
+        int rgb = decoded.getRGB(5, 5);
+        assertThat(new Color(rgb, false)).isEqualTo(Color.WHITE);
+    }
+
+    @Test
+    void reencodingStripsExifIncludingGpsData() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] jpegWithExif = jpegWithOrientationAndGps(6);
+        MockMultipartFile file = new MockMultipartFile("file", "phone-photo.jpg", "image/jpeg", jpegWithExif);
+
+        String imageUrl = service.store(file);
+
+        assertThat(containsApp1ExifMarker(readStoredFile(imageUrl))).isFalse();
+    }
+
+    // A 32x32 source image split into four solid-color quadrants (top-left red, top-right
+    // green, bottom-left blue, bottom-right yellow) tagged with EXIF Orientation=6 ("Rotate 90
+    // CW"). After correction, each quadrant's content moves one corner clockwise: original
+    // bottom-left -> displayed top-left, top-left -> top-right, top-right -> bottom-right,
+    // bottom-right -> bottom-left. Verified independently against this exact fixture with
+    // `exiftool` and a standalone Thumbnailator invocation before being hardcoded here.
+    @Test
+    void orientationSixDisplaysTheRightWayUp() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] jpegWithExif = jpegWithOrientationAndGps(6);
+        MockMultipartFile file = new MockMultipartFile("file", "phone-photo.jpg", "image/jpeg", jpegWithExif);
+
+        String imageUrl = service.store(file);
+        BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(readStoredFile(imageUrl)));
+
+        assertColorCloseTo(colorAt(decoded, 8, 8), Color.BLUE);
+        assertColorCloseTo(colorAt(decoded, 24, 8), Color.RED);
+        assertColorCloseTo(colorAt(decoded, 8, 24), Color.YELLOW);
+        assertColorCloseTo(colorAt(decoded, 24, 24), Color.GREEN);
+    }
+
+    @Test
+    void deletesAFileStoredUnderTheNestedClubPostsDirectory() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] jpegBytes = solidColorJpeg(10, 10, Color.RED);
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", jpegBytes);
+        String imageUrl = service.store(file);
+        assertThat(Files.exists(pathFor(imageUrl))).isTrue();
+
+        service.delete(imageUrl);
+
+        assertThat(Files.exists(pathFor(imageUrl))).isFalse();
+    }
+
+    @Test
+    void deleteIgnoresAUrlThatWouldEscapeTheUploadDirectory() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        Path outsideFile = uploadDir.resolveSibling("outside-secret.txt");
+        Files.writeString(outsideFile, "do not delete me");
+
+        service.delete("/uploads/../outside-secret.txt");
+
+        assertThat(Files.exists(outsideFile)).isTrue();
+        Files.deleteIfExists(outsideFile);
+    }
+
+    private Path pathFor(String imageUrl) {
+        return uploadDir.resolve(imageUrl.substring("/uploads/".length()));
+    }
+
+    private byte[] readStoredFile(String imageUrl) throws IOException {
+        return Files.readAllBytes(pathFor(imageUrl));
+    }
+
+    private static boolean isJpeg(byte[] bytes) {
+        return bytes.length > 2 && (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8;
+    }
+
+    private static boolean isPng(byte[] bytes) {
+        byte[] signature = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+        return bytes.length >= signature.length && Arrays.equals(Arrays.copyOf(bytes, signature.length), signature);
+    }
+
+    private static boolean containsApp1ExifMarker(byte[] bytes) {
+        for (int i = 0; i < bytes.length - 1; i++) {
+            if ((bytes[i] & 0xFF) == 0xFF && (bytes[i + 1] & 0xFF) == 0xE1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Color colorAt(BufferedImage image, int x, int y) {
+        return new Color(image.getRGB(x, y), false);
+    }
+
+    // Solid color quadrants encoded at high JPEG quality should survive lossy compression
+    // almost exactly; a generous per-channel tolerance absorbs the residual DCT rounding.
+    private static void assertColorCloseTo(Color actual, Color expected) {
+        int tolerance = 40;
+        assertThat(Math.abs(actual.getRed() - expected.getRed())).isLessThanOrEqualTo(tolerance);
+        assertThat(Math.abs(actual.getGreen() - expected.getGreen())).isLessThanOrEqualTo(tolerance);
+        assertThat(Math.abs(actual.getBlue() - expected.getBlue())).isLessThanOrEqualTo(tolerance);
+    }
+
+    private static byte[] padTo(byte[] original, int targetLength) {
+        return Arrays.copyOf(original, targetLength);
+    }
+
+    private static byte[] solidColorJpeg(int width, int height, Color color) throws IOException {
+        BufferedImage image = solidColorImage(width, height, color, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(image, "jpg", out);
+        return out.toByteArray();
+    }
+
+    private static byte[] solidColorPng(int width, int height, Color color, boolean withAlpha) throws IOException {
+        BufferedImage image = solidColorImage(
+            width, height, color, withAlpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", out);
+        return out.toByteArray();
+    }
+
+    private static byte[] solidColorGif(int width, int height, Color color) throws IOException {
+        BufferedImage image = solidColorImage(width, height, color, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(image, "gif", out);
+        return out.toByteArray();
+    }
+
+    private static BufferedImage solidColorImage(int width, int height, Color color, int type) {
+        BufferedImage image = new BufferedImage(width, height, type);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setColor(color);
+        graphics.fillRect(0, 0, width, height);
+        graphics.dispose();
+        return image;
+    }
+
+    private static byte[] animatedGif(int width, int height) throws IOException {
+        BufferedImage frame1 = solidColorImage(width, height, Color.RED, BufferedImage.TYPE_INT_RGB);
+        BufferedImage frame2 = solidColorImage(width, height, Color.BLUE, BufferedImage.TYPE_INT_RGB);
+
+        ImageWriter writer = ImageIO.getImageWritersByFormatName("gif").next();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (ImageOutputStream ios = ImageIO.createImageOutputStream(out)) {
+            writer.setOutput(ios);
+            writer.prepareWriteSequence(null);
+            for (BufferedImage frame : new BufferedImage[] {frame1, frame2}) {
+                ImageWriteParam param = writer.getDefaultWriteParam();
+                IIOMetadata metadata = writer.getDefaultImageMetadata(new ImageTypeSpecifier(frame), param);
+                writer.writeToSequence(new IIOImage(frame, null, metadata), param);
+            }
+            writer.endWriteSequence();
+        } finally {
+            writer.dispose();
+        }
+        return out.toByteArray();
+    }
+
+    private static int frameCount(byte[] gifBytes) throws IOException {
+        ImageReader reader = ImageIO.getImageReadersByFormatName("gif").next();
+        try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(gifBytes))) {
+            reader.setInput(iis);
+            return reader.getNumImages(true);
+        } finally {
+            reader.dispose();
+        }
+    }
+
+    // Hand-builds a minimal, standards-compliant Exif APP1 segment (TIFF header + IFD0 with an
+    // Orientation tag and a GPSInfo pointer + a GPS IFD with Lat/Long) and splices it in right
+    // after the JPEG SOI marker. Independently verified against this exact fixture with
+    // `exiftool` (reports "Orientation: Rotate 90 CW" and real GPS coordinates).
+    private static byte[] jpegWithOrientationAndGps(int orientation) throws IOException {
+        byte[] quadrants = quadrantJpeg();
+        byte[] app1 = buildApp1Segment(orientation);
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(quadrants, 0, 2); // SOI
+        out.write(app1);
+        out.write(quadrants, 2, quadrants.length - 2);
+        return out.toByteArray();
+    }
+
+    private static byte[] quadrantJpeg() throws IOException {
+        BufferedImage image = new BufferedImage(32, 32, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setColor(Color.RED);
+        graphics.fillRect(0, 0, 16, 16);
+        graphics.setColor(Color.GREEN);
+        graphics.fillRect(16, 0, 16, 16);
+        graphics.setColor(Color.BLUE);
+        graphics.fillRect(0, 16, 16, 16);
+        graphics.setColor(Color.YELLOW);
+        graphics.fillRect(16, 16, 16, 16);
+        graphics.dispose();
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
+        try {
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(0.95f);
+            try (ImageOutputStream ios = ImageIO.createImageOutputStream(out)) {
+                writer.setOutput(ios);
+                writer.write(null, new IIOImage(image, null, null), param);
+            }
+        } finally {
+            writer.dispose();
+        }
+        return out.toByteArray();
+    }
+
+    private static byte[] buildApp1Segment(int orientation) {
+        byte[] tiff = buildTiffWithOrientationAndGps(orientation);
+        byte[] exifHeader = {'E', 'x', 'i', 'f', 0, 0};
+        int payloadLength = exifHeader.length + tiff.length;
+        int segmentLength = 2 + payloadLength;
+
+        ByteBuffer buffer = ByteBuffer.allocate(2 + 2 + payloadLength).order(ByteOrder.BIG_ENDIAN);
+        buffer.put((byte) 0xFF).put((byte) 0xE1);
+        buffer.putShort((short) segmentLength);
+        buffer.put(exifHeader);
+        buffer.put(tiff);
+        return buffer.array();
+    }
+
+    // Layout (all offsets relative to the start of the TIFF header, little-endian):
+    // 0-7 header, 8-9 IFD0 field count, 10-33 IFD0 entries (Orientation, GPSInfo pointer),
+    // 34-37 next-IFD offset (0), 38-.. GPS IFD (LatRef, Lat, LonRef, Lon), then the RATIONAL
+    // data blocks the GPS Lat/Long entries point to.
+    private static byte[] buildTiffWithOrientationAndGps(int orientation) {
+        int ifd0Start = 8;
+        int ifd0Count = 2;
+        int ifd0NextOffsetPos = ifd0Start + 2 + ifd0Count * 12;
+        int gpsIfdStart = ifd0NextOffsetPos + 4;
+        int gpsCount = 4;
+        int gpsNextOffsetPos = gpsIfdStart + 2 + gpsCount * 12;
+        int gpsDataStart = gpsNextOffsetPos + 4;
+        int latDataOffset = gpsDataStart;
+        int lonDataOffset = latDataOffset + 24;
+        int totalLength = lonDataOffset + 24;
+
+        ByteBuffer buffer = ByteBuffer.allocate(totalLength).order(ByteOrder.LITTLE_ENDIAN);
+        buffer.put((byte) 'I').put((byte) 'I');
+        buffer.putShort((short) 42);
+        buffer.putInt(8);
+
+        buffer.putShort((short) ifd0Count);
+        buffer.putShort((short) 0x0112).putShort((short) 3).putInt(1); // Orientation, SHORT, count 1
+        buffer.putShort((short) orientation).putShort((short) 0);
+        buffer.putShort((short) 0x8825).putShort((short) 4).putInt(1); // GPSInfo pointer, LONG, count 1
+        buffer.putInt(gpsIfdStart);
+        buffer.putInt(0); // next IFD0 offset
+
+        buffer.putShort((short) gpsCount);
+        buffer.putShort((short) 0x0001).putShort((short) 2).putInt(2); // GPSLatitudeRef, ASCII, "N\0"
+        buffer.put((byte) 'N').put((byte) 0).put((byte) 0).put((byte) 0);
+        buffer.putShort((short) 0x0002).putShort((short) 5).putInt(3); // GPSLatitude, RATIONAL x3
+        buffer.putInt(latDataOffset);
+        buffer.putShort((short) 0x0003).putShort((short) 2).putInt(2); // GPSLongitudeRef, ASCII, "E\0"
+        buffer.put((byte) 'E').put((byte) 0).put((byte) 0).put((byte) 0);
+        buffer.putShort((short) 0x0004).putShort((short) 5).putInt(3); // GPSLongitude, RATIONAL x3
+        buffer.putInt(lonDataOffset);
+        buffer.putInt(0); // next GPS IFD offset
+
+        buffer.putInt(37).putInt(1); // 37 deg
+        buffer.putInt(25).putInt(1); // 25 min
+        buffer.putInt(192).putInt(10); // 19.2 sec
+        buffer.putInt(122).putInt(1); // 122 deg
+        buffer.putInt(5).putInt(1); // 5 min
+        buffer.putInt(60).putInt(10); // 6.0 sec
+
+        return buffer.array();
+    }
+}

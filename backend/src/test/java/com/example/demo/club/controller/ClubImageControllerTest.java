@@ -4,14 +4,20 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.club.service.ImageStorageService;
 import com.example.demo.security.AuthenticatedUserResolver;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.security.oauth2.client.autoconfigure.OAuth2ClientAutoConfiguration;
@@ -58,6 +64,9 @@ class ClubImageControllerTest {
     @MockitoBean
     private ClubService clubService;
 
+    @MockitoBean
+    private ImageStorageService imageStorageService;
+
     @Test
     void uploadImageRequiresManageAccess() throws Exception {
         Club club = new Club();
@@ -65,7 +74,7 @@ class ClubImageControllerTest {
         club.setCanManage(false);
         when(clubService.findById(eq(1L), any())).thenReturn(club);
 
-        MockMultipartFile file = new MockMultipartFile("file", "avatar.png", "image/png", new byte[] {1, 2, 3});
+        MockMultipartFile file = realPngFile();
 
         mockMvc.perform(multipart("/api/clubs/1/image")
                 .file(file)
@@ -79,13 +88,23 @@ class ClubImageControllerTest {
         club.setId(1L);
         club.setCanManage(false);
         when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/generated-uuid.jpg");
 
-        MockMultipartFile file = new MockMultipartFile("file", "avatar.png", "image/png", new byte[] {1, 2, 3});
+        MockMultipartFile file = realPngFile();
 
         mockMvc.perform(multipart("/api/clubs/1/image")
                 .file(file)
                 .principal(oauthToken(OWNER_EMAIL)))
-            .andExpect(status().isOk());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.imageUrl").value("/uploads/club-posts/generated-uuid.jpg"));
+    }
+
+    private static MockMultipartFile realPngFile() throws IOException {
+        BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+        image.setRGB(0, 0, 0x00FF00);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", out);
+        return new MockMultipartFile("file", "avatar.png", "image/png", out.toByteArray());
     }
 
     private OAuth2AuthenticationToken oauthToken(String email) {
