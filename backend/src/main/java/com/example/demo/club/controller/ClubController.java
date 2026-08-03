@@ -275,12 +275,7 @@ public class ClubController {
     // ---- Permission helpers ----
 
     private Club resolveClub(String clubSlugOrId, String viewerEmail) {
-        try {
-            Long numericId = Long.valueOf(clubSlugOrId);
-            return clubService.findById(numericId, viewerEmail);
-        } catch (NumberFormatException e) {
-            return clubService.findBySlug(clubSlugOrId, viewerEmail);
-        }
+        return clubService.resolveBySlugOrId(clubSlugOrId, viewerEmail);
     }
 
     private String resolveViewerEmail(Authentication authentication) {

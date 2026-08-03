@@ -74,7 +74,7 @@ class ClubImageControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setCanManage(false);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
 
         MockMultipartFile file = realPngFile();
 
@@ -89,7 +89,7 @@ class ClubImageControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setCanManage(false);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(imageStorageService.store(any())).thenReturn("/uploads/club-posts/generated-uuid.jpg");
 
         MockMultipartFile file = realPngFile();
@@ -116,7 +116,7 @@ class ClubImageControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setCanManage(false);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(imageStorageService.store(any())).thenThrow(new IllegalArgumentException("Unreadable image"));
 
         MockMultipartFile file = realPngFile();
@@ -135,7 +135,7 @@ class ClubImageControllerTest {
         Club club = new Club();
         club.setId(1L);
         club.setCanManage(false);
-        when(clubService.findById(eq(1L), any())).thenReturn(club);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
         when(imageStorageService.store(any())).thenThrow(new IOException("disk full"));
 
         MockMultipartFile file = realPngFile();

@@ -73,6 +73,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/clubs").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/clubs/calendar").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/clubs/*").permitAll()
+                // Club media feed (#78): "/api/clubs/*" above does not span path segments, so
+                // it does not cover this. Deliberately its own matcher, not added to
+                // PUBLIC_READ_ONLY_CORS_PATTERNS below -- see that list's Javadoc.
+                .requestMatchers(HttpMethod.GET, "/api/clubs/*/posts").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/avatars/instagram/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/summary").permitAll()
                 // Everything else under /api requires authentication
@@ -147,10 +151,17 @@ public class SecurityConfig {
 
     /**
      * Path patterns that carry a permitAll() GET in SecurityConfig's authorizeHttpRequests
-     * block above (public club data meant for future data-collection clients, plus the cached
-     * Instagram avatar images those clients would also want to fetch() rather than just
-     * <img>-load). Kept as a constant so the authorization rules and the CORS policy can't
-     * silently drift apart.
+     * block above -- but not every one of them: only the ones meant to be readable by
+     * literally any origin (public club data meant for future data-collection clients, plus
+     * the cached Instagram avatar images those clients would also want to fetch() rather than
+     * just <img>-load). GET /api/clubs/{clubSlugOrId}/posts (#78) is deliberately excluded
+     * even though it is also permitAll(): a club's activity photos and student display names
+     * are not the kind of data this wildcard-CORS list exists to let off-site aggregators
+     * script-read, so a cross-origin caller for that path falls through to the authenticated,
+     * exact-origin CORS policy instead (see SecurityConfigCorsTest for the behavior this
+     * protects). Kept as a constant so *this* list and the CORS policy built from it can't
+     * silently drift apart -- it is a deliberate subset of the permitAll() GETs above, not a
+     * mechanical mirror of all of them.
      */
     private static final List<String> PUBLIC_READ_ONLY_CORS_PATTERNS = List.of(
         "/api/summary",

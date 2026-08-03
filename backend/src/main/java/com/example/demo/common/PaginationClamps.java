@@ -17,6 +17,13 @@ public final class PaginationClamps {
         return Math.max(1, Math.min(size, MAX_PAGE_SIZE));
     }
 
+    // Mirrors the same "negative page treated as first page" rule clampOffset already applies
+    // internally, so an envelope that echoes the page number back to the caller (see the club
+    // post feed) reports what was actually served rather than a raw, possibly-negative input.
+    public static int clampPage(int page) {
+        return Math.max(0, page);
+    }
+
     // Uses long arithmetic so a huge page number can't wrap around into a negative int offset,
     // and clamps to Integer.MAX_VALUE (the widest legal offset) rather than overflowing.
     public static int clampOffset(int page, int limit) {

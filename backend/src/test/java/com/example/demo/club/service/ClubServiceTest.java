@@ -1,5 +1,6 @@
 package com.example.demo.club.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.club.mapper.ClubMapper;
+import com.example.demo.club.model.Club;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,5 +76,40 @@ class ClubServiceTest {
 
         verify(clubMapper).updateImageUrl(1L, "/uploads/club-posts/new-uuid.jpg");
         verify(clubMapper, never()).update(any());
+    }
+
+    // The shared slug-or-id resolver every controller that takes a {clubSlugOrId} path
+    // variable delegates to: a purely numeric path segment is looked up by id, anything else
+    // by slug -- never both, so a numeric slug (were one ever created) cannot be reached this
+    // way, which matches every one of these controllers' pre-existing behavior.
+    @Test
+    void resolveBySlugOrIdLooksUpByIdWhenTheSegmentIsNumeric() {
+        Club club = new Club();
+        club.setId(42L);
+        when(clubMapper.findById(42L)).thenReturn(club);
+
+        Club resolved = clubService.resolveBySlugOrId("42", "viewer@example.com");
+
+        assertThat(resolved).isSameAs(club);
+        verify(clubMapper, never()).findBySlug(any());
+    }
+
+    @Test
+    void resolveBySlugOrIdLooksUpBySlugWhenTheSegmentIsNotNumeric() {
+        Club club = new Club();
+        club.setId(42L);
+        when(clubMapper.findBySlug("chess-club")).thenReturn(club);
+
+        Club resolved = clubService.resolveBySlugOrId("chess-club", "viewer@example.com");
+
+        assertThat(resolved).isSameAs(club);
+        verify(clubMapper, never()).findById(any());
+    }
+
+    @Test
+    void resolveBySlugOrIdReturnsNullWhenNeitherLookupFindsTheClub() {
+        Club resolved = clubService.resolveBySlugOrId("does-not-exist", "viewer@example.com");
+
+        assertThat(resolved).isNull();
     }
 }

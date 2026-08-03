@@ -56,18 +56,11 @@ public class ClubImageController {
     }
 
     private Club resolveClub(String clubSlugOrId, String viewerEmail) {
-        try {
-            Long numericId = Long.valueOf(clubSlugOrId);
-            Club club = clubService.findById(numericId, viewerEmail);
-            if (club == null) throw new IllegalArgumentException("Club not found");
-            return club;
-        } catch (NumberFormatException e) {
-            Club club = clubService.findBySlug(clubSlugOrId, viewerEmail);
-            if (club == null) throw new IllegalArgumentException("Club not found");
-            return club;
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        Club club = clubService.resolveBySlugOrId(clubSlugOrId, viewerEmail);
+        if (club == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
+        return club;
     }
 
     private Club requireManageAccess(String clubSlugOrId, Authentication authentication) {
