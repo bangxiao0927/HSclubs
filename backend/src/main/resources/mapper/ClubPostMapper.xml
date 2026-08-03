@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.club.mapper.ClubPostMapper">
+
+    <resultMap id="ClubPostResultMap" type="com.example.demo.club.model.ClubPost">
+        <id column="id" property="id" />
+        <result column="club_id" property="clubId" />
+        <result column="author_oauth_user_id" property="authorOauthUserId" />
+        <result column="title" property="title" />
+        <result column="image_url" property="imageUrl" />
+        <result column="pinned_at" property="pinnedAt" />
+        <result column="pinned_by_oauth_user_id" property="pinnedByOauthUserId" />
+        <result column="created_at" property="createdAt" />
+    </resultMap>
+
+    <sql id="PostColumnList">
+        id, club_id, author_oauth_user_id, title, image_url, pinned_at, pinned_by_oauth_user_id, created_at
+    </sql>
+
+    <!-- The CASE WHEN form is required over "(pinned_at IS NOT NULL) DESC": that expression is
+         1/0 in MySQL but BOOLEAN in H2 MODE=MySQL, an engine-dependent difference this repo has
+         already been bitten by (see schema.sql's achievements CLOB-vs-JSON comment). The
+         trailing "id DESC" is a deliberate pagination-stability tiebreaker: created_at only has
+         second granularity, so without it two posts created in the same second could swap
+         places between page requests, duplicating or skipping items across a page boundary. -->
+    <select id="findFeedByClubId" resultMap="ClubPostResultMap">
+        SELECT <include refid="PostColumnList" />
+        FROM club_post
+        WHERE club_id = #{clubId}
+        ORDER BY CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC,
+                 pinned_at  DESC,
+                 created_at DESC,
+                 id         DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countFeedByClubId" resultType="int">
+        SELECT COUNT(*) FROM club_post WHERE club_id = #{clubId}
+    </select>
+
+    <insert id="insert" parameterType="com.example.demo.club.model.ClubPost"
+            useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO club_post (club_id, author_oauth_user_id, title, image_url)
+        VALUES (#{clubId}, #{authorOauthUserId}, #{title}, #{imageUrl})
+    </insert>
+
+    <delete id="delete">
+        DELETE FROM club_post WHERE id = #{id}
+    </delete>
+
+    <update id="pin">
+        UPDATE club_post
+        SET pinned_at = CURRENT_TIMESTAMP,
+            pinned_by_oauth_user_id = #{pinnedByOauthUserId}
+        WHERE id = #{id}
+    </update>
+
+    <update id="unpin">
+        UPDATE club_post
+        SET pinned_at = NULL,
+            pinned_by_oauth_user_id = NULL
+        WHERE id = #{id}
+    </update>
+
+    <select id="countPinnedByClubId" resultType="int">
+        SELECT COUNT(*) FROM club_post WHERE club_id = #{clubId} AND pinned_at IS NOT NULL
+    </select>
+
+    <resultMap id="ClubPostCommentResultMap" type="com.example.demo.club.model.ClubPostComment">
+        <id column="id" property="id" />
+        <result column="post_id" property="postId" />
+        <result column="author_oauth_user_id" property="authorOauthUserId" />
+        <result column="body" property="body" />
+        <result column="created_at" property="createdAt" />
+    </resultMap>
+
+    <select id="findCommentsByPostId" resultMap="ClubPostCommentResultMap">
+        SELECT id, post_id, author_oauth_user_id, body, created_at
+        FROM club_post_comment
+        WHERE post_id = #{postId}
+        ORDER BY created_at ASC, id ASC
+    </select>
+
+    <insert id="insertComment" parameterType="com.example.demo.club.model.ClubPostComment"
+            useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO club_post_comment (post_id, author_oauth_user_id, body)
+        VALUES (#{postId}, #{authorOauthUserId}, #{body})
+    </insert>
+
+    <delete id="deleteComment">
+        DELETE FROM club_post_comment WHERE id = #{id}
+    </delete>
+
+    <select id="countCommentsByPostId" resultType="int">
+        SELECT COUNT(*) FROM club_post_comment WHERE post_id = #{postId}
+    </select>
+
+    <!-- Not called by UploadCleanupService yet: that rework is #77. Exists now so #77 can
+         union this with clubs.image_url to know which stored files under club-posts/ are still
+         referenced and must not be deleted as orphans. -->
+    <select id="findAllImageUrls" resultType="string">
+        SELECT image_url FROM club_post
+    </select>
+
+</mapper>
