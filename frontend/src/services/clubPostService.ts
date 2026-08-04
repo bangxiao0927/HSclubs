@@ -1,5 +1,6 @@
 import type { ClubPost, ClubPostComment, ClubPostFeedPage } from '../types/clubPost'
 import { buildApiUrl } from './httpClient'
+import { resolveErrorMessage } from './httpErrorMessage'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = buildApiUrl(path)
@@ -51,8 +52,8 @@ export const publishClubPost = async (
     body: formData,
   })
   if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `Request failed with status ${response.status}`)
+    const message = await resolveErrorMessage(response, `Request failed with status ${response.status}`)
+    throw new Error(message)
   }
   return (await response.json()) as ClubPost
 }

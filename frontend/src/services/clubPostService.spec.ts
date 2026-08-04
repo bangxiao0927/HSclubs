@@ -66,6 +66,53 @@ describe('publishClubPost', () => {
       'Title must be 140 characters or fewer',
     )
   })
+
+  // Spring's own multipart-size rejection (see MultipartUploadExceptionHandler and
+  // docs/API.md's 413 row): an application/problem+json body, not plain text -- the one case
+  // resolveErrorMessage exists to translate into a readable message instead of raw JSON.
+  it('rejects with the ProblemDetail detail message on a 413 application/problem+json response', async () => {
+    const problemBody = JSON.stringify({
+      title: 'Content Too Large',
+      status: 413,
+      detail: 'The uploaded file is too large. Please choose a smaller file and try again.',
+      instance: '/api/clubs/1/posts',
+    })
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 413,
+      headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/problem+json' : null) },
+      text: async () => problemBody,
+    })
+
+    await expect(
+      publishClubPost('1', 'Meeting recap', new File(['image'], 'huge.jpg')),
+    ).rejects.toThrow('The uploaded file is too large. Please choose a smaller file and try again.')
+  })
+
+  it('rejects with the raw body verbatim when a JSON-declared error body is malformed', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 413,
+      headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/problem+json' : null) },
+      text: async () => '{"detail": "cut off mid-strea',
+    })
+
+    await expect(
+      publishClubPost('1', 'Meeting recap', new File(['image'], 'huge.jpg')),
+    ).rejects.toThrow('{"detail": "cut off mid-strea')
+  })
+
+  it('rejects with a status-based fallback message when the error body is empty', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => '',
+    })
+
+    await expect(
+      publishClubPost('1', 'Meeting recap', new File(['image'], 'photo.jpg')),
+    ).rejects.toThrow('Request failed with status 500')
+  })
 })
 
 describe('deleteClubPost', () => {
