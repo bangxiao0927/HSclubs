@@ -21,15 +21,25 @@ public interface ClubPostMapper {
     // Public projection for the anonymous club feed: post columns plus the author's display
     // name/avatar only, never any oauth_users column that could identify or contact them (see
     // PublicClubPost's Javadoc for the exact forbidden list).
+    // viewerOauthUserId (nullable, for anonymous callers) and viewerCanModerateAnyPost feed only
+    // PublicClubPost#viewerCanDelete's own CASE WHEN, never anything serialized back to the
+    // caller.
     List<PublicClubPost> findPublicFeedByClubId(@Param("clubId") Long clubId,
                                                  @Param("offset") int offset,
-                                                 @Param("limit") int limit);
+                                                 @Param("limit") int limit,
+                                                 @Param("viewerOauthUserId") Long viewerOauthUserId,
+                                                 @Param("viewerCanModerateAnyPost") boolean viewerCanModerateAnyPost);
 
     // Read-back for ClubPostService#publish, so a just-published post can be returned with the
     // exact same safe shape a feed item has (author display name/avatar, never the internal
     // author_oauth_user_id). Scoped to clubId as a defense-in-depth guard, matching every other
     // by-ID lookup in this codebase.
-    PublicClubPost findPublicPostByIdAndClubId(@Param("id") Long id, @Param("clubId") Long clubId);
+    // ClubPostWriter#insertAndReadBack always passes the newly created post's own author as
+    // viewerOauthUserId, so the returned viewerCanDelete is always true -- the same authorship
+    // rule findPublicFeedByClubId applies to every other viewer.
+    PublicClubPost findPublicPostByIdAndClubId(@Param("id") Long id, @Param("clubId") Long clubId,
+                                                @Param("viewerOauthUserId") Long viewerOauthUserId,
+                                                @Param("viewerCanModerateAnyPost") boolean viewerCanModerateAnyPost);
 
     // Scoped lookup shared by the pin/unpin path (ClubPostService#pin/#unpin) and the delete
     // endpoint's own author/president/platform-owner authorization: a post ID that exists but
@@ -64,11 +74,19 @@ public interface ClubPostMapper {
 
     // Public projection for the anonymous comments endpoint: comment columns plus the author's
     // display name/avatar only, reusing the same no-PII rule as findPublicFeedByClubId.
-    List<PublicClubPostComment> findPublicCommentsByPostId(@Param("postId") Long postId);
+    List<PublicClubPostComment> findPublicCommentsByPostId(@Param("postId") Long postId,
+                                                            @Param("viewerOauthUserId") Long viewerOauthUserId,
+                                                            @Param("viewerCanModerateAnyPost")
+                                                            boolean viewerCanModerateAnyPost);
 
     // Read-back for ClubPostCommentWriter#lockCountAndInsert, so a just-posted comment can be
     // returned in the exact same safe shape the public list has.
-    PublicClubPostComment findPublicCommentByIdAndPostId(@Param("id") Long id, @Param("postId") Long postId);
+    // Always passed the new comment's own author as viewerOauthUserId, mirroring
+    // findPublicPostByIdAndClubId's contract for a freshly published post.
+    PublicClubPostComment findPublicCommentByIdAndPostId(@Param("id") Long id, @Param("postId") Long postId,
+                                                          @Param("viewerOauthUserId") Long viewerOauthUserId,
+                                                          @Param("viewerCanModerateAnyPost")
+                                                          boolean viewerCanModerateAnyPost);
 
     int insertComment(ClubPostComment comment);
 

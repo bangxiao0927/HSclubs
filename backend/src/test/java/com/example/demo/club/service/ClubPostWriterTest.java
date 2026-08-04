@@ -42,7 +42,7 @@ class ClubPostWriterTest {
     void insertAndReadBackInsertsExactlyWhatItWasGiven() {
         PublicClubPost readBack = new PublicClubPost();
         readBack.setTitle("Meeting recap");
-        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(readBack);
+        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L, 10L, false)).thenReturn(readBack);
 
         clubPostWriter.insertAndReadBack(1L, 10L, "Meeting recap", "/uploads/club-posts/uuid.jpg");
 
@@ -59,7 +59,7 @@ class ClubPostWriterTest {
         PublicClubPost readBack = new PublicClubPost();
         readBack.setId(99L);
         readBack.setAuthorDisplayName("Ada Lovelace");
-        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(readBack);
+        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L, 10L, false)).thenReturn(readBack);
 
         PublicClubPost result =
             clubPostWriter.insertAndReadBack(1L, 10L, "Meeting recap", "/uploads/club-posts/uuid.jpg");
@@ -73,7 +73,7 @@ class ClubPostWriterTest {
     // object.
     @Test
     void insertAndReadBackThrowsWhenTheReadBackFindsNoRow() {
-        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L)).thenReturn(null);
+        when(clubPostMapper.findPublicPostByIdAndClubId(99L, 1L, 10L, false)).thenReturn(null);
 
         assertThatThrownBy(() ->
             clubPostWriter.insertAndReadBack(1L, 10L, "Meeting recap", "/uploads/club-posts/uuid.jpg"))

@@ -1,8 +1,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchClubById } from '../services/clubService'
-import { fetchClubMediaFeed, fetchClubPostComments } from '../services/clubPostService'
+import {
+  fetchClubMediaFeed,
+  fetchClubPostComments,
+  publishClubPost,
+  deleteClubPost,
+  pinClubPost,
+  unpinClubPost,
+  createClubPostComment,
+  deleteClubPostComment,
+} from '../services/clubPostService'
+import { useAuthStore } from '../stores/auth'
 import type { Club } from '../types/club'
 import type { ClubPost, ClubPostComment } from '../types/clubPost'
 import { clubPostImage } from '../utils/clubImages'
@@ -10,6 +21,12 @@ import { userAvatar } from '../utils/avatarImages'
 import BackButton from '../components/BackButton.vue'
 
 const DEFAULT_PAGE_SIZE = 12
+const TITLE_MAX_LENGTH = 140
+const COMMENT_MAX_LENGTH = 300
+const SUPPORTED_FORMATS_NOTICE =
+  'Supported formats: JPEG, PNG, WebP, and GIF. HEIC (the default photo format on many iPhones) is not supported.'
+const PUBLIC_VISIBILITY_NOTICE =
+  'This photo will be visible to anyone who visits this page, including people who are not logged in.'
 
 interface CommentsEntry {
   loading: boolean
@@ -17,8 +34,16 @@ interface CommentsEntry {
   comments: ClubPostComment[]
 }
 
+interface CommentFormState {
+  body: string
+  submitting: boolean
+  error: string
+}
+
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
+const { currentUser } = storeToRefs(authStore)
 
 const club = ref<Club | null>(null)
 const posts = ref<ClubPost[]>([])
@@ -30,6 +55,13 @@ const error = ref('')
 
 const expandedPostIds = ref<Set<number>>(new Set())
 const commentsByPost = ref<Record<number, CommentsEntry>>({})
+// A per-post monotonically increasing counter, never reset (not even by `load()`'s own state
+// reset): the single source of truth for "which in-flight comments request is the newest one"
+// for a given post. Comparing a response's captured generation against the live one at
+// resolution time is what lets loadComments and reconcileCommentsAfterSubmit below tell a
+// still-relevant response apart from a stale one that must be discarded, regardless of which
+// of two in-flight requests happens to resolve (or reject) last.
+const commentsRequestGeneration = ref<Record<number, number>>({})
 let loadedClubId: string | null = null
 
 const routeClubId = computed(() => {
@@ -37,6 +69,11 @@ const routeClubId = computed(() => {
   const value = Array.isArray(raw) ? raw[0] : raw
   return value ?? ''
 })
+
+// Pin/unpin is an editorial power over the whole club, not tied to any one post's authorship:
+// the club's own president (club.canManage) or a platform owner (currentUser.isOwner), the
+// same club.canManage-or-owner pattern ClubAdminView's canManageMembers already uses.
+const canManagePins = computed(() => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner))
 
 const commentsRegionId = (postId: number) => `club-media-comments-${postId}`
 
@@ -62,6 +99,15 @@ const load = async () => {
   error.value = ''
   expandedPostIds.value = new Set()
   commentsByPost.value = {}
+  // A page/club navigation leaves the previous page's posts and comments behind entirely, so
+  // any in-flight action error or unsent comment draft tied to those (now off-screen) post/
+  // comment ids must not silently reappear if a later page happens to reuse the same ids.
+  commentForms.value = {}
+  postActionError.value = {}
+  commentActionError.value = {}
+  deletingPostIds.value = new Set()
+  pinningPostIds.value = new Set()
+  deletingCommentIds.value = new Set()
 
   const requestedPage = Math.max(0, parseQueryInt(route.query.page, 0))
   const requestedSize = Math.max(1, parseQueryInt(route.query.size, DEFAULT_PAGE_SIZE))
@@ -108,18 +154,37 @@ const isExpanded = (postId: number) => expandedPostIds.value.has(postId)
 const emptyCommentsEntry: CommentsEntry = { loading: false, error: '', comments: [] }
 const commentsState = (postId: number) => commentsByPost.value[postId] ?? emptyCommentsEntry
 
+// Claims the next generation number for a post's comments request and records it as the live
+// one; a caller compares its own captured number against `commentsRequestGeneration.value[postId]`
+// once its request settles to know whether it is still the newest one.
+const bumpCommentsGeneration = (postId: number) => {
+  const next = (commentsRequestGeneration.value[postId] ?? 0) + 1
+  commentsRequestGeneration.value = { ...commentsRequestGeneration.value, [postId]: next }
+  return next
+}
+
 const loadComments = async (postId: number) => {
+  const generation = bumpCommentsGeneration(postId)
   commentsByPost.value = {
     ...commentsByPost.value,
     [postId]: { loading: true, error: '', comments: [] },
   }
   try {
     const comments = await fetchClubPostComments(routeClubId.value, postId)
+    if (commentsRequestGeneration.value[postId] !== generation) {
+      // A newer request for this same post (another loadComments call, or a post-submit
+      // reconciliation) has since superseded this one; applying this stale response now would
+      // silently undo whatever that newer request already wrote.
+      return
+    }
     commentsByPost.value = {
       ...commentsByPost.value,
       [postId]: { loading: false, error: '', comments },
     }
   } catch (err) {
+    if (commentsRequestGeneration.value[postId] !== generation) {
+      return
+    }
     const message = err instanceof Error ? err.message : 'Failed to load comments'
     commentsByPost.value = {
       ...commentsByPost.value,
@@ -140,6 +205,282 @@ const toggleComments = (postId: number) => {
   const existing = commentsByPost.value[postId]
   if (!existing || existing.error) {
     void loadComments(postId)
+  }
+}
+
+// ---- Publishing (member-only) ----
+
+const publishTitle = ref('')
+const publishFile = ref<File | null>(null)
+const publishPreviewUrl = ref('')
+const publishing = ref(false)
+const publishError = ref('')
+const publishFileInput = ref<HTMLInputElement | null>(null)
+
+const revokePublishPreview = () => {
+  if (publishPreviewUrl.value) {
+    URL.revokeObjectURL(publishPreviewUrl.value)
+    publishPreviewUrl.value = ''
+  }
+}
+
+const handlePublishFileChange = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  revokePublishPreview()
+  publishFile.value = file
+  if (file) {
+    publishPreviewUrl.value = URL.createObjectURL(file)
+  }
+}
+
+const resetPublishForm = () => {
+  publishTitle.value = ''
+  publishFile.value = null
+  revokePublishPreview()
+  if (publishFileInput.value) {
+    publishFileInput.value.value = ''
+  }
+}
+
+// Raw fetch with FormData and no explicit Content-Type (see publishClubPost's own Javadoc-style
+// comment): the created post is prepended locally so the feed updates without a page reload or
+// a second round trip back to the server.
+const handlePublish = async () => {
+  if (!club.value || publishing.value) {
+    return
+  }
+  if (!publishFile.value) {
+    publishError.value = 'A photo is required'
+    return
+  }
+
+  publishing.value = true
+  publishError.value = ''
+  try {
+    const created = await publishClubPost(routeClubId.value, publishTitle.value, publishFile.value)
+    posts.value = [created, ...posts.value]
+    total.value += 1
+    resetPublishForm()
+  } catch (err) {
+    publishError.value = err instanceof Error ? err.message : 'Failed to publish post'
+  } finally {
+    publishing.value = false
+  }
+}
+
+// ---- Commenting (member-only) ----
+
+const commentForms = ref<Record<number, CommentFormState>>({})
+const emptyCommentFormState: CommentFormState = { body: '', submitting: false, error: '' }
+
+const commentFormState = (postId: number) => commentForms.value[postId] ?? emptyCommentFormState
+
+const updateCommentBody = (postId: number, body: string) => {
+  commentForms.value = {
+    ...commentForms.value,
+    [postId]: { ...commentFormState(postId), body },
+  }
+}
+
+const submitComment = async (postId: number) => {
+  const state = commentFormState(postId)
+  if (state.submitting) {
+    return
+  }
+  commentForms.value = { ...commentForms.value, [postId]: { ...state, submitting: true, error: '' } }
+  try {
+    const created = await createClubPostComment(routeClubId.value, postId, state.body)
+    // Immediate, useful feedback: show the just-created comment right away, appended to
+    // whatever is currently displayed -- even if that is empty because the list was still
+    // loading or had errored. reconcileCommentsAfterSubmit below replaces this with the
+    // authoritative server list right after, so this optimistic view is never the last word.
+    const existing = commentsState(postId)
+    commentsByPost.value = {
+      ...commentsByPost.value,
+      [postId]: { loading: false, error: '', comments: [...existing.comments, created] },
+    }
+    posts.value = posts.value.map((post) =>
+      post.id === postId ? { ...post, commentCount: post.commentCount + 1 } : post,
+    )
+    commentForms.value = { ...commentForms.value, [postId]: { ...emptyCommentFormState } }
+    await reconcileCommentsAfterSubmit(postId)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to post comment'
+    commentForms.value = {
+      ...commentForms.value,
+      [postId]: { ...state, submitting: false, error: message },
+    }
+  }
+}
+
+// A comment box is usable even while its post's comment list is still loading or has errored
+// (the form does not wait on that state -- see the template), so the optimistic append in
+// submitComment above can start from an incomplete or empty list. Worse, an older loadComments
+// GET issued before this submit (e.g. from expanding the comments panel) can still be in flight
+// and would otherwise resolve afterwards with a pre-submission snapshot that clobbers the new
+// comment. Refetching here under the same generation-token guard loadComments uses fixes both:
+// whichever request for this post is actually the newest is the only one ever applied, and the
+// comment count is set from the authoritative list's own length rather than layered on top of
+// the optimistic +1 above, so the two can never double-count.
+const reconcileCommentsAfterSubmit = async (postId: number) => {
+  const generation = bumpCommentsGeneration(postId)
+  try {
+    const comments = await fetchClubPostComments(routeClubId.value, postId)
+    if (commentsRequestGeneration.value[postId] !== generation) {
+      return
+    }
+    commentsByPost.value = {
+      ...commentsByPost.value,
+      [postId]: { loading: false, error: '', comments },
+    }
+    posts.value = posts.value.map((post) =>
+      post.id === postId ? { ...post, commentCount: comments.length } : post,
+    )
+  } catch {
+    // The comment itself was already posted successfully -- the optimistic append above is
+    // still visible -- so a failed reconciliation fetch does not surface a second, confusing
+    // error for an action that already succeeded.
+  }
+}
+
+// ---- Post deletion, pin/unpin, and comment deletion ----
+
+const postActionError = ref<Record<number, string>>({})
+const deletingPostIds = ref<Set<number>>(new Set())
+const pinningPostIds = ref<Set<number>>(new Set())
+const commentActionError = ref<Record<number, string>>({})
+const deletingCommentIds = ref<Set<number>>(new Set())
+
+const isDeletingPost = (postId: number) => deletingPostIds.value.has(postId)
+const isPinningPost = (postId: number) => pinningPostIds.value.has(postId)
+const isDeletingComment = (commentId: number) => deletingCommentIds.value.has(commentId)
+
+const handleDeletePost = async (postId: number) => {
+  if (isDeletingPost(postId)) {
+    return
+  }
+  const next = new Set(deletingPostIds.value)
+  next.add(postId)
+  deletingPostIds.value = next
+  postActionError.value = { ...postActionError.value, [postId]: '' }
+  try {
+    await deleteClubPost(routeClubId.value, postId)
+    posts.value = posts.value.filter((post) => post.id !== postId)
+    total.value = Math.max(0, total.value - 1)
+    await backfillCurrentPageAfterPostDeletion()
+  } catch (err) {
+    postActionError.value = {
+      ...postActionError.value,
+      [postId]: err instanceof Error ? err.message : 'Failed to delete post',
+    }
+  } finally {
+    const cleared = new Set(deletingPostIds.value)
+    cleared.delete(postId)
+    deletingPostIds.value = cleared
+  }
+}
+
+// Deleting a post shrinks the current page below a full page's worth of items without ever
+// pulling in the item that should now slide up from the next page -- the local, optimistic
+// removal above only ever shrinks the list. This re-fetches the same page from the server so
+// that backfill can happen, still without a manual browser reload: if the current page is a
+// nonzero page and the re-fetch shows it is now empty, the viewer would otherwise be stranded
+// on a page with nothing to show, so this navigates back to the previous (now-valid) page
+// instead, which itself reloads through the normal query-driven `load()` path.
+//
+// The request's own club id, page, and size are captured up front, before the `await`, and
+// re-checked against the live route once the response arrives: a fast Next/Previous click (or a
+// club navigation) issued while this backfill is still in flight must not let this now-stale
+// response overwrite whatever that newer navigation's own `load()` call already wrote -- last
+// network response to resolve is not necessarily the last request the viewer actually intended.
+const backfillCurrentPageAfterPostDeletion = async () => {
+  const requestedClubId = routeClubId.value
+  const requestedPage = page.value
+  const requestedSize = size.value
+  const requestedQueryPage = route.query.page
+  const requestedQuerySize = route.query.size
+  const isStillTheSameFeedContext = () =>
+    routeClubId.value === requestedClubId &&
+    route.query.page === requestedQueryPage &&
+    route.query.size === requestedQuerySize
+
+  try {
+    const feed = await fetchClubMediaFeed(requestedClubId, requestedPage, requestedSize)
+    if (!isStillTheSameFeedContext()) {
+      return
+    }
+    if (feed.items.length === 0 && requestedPage > 0) {
+      goToPage(requestedPage - 1)
+      return
+    }
+    posts.value = feed.items
+    page.value = feed.page
+    size.value = feed.size
+    total.value = feed.total
+  } catch {
+    // The delete itself already succeeded; a failed backfill just leaves the optimistic,
+    // already-shorter local list in place rather than surfacing a second, confusing error.
+  }
+}
+
+const handleTogglePin = async (post: ClubPost) => {
+  if (isPinningPost(post.id)) {
+    return
+  }
+  const next = new Set(pinningPostIds.value)
+  next.add(post.id)
+  pinningPostIds.value = next
+  postActionError.value = { ...postActionError.value, [post.id]: '' }
+  try {
+    if (post.pinnedAt) {
+      await unpinClubPost(routeClubId.value, post.id)
+      posts.value = posts.value.map((p) => (p.id === post.id ? { ...p, pinnedAt: null } : p))
+    } else {
+      await pinClubPost(routeClubId.value, post.id)
+      posts.value = posts.value.map((p) =>
+        p.id === post.id ? { ...p, pinnedAt: new Date().toISOString() } : p,
+      )
+    }
+  } catch (err) {
+    postActionError.value = {
+      ...postActionError.value,
+      [post.id]: err instanceof Error ? err.message : 'Failed to update pin',
+    }
+  } finally {
+    const cleared = new Set(pinningPostIds.value)
+    cleared.delete(post.id)
+    pinningPostIds.value = cleared
+  }
+}
+
+const handleDeleteComment = async (postId: number, commentId: number) => {
+  if (isDeletingComment(commentId)) {
+    return
+  }
+  const next = new Set(deletingCommentIds.value)
+  next.add(commentId)
+  deletingCommentIds.value = next
+  commentActionError.value = { ...commentActionError.value, [commentId]: '' }
+  try {
+    await deleteClubPostComment(routeClubId.value, postId, commentId)
+    const existing = commentsState(postId)
+    commentsByPost.value = {
+      ...commentsByPost.value,
+      [postId]: { ...existing, comments: existing.comments.filter((comment) => comment.id !== commentId) },
+    }
+    posts.value = posts.value.map((post) =>
+      post.id === postId ? { ...post, commentCount: Math.max(0, post.commentCount - 1) } : post,
+    )
+  } catch (err) {
+    commentActionError.value = {
+      ...commentActionError.value,
+      [commentId]: err instanceof Error ? err.message : 'Failed to delete comment',
+    }
+  } finally {
+    const cleared = new Set(deletingCommentIds.value)
+    cleared.delete(commentId)
+    deletingCommentIds.value = cleared
   }
 }
 
@@ -191,6 +532,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  revokePublishPreview()
   const existing = document.head.querySelector('meta[name="robots"]')
   if (!existing) {
     return
@@ -229,6 +571,51 @@ watch(
         <p class="mv-subtitle">Activity photos and updates shared by club members.</p>
       </header>
 
+      <section v-if="club?.viewerIsMember" class="mv-publish">
+        <h2 class="mv-publish-title">Share an update</h2>
+        <p class="mv-publish-notice">{{ PUBLIC_VISIBILITY_NOTICE }}</p>
+        <form class="mv-publish-form" @submit.prevent="handlePublish">
+          <label class="mv-field">
+            <span>Title</span>
+            <input
+              v-model="publishTitle"
+              type="text"
+              class="mv-publish-title-input"
+              :maxlength="TITLE_MAX_LENGTH"
+              placeholder="What's happening?"
+              :disabled="publishing"
+            />
+          </label>
+          <p class="mv-counter">{{ publishTitle.length }}/{{ TITLE_MAX_LENGTH }}</p>
+
+          <label class="mv-field">
+            <span>Photo</span>
+            <input
+              ref="publishFileInput"
+              type="file"
+              class="mv-publish-file-input"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              :disabled="publishing"
+              @change="handlePublishFileChange"
+            />
+          </label>
+          <p class="mv-format-notice">{{ SUPPORTED_FORMATS_NOTICE }}</p>
+
+          <img
+            v-if="publishPreviewUrl"
+            :src="publishPreviewUrl"
+            alt="Selected photo preview"
+            class="mv-publish-preview"
+          />
+
+          <p v-if="publishError" class="mv-status mv-status--error">{{ publishError }}</p>
+
+          <button type="submit" class="mv-publish-submit" :disabled="publishing">
+            {{ publishing ? 'Publishing…' : 'Publish' }}
+          </button>
+        </form>
+      </section>
+
       <p v-if="posts.length === 0" class="mv-empty">No posts yet. Check back soon.</p>
 
       <ul v-else class="mv-post-list">
@@ -260,6 +647,32 @@ watch(
             >
               {{ isExpanded(post.id) ? 'Hide comments' : `Show comments (${post.commentCount})` }}
             </button>
+
+            <p v-if="postActionError[post.id]" class="mv-status mv-status--error">
+              {{ postActionError[post.id] }}
+            </p>
+
+            <div v-if="canManagePins || post.viewerCanDelete" class="mv-post-actions">
+              <button
+                v-if="canManagePins"
+                type="button"
+                class="mv-pin-toggle"
+                :disabled="isPinningPost(post.id)"
+                @click="handleTogglePin(post)"
+              >
+                {{ post.pinnedAt ? 'Unpin' : 'Pin' }}
+              </button>
+              <button
+                v-if="post.viewerCanDelete"
+                type="button"
+                class="mv-post-delete"
+                :disabled="isDeletingPost(post.id)"
+                @click="handleDeletePost(post.id)"
+              >
+                Delete post
+              </button>
+            </div>
+
             <div
               v-show="isExpanded(post.id)"
               :id="commentsRegionId(post.id)"
@@ -279,8 +692,41 @@ watch(
                   <p class="mv-comment-author">{{ comment.authorDisplayName }}</p>
                   <p class="mv-comment-body">{{ comment.body }}</p>
                   <p class="mv-comment-time">{{ formatRelativeTime(comment.createdAt) }}</p>
+                  <button
+                    v-if="comment.viewerCanDelete"
+                    type="button"
+                    class="mv-comment-delete"
+                    :disabled="isDeletingComment(comment.id)"
+                    @click="handleDeleteComment(post.id, comment.id)"
+                  >
+                    Delete
+                  </button>
+                  <p v-if="commentActionError[comment.id]" class="mv-status mv-status--error">
+                    {{ commentActionError[comment.id] }}
+                  </p>
                 </li>
               </ul>
+
+              <form v-if="club?.viewerIsMember" class="mv-comment-form" @submit.prevent="submitComment(post.id)">
+                <label class="mv-field">
+                  <span class="mv-visually-hidden">Add a comment</span>
+                  <textarea
+                    :value="commentFormState(post.id).body"
+                    class="mv-comment-input"
+                    :maxlength="COMMENT_MAX_LENGTH"
+                    placeholder="Add a comment"
+                    :disabled="commentFormState(post.id).submitting"
+                    @input="updateCommentBody(post.id, ($event.target as HTMLTextAreaElement).value)"
+                  ></textarea>
+                </label>
+                <p class="mv-counter">{{ commentFormState(post.id).body.length }}/{{ COMMENT_MAX_LENGTH }}</p>
+                <p v-if="commentFormState(post.id).error" class="mv-status mv-status--error">
+                  {{ commentFormState(post.id).error }}
+                </p>
+                <button type="submit" class="mv-comment-submit" :disabled="commentFormState(post.id).submitting">
+                  Post comment
+                </button>
+              </form>
             </div>
           </div>
         </li>
@@ -342,6 +788,121 @@ watch(
   padding: 1.5rem;
   text-align: center;
   color: var(--mv-text-faint);
+}
+
+.mv-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mv-publish {
+  border-radius: 24px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+  box-shadow: var(--mv-shadow-card);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mv-publish-title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.mv-publish-notice,
+.mv-format-notice {
+  margin: 0;
+  color: var(--mv-text-faint);
+  font-size: 0.9rem;
+}
+
+.mv-publish-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.mv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mv-field input,
+.mv-field textarea {
+  border-radius: 12px;
+  border: 1px solid var(--mv-border);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  background: var(--mv-surface-muted);
+  color: inherit;
+}
+
+.mv-counter {
+  margin: 0;
+  align-self: flex-end;
+  font-size: 0.8rem;
+  color: var(--mv-text-dim);
+}
+
+.mv-publish-preview {
+  max-width: 240px;
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+.mv-publish-submit,
+.mv-comment-submit {
+  align-self: flex-start;
+  border-radius: 999px;
+  border: 1px solid var(--mv-border-strong);
+  background: var(--mv-surface-accent);
+  color: var(--mv-gold);
+  font-weight: 600;
+  padding: 0.45rem 1.2rem;
+  cursor: pointer;
+}
+
+.mv-publish-submit:disabled,
+.mv-comment-submit:disabled,
+.mv-pin-toggle:disabled,
+.mv-post-delete:disabled,
+.mv-comment-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mv-post-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mv-pin-toggle,
+.mv-post-delete,
+.mv-comment-delete {
+  border-radius: 999px;
+  border: 1px solid var(--mv-border);
+  padding: 0.35rem 0.9rem;
+  background: var(--mv-surface-muted);
+  color: var(--mv-text-soft);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mv-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
 }
 
 .mv-post-list {

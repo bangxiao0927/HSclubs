@@ -57,6 +57,7 @@
         <result column="author_display_name" property="authorDisplayName" />
         <result column="author_avatar_url" property="authorAvatarUrl" />
         <result column="comment_count" property="commentCount" />
+        <result column="viewer_can_delete" property="viewerCanDelete" />
     </resultMap>
 
     <!-- Shared by findPublicFeedByClubId and findPublicPostByIdAndClubId so a freshly published
@@ -67,13 +68,22 @@
          through as-is: see EpochSecondsInstantTypeHandler's Javadoc for why that (not the raw
          column) is what makes PublicClubPost#createdAt an unambiguous instant instead of a
          wall-clock reading a browser in a different timezone could misread as its own local
-         time. -->
+         time.
+
+         viewer_can_delete is computed here, not exposed as author_oauth_user_id itself: TRUE
+         when the caller already has club-wide moderation power (viewerCanModerateAnyPost, the
+         club's own canManage or a platform owner) or is this row's own author. A NULL
+         viewerOauthUserId (an anonymous caller) makes the equality below unknown, which CASE
+         WHEN treats as false, same as MySQL/H2's own three-valued logic everywhere else in this
+         file. -->
     <sql id="PublicPostColumnList">
         cp.id, cp.club_id, cp.title, cp.image_url, cp.pinned_at,
         UNIX_TIMESTAMP(cp.created_at) AS created_at,
         ou.display_name AS author_display_name,
         ou.avatar_url   AS author_avatar_url,
-        (SELECT COUNT(*) FROM club_post_comment cpc WHERE cpc.post_id = cp.id) AS comment_count
+        (SELECT COUNT(*) FROM club_post_comment cpc WHERE cpc.post_id = cp.id) AS comment_count,
+        CASE WHEN #{viewerCanModerateAnyPost} = TRUE OR cp.author_oauth_user_id = #{viewerOauthUserId}
+             THEN TRUE ELSE FALSE END AS viewer_can_delete
     </sql>
 
     <!-- Deliberately not a wildcard select and not a reuse of ClubMemberView's/
@@ -171,6 +181,7 @@
                 typeHandler="com.example.demo.club.mapper.EpochSecondsInstantTypeHandler" />
         <result column="author_display_name" property="authorDisplayName" />
         <result column="author_avatar_url" property="authorAvatarUrl" />
+        <result column="viewer_can_delete" property="viewerCanDelete" />
     </resultMap>
 
     <!-- Shared by findPublicCommentsByPostId and findPublicCommentByIdAndPostId, mirroring
@@ -180,12 +191,18 @@
          PublicPostColumnList's cp.created_at: see EpochSecondsInstantTypeHandler's Javadoc for
          why that is what makes PublicClubPostComment#createdAt an unambiguous instant instead
          of a wall-clock reading a browser in a different timezone could misread as its own
-         local time. -->
+         local time.
+
+         viewer_can_delete follows the exact same rule as PublicPostColumnList's own column: see
+         that comment for why a NULL viewerOauthUserId (anonymous caller) correctly evaluates to
+         false rather than NULL. -->
     <sql id="PublicCommentColumnList">
         cpc.id, cpc.post_id, cpc.body,
         UNIX_TIMESTAMP(cpc.created_at) AS created_at,
         ou.display_name AS author_display_name,
-        ou.avatar_url   AS author_avatar_url
+        ou.avatar_url   AS author_avatar_url,
+        CASE WHEN #{viewerCanModerateAnyPost} = TRUE OR cpc.author_oauth_user_id = #{viewerOauthUserId}
+             THEN TRUE ELSE FALSE END AS viewer_can_delete
     </sql>
 
     <!-- Oldest first, flat, uncapped by pagination (the 50-comment cap makes it unnecessary,

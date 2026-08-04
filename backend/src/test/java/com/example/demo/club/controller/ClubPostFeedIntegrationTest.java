@@ -201,7 +201,8 @@ class ClubPostFeedIntegrationTest {
         long filesBefore = countRegularFiles(clubPostsDir);
         int rowsBefore = countPostRows(clubId);
 
-        doReturn(null).when(clubPostMapperSpy).findPublicPostByIdAndClubId(any(), eq(clubId));
+        doReturn(null).when(clubPostMapperSpy)
+            .findPublicPostByIdAndClubId(any(), eq(clubId), any(), org.mockito.ArgumentMatchers.anyBoolean());
 
         mockMvc.perform(multipart("/api/clubs/" + clubId + "/posts")
                 .file(new MockMultipartFile("file", "photo.jpg", "image/jpeg", tinyJpeg()))
@@ -280,6 +281,36 @@ class ClubPostFeedIntegrationTest {
             .andExpect(jsonPath("$.items", Matchers.hasSize(1)))
             .andExpect(jsonPath("$.items[0].authorDisplayName").value("Ada Lovelace"))
             .andExpect(jsonPath("$.items[0].authorAvatarUrl").value("/uploads/avatar-cache/ada.jpg"));
+    }
+
+    // Full-stack proof of the capability field: the frontend can show a delete control to the
+    // post's own author, and to a club president, without either ever seeing an
+    // author_oauth_user_id or inferring authorship by comparing display names.
+    @Test
+    void feedItemsMarkViewerCanDeleteTrueForTheAuthorAndPresidentButFalseForEveryoneElse() throws Exception {
+        long clubId = createActiveClubWithAMember();
+        insertPost(clubId, "Post 1", null);
+        String presidentEmail = "president@example.com";
+        long presidentUid = insertOauthUser(presidentEmail, "President", null);
+        jdbcTemplate.update(
+            "INSERT INTO club_member (club_id, oauth_user_id, role_name) VALUES (?, ?, 'president')",
+            clubId, presidentUid);
+
+        mockMvc.perform(get("/api/clubs/" + clubId + "/posts").with(authentication(oauthToken(MEMBER_EMAIL))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(true));
+
+        mockMvc.perform(get("/api/clubs/" + clubId + "/posts").with(authentication(oauthToken(presidentEmail))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(true));
+
+        mockMvc.perform(get("/api/clubs/" + clubId + "/posts").with(authentication(oauthToken(OUTSIDER_EMAIL))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(false));
+
+        mockMvc.perform(get("/api/clubs/" + clubId + "/posts"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(false));
     }
 
     // Real DB, real join: proves the correlated subquery in ClubPostMapper.xml's

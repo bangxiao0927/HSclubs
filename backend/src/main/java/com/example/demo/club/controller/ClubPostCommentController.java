@@ -80,7 +80,9 @@ public class ClubPostCommentController {
 
         requirePostInClub(postId, club.getId());
 
-        return clubPostCommentService.findPublicComments(postId);
+        Long viewerOauthUserId = viewerEmail != null ? oAuthUserMapper.findIdByEmail(viewerEmail) : null;
+        boolean viewerCanModerateAnyPost = clubContentModerationPolicy.canModerateAnyContent(club, authentication);
+        return clubPostCommentService.findPublicComments(postId, viewerOauthUserId, viewerCanModerateAnyPost);
     }
 
     @PostMapping("/{clubSlugOrId}/posts/{postId}/comments")

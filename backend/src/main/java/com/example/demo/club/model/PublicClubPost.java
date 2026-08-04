@@ -35,6 +35,13 @@ public class PublicClubPost {
     // this row once per comment instead of contributing a single count.
     private int commentCount;
 
+    // Computed server-side per request from the viewer's own oauth_user_id and the club's
+    // canManage/platform-owner status (see ClubPostMapper.xml's PublicPostColumnList) -- never
+    // the viewer's or the author's oauth_user_id itself. This is what lets the frontend show a
+    // delete control to the post's own author without either leaking author_oauth_user_id to
+    // every caller or having the frontend infer authorship by comparing display names.
+    private boolean viewerCanDelete;
+
     public Long getId() {
         return id;
     }
@@ -105,5 +112,13 @@ public class PublicClubPost {
 
     public void setCommentCount(int commentCount) {
         this.commentCount = commentCount;
+    }
+
+    public boolean isViewerCanDelete() {
+        return viewerCanDelete;
+    }
+
+    public void setViewerCanDelete(boolean viewerCanDelete) {
+        this.viewerCanDelete = viewerCanDelete;
     }
 }

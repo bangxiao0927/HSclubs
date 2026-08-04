@@ -32,8 +32,9 @@ public class ClubPostCommentService {
         return clubPostCommentWriter.lockCountAndInsert(clubId, postId, authorOauthUserId, trimmedBody);
     }
 
-    public List<PublicClubPostComment> findPublicComments(Long postId) {
-        return clubPostMapper.findPublicCommentsByPostId(postId);
+    public List<PublicClubPostComment> findPublicComments(Long postId, Long viewerOauthUserId,
+                                                           boolean viewerCanModerateAnyPost) {
+        return clubPostMapper.findPublicCommentsByPostId(postId, viewerOauthUserId, viewerCanModerateAnyPost);
     }
 
     public ClubPostComment findByIdAndPostId(Long commentId, Long postId) {

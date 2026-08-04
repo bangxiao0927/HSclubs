@@ -104,7 +104,9 @@ public class ClubPostController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
 
-        return clubPostService.findPublicFeed(club.getId(), page, size);
+        Long viewerOauthUserId = viewerEmail != null ? oAuthUserMapper.findIdByEmail(viewerEmail) : null;
+        boolean viewerCanModerateAnyPost = clubContentModerationPolicy.canModerateAnyContent(club, authentication);
+        return clubPostService.findPublicFeed(club.getId(), page, size, viewerOauthUserId, viewerCanModerateAnyPost);
     }
 
     // ---- Pinning (president or platform owner only) ----
@@ -180,17 +182,18 @@ public class ClubPostController {
         }
     }
 
-    // Same matrix as ClubController/ClubImageController's requireManageAccess: the club's own
-    // president, or a platform owner. Pinning is an editorial power, not a publishing one, so an
-    // ordinary member (even the post's own author) is not enough.
+    // Same matrix as ClubController/ClubImageController's requireManageAccess, delegated to
+    // ClubContentModerationPolicy#canModerateAnyContent so this branch can never silently drift
+    // from the one #feed uses for viewerCanModerateAnyPost or #deletePost uses for canModerate:
+    // the club's own president, or a platform owner. Pinning is an editorial power, not a
+    // publishing one, so an ordinary member (even the post's own author) is not enough.
     private Club requireManageAccess(String clubSlugOrId, Authentication authentication) {
         String viewerEmail = authenticatedUserResolver.requireEmail(authentication);
         Club club = clubService.resolveBySlugOrId(clubSlugOrId, viewerEmail);
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
-        boolean canManage = Boolean.TRUE.equals(club.getCanManage())
-            || authenticatedUserResolver.isPlatformOwner(authentication);
+        boolean canManage = clubContentModerationPolicy.canModerateAnyContent(club, authentication);
         if (!canManage) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Only the club president or a platform owner can pin posts");

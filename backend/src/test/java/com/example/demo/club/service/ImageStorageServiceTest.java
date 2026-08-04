@@ -56,6 +56,26 @@ class ImageStorageServiceTest {
         assertThatThrownBy(() -> service.store(file)).isInstanceOf(IllegalArgumentException.class);
     }
 
+    // The issue's own requirement (#82): the error a student sees for an unsupported format
+    // (most commonly a raw .heic pulled from the iPhone Files app, since iOS Safari's own file
+    // picker usually converts to JPEG for web uploads) must name every accepted format and call
+    // out that HEIC specifically is not one of them, not just say "unsupported".
+    @Test
+    void rejectsAnUnrecognizedFormatWithAMessageNamingTheAcceptedFormatsAndHeic() {
+        ImageStorageService service = service(uploadDir);
+        byte[] pdfBytes = "%PDF-1.4 not actually an image".getBytes();
+        MockMultipartFile file = new MockMultipartFile("file", "fake.gif", "image/gif", pdfBytes);
+
+        assertThatThrownBy(() -> service.store(file))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("JPEG")
+            .hasMessageContaining("PNG")
+            .hasMessageContaining("WebP")
+            .hasMessageContaining("GIF")
+            .hasMessageContaining("HEIC")
+            .hasMessageContaining("not supported");
+    }
+
     // A magic-byte prefix is enough for ImageIO to pick a candidate reader, but the reader then
     // throws IOException trying to actually parse the (truncated) header -- e.g. real-world
     // partial uploads from a dropped connection. That must surface as a readable 400, not an
