@@ -114,8 +114,8 @@ convention as the rest of this section (see the "Future API Needs" preamble late
 file for how new routes should be proposed).
 
 **Photo URLs are unauthenticated, unguessable capability URLs, not authorization-checked
-resources.** `imageUrl` and `authorAvatarUrl` values under `/uploads/club-posts/<uuid>.jpg`
-are served by the static `/uploads/**` resource handler (`WebConfig`), which sits under
+resources.** A post's own `imageUrl`, under `/uploads/club-posts/<uuid>.jpg`, is served by
+the static `/uploads/**` resource handler (`WebConfig`), which sits under
 Spring Security's `anyRequest().permitAll()` -- it does not check `clubs.status`,
 `ClubVisibilityPolicy`, or authentication at all. The feed and comment endpoints below are
 gated (a non-active club's feed is hidden from non-members), but once a client has a photo
@@ -124,6 +124,11 @@ fetched directly, by anyone, forever (until the post is deleted). Security rests
 the UUIDv4 filename being unguessable, the same model as an unlisted document link. This is a
 deliberate trade-off: serving images through an authorization-aware controller instead would
 also have to cover club cover images, and would give up static file serving and HTTP caching.
+
+`authorAvatarUrl` is not part of this boundary: it is `oauth_users.avatar_url`, populated
+from the OAuth provider's own profile picture claim (e.g. Google's `picture`) at login, and
+is an external URL on the provider's own domain, not a file under `/uploads/**`. It can be
+`null` when the provider did not supply one.
 
 A `PublicClubPost` (returned by publish and by the feed) looks like:
 ```json

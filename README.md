@@ -72,8 +72,9 @@ The backend preloads avatars for clubs with an `instagramUrl`, stores them under
 Club post photos (the club media feed) are stored under `${app.upload.dir}/club-posts/`
 (same upload root as the avatar cache, default `backend/uploads`). Like the avatar cache,
 this directory must live on persistent, private storage in production: it is not backed up
-by the database, and a nightly job only reclaims files no club post still references -- it
-does not recreate anything lost.
+by the database. A separate nightly (3 AM) job reclaims orphaned files under the legacy
+top-level club-image upload location and `club-posts/` -- after a 10-minute grace period, and
+never the Instagram avatar cache -- but it does not recreate anything already lost.
 
 Frontend:
 

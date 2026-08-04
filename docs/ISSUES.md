@@ -556,28 +556,36 @@ A future maintainer opening `SecurityConfig.java` has to reverse-engineer the in
 and deletion requirements that did not have answers yet.
 
 **Solution:**
-Shipped a per-club photo post feed (issues bangxiao0927/HSclubs#78 through
-bangxiao0927/HSclubs#83) with those requirements answered directly:
+Shipped a per-club photo post feed, implemented in issues bangxiao0927/HSclubs#76 through
+bangxiao0927/HSclubs#82 (bangxiao0927/HSclubs#83, this entry's own issue, is the documentation
+and roadmap reconciliation that followed, not implementation), with those requirements
+answered directly:
 1. `ClubPost`/`ClubPostComment` schema, mapper, and `ImageStorageService` hardening
-   (bangxiao0927/HSclubs#84, bangxiao0927/HSclubs#85).
-2. Publish-a-post and read-the-feed endpoints (bangxiao0927/HSclubs#86).
-3. Pinning, capped at 3 posts per club (bangxiao0927/HSclubs#87).
-4. Comments (capped at 50 per post) and moderation-gated deletion of posts and comments
-   (bangxiao0927/HSclubs#88).
-5. The public, read-only media page (bangxiao0927/HSclubs#89).
+   (bangxiao0927/HSclubs#76, bangxiao0927/HSclubs#77; PRs bangxiao0927/HSclubs#84,
+   bangxiao0927/HSclubs#85).
+2. Publish-a-post and read-the-feed endpoints (bangxiao0927/HSclubs#78; PR
+   bangxiao0927/HSclubs#86).
+3. Comments (capped at 50 per post) and moderation-gated deletion of posts and comments
+   (bangxiao0927/HSclubs#79; PR bangxiao0927/HSclubs#88).
+4. Pinning, capped at 3 posts per club (bangxiao0927/HSclubs#80; PR bangxiao0927/HSclubs#87).
+5. The public, read-only media page (bangxiao0927/HSclubs#81; PR bangxiao0927/HSclubs#89).
 6. Authenticated publish/comment/delete/pin interactions on that page
-   (bangxiao0927/HSclubs#91).
+   (bangxiao0927/HSclubs#82; PR bangxiao0927/HSclubs#91).
 
 **Expected Outcome:**
 - Moderation: a club's own president, or a platform owner, can delete any post or comment in
   that club; only members can publish a post or a comment.
 - Storage: every non-GIF upload is re-encoded to a flattened, EXIF-stripped JPEG capped at
-  1600px; GIFs are capped at 2MB; a nightly job reclaims orphaned files.
+  1600px; GIFs are capped at 2MB; a nightly (3 AM) job reclaims orphaned files under the
+  legacy top-level club-image upload location and `club-posts/` after a 10-minute grace
+  period, excluding the Instagram avatar cache and any other subsystem on the same upload
+  root.
 - Deletion: deleting a post removes its photo file from disk, not just its row.
 - Abuse: partially addressed by per-file size caps and the 50-comment-per-post cap. Rate
   limiting on how often a member can publish is still open — see Issue #21 below.
 - Left explicitly out of scope: `clubs.visibility` semantics (see Issue #20 below) and photo
-  URLs remain unauthenticated, unguessable capability URLs (see `docs/API.md`).
+  URLs (post images only, not author avatars) remain unauthenticated, unguessable capability
+  URLs (see `docs/API.md`).
 
 ---
 
@@ -590,7 +598,8 @@ bangxiao0927/HSclubs#83) with those requirements answered directly:
 `clubs.visibility` (`schema.sql`, default `'public'`) is selected, inserted, and updated by
 `ClubMapper`/`ClubMapper.xml`, but no query anywhere filters or branches on it. The only
 visibility gating that exists is `ClubVisibilityPolicy`, which uses `clubs.status = 'active'`
-for the club media feed (see `docs/FIRST_REPO_ROADMAP.md` item 23 and
+for the club media feed (introduced in bangxiao0927/HSclubs#78; see
+`docs/FIRST_REPO_ROADMAP.md` item 23 and this gap's own reconciliation in
 bangxiao0927/HSclubs#83), not `clubs.visibility`. The club media feature deliberately did not
 become the first place to enforce this column: hiding a club's post feed while
 `GET /api/clubs/{id}` still returns that same club's full details publicly would be

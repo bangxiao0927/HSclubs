@@ -279,18 +279,22 @@ Useful for presidents, but it needs careful data modeling and should come after 
 
 This item was originally deferred here because a social feed or story-like timeline creates
 moderation, storage, abuse, and deletion requirements. It shipped as a per-club photo post
-feed (club media, tracked in issues bangxiao0927/HSclubs#78 through bangxiao0927/HSclubs#83,
+feed (club media, implemented in issues bangxiao0927/HSclubs#76 through bangxiao0927/HSclubs#82,
 PRs bangxiao0927/HSclubs#84, bangxiao0927/HSclubs#85, bangxiao0927/HSclubs#86,
 bangxiao0927/HSclubs#87, bangxiao0927/HSclubs#88, bangxiao0927/HSclubs#89, and
-bangxiao0927/HSclubs#91), with the original concerns addressed directly rather than avoided:
+bangxiao0927/HSclubs#91; bangxiao0927/HSclubs#83 is this documentation reconciliation itself,
+not implementation), with the original concerns addressed directly rather than avoided:
 
 - **Moderation:** a club's own president, or a platform owner, can delete any post or comment
   in that club; only members can publish a post or a comment; comments are capped at 50 per
   post.
 - **Storage:** every non-GIF upload is re-encoded to a single flattened, EXIF-stripped JPEG
   (capped at 1600px on the long edge, ~5MB source limit before re-encoding), GIFs are capped
-  at 2MB and stored as-is, and a nightly scheduled job reclaims any file on disk no club or
-  club post still references.
+  at 2MB and stored as-is, and a nightly (3 AM) scheduled job reclaims orphaned files under
+  the legacy top-level club-image upload location and `club-posts/` that no club or club post
+  still references, after a 10-minute grace period so an in-flight upload is never mistaken
+  for an orphan. It does not touch the Instagram avatar cache or any other subsystem sharing
+  the same upload root.
 - **Deletion:** deleting a post removes its photo file from disk, not just its database row.
 - **Abuse:** partially addressed. The per-file size caps and the 50-comment-per-post cap bound
   a single request, but nothing yet bounds how often a member can publish a post or a comment.
