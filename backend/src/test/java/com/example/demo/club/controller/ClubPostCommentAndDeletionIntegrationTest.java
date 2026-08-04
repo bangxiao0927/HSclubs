@@ -22,7 +22,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TimeZone;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -338,29 +337,29 @@ class ClubPostCommentAndDeletionIntegrationTest {
 
     // Mirrors ClubPostFeedIntegrationTest's equivalent post-level test: a comment posted "just
     // now" (DB default CURRENT_TIMESTAMP, no literal override) must serialize as an instant
-    // close to the real Instant.now(), never shifted hours away, even when the JVM's own
-    // default timezone is a real, non-UTC one.
+    // close to the real Instant.now(), never shifted hours away.
+    //
+    // No TimeZone.setDefault() here: this property holds regardless of timezone by
+    // construction (UNIX_TIMESTAMP inverts CURRENT_TIMESTAMP within the same session no matter
+    // which zone is actually in effect), and see ClubPostMapperTest's literal round-trip tests
+    // for why an in-test override would not reliably change H2's already-established session
+    // zone anyway. Running this suite under both this repo's normal non-UTC local/dev
+    // environment and an explicit `TZ=UTC` (CI-like) process both exercise this meaningfully.
     @Test
-    void justPostedCommentsCreatedAtIsCloseToNowRegardlessOfTheJvmDefaultTimeZone() throws Exception {
-        TimeZone originalDefault = TimeZone.getDefault();
-        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
-        try {
-            long clubId = createClub();
-            long authorUid = insertOauthUser(MEMBER_EMAIL, "Ada Lovelace");
-            addMember(clubId, authorUid, "member");
-            long postId = insertPost(clubId, authorUid, writeStoredPhoto());
-            insertComment(postId, authorUid, "Fresh comment");
+    void justPostedCommentsCreatedAtIsCloseToNow() throws Exception {
+        long clubId = createClub();
+        long authorUid = insertOauthUser(MEMBER_EMAIL, "Ada Lovelace");
+        addMember(clubId, authorUid, "member");
+        long postId = insertPost(clubId, authorUid, writeStoredPhoto());
+        insertComment(postId, authorUid, "Fresh comment");
 
-            String responseBody = mockMvc.perform(get("/api/clubs/" + clubId + "/posts/" + postId + "/comments"))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+        String responseBody = mockMvc.perform(get("/api/clubs/" + clubId + "/posts/" + postId + "/comments"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
 
-            String createdAt = extractJsonStringField(responseBody, "createdAt");
-            assertThat(createdAt).endsWith("Z");
-            assertThat(Instant.parse(createdAt)).isCloseTo(Instant.now(), within(5, ChronoUnit.SECONDS));
-        } finally {
-            TimeZone.setDefault(originalDefault);
-        }
+        String createdAt = extractJsonStringField(responseBody, "createdAt");
+        assertThat(createdAt).endsWith("Z");
+        assertThat(Instant.parse(createdAt)).isCloseTo(Instant.now(), within(5, ChronoUnit.SECONDS));
     }
 
     @Test

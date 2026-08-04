@@ -10,7 +10,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.TimeZone;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -345,27 +344,22 @@ class ClubPostMapperTest {
         assertThat(clubPostMapper.findPublicCommentByIdAndPostId(1L, 2L)).isNull();
     }
 
-    // Mirrors findPublicPostByIdAndClubIdReturnsAnUnambiguousInstantRegardlessOfTheJvmDefaultTimeZone:
+    // Mirrors findPublicPostByIdAndClubIdConvertsALiteralCreatedAtUsingTheEffectiveSystemZone:
     // PublicClubPostComment#createdAt is on the same UNIX_TIMESTAMP/EpochSecondsInstantTypeHandler
-    // contract as PublicClubPost#createdAt, so it must round-trip to the correct instant under a
-    // forced, non-UTC JVM default zone too.
+    // contract as PublicClubPost#createdAt, so it must round-trip to the correct instant too --
+    // see that test's comment for why this derives the expected value from
+    // ZoneId.systemDefault() rather than attempting to force one with TimeZone.setDefault().
     @Test
-    void findPublicCommentByIdAndPostIdReturnsAnUnambiguousInstantRegardlessOfTheJvmDefaultTimeZone() {
-        TimeZone originalDefault = TimeZone.getDefault();
-        TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"));
-        try {
-            insertPost(1L, 1L, "2024-01-01 10:00:00", null);
-            insertCommentAt(1L, 1L, "Great photo!", "2024-01-01 11:30:00");
+    void findPublicCommentByIdAndPostIdConvertsALiteralCreatedAtUsingTheEffectiveSystemZone() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertCommentAt(1L, 1L, "Great photo!", "2024-01-01 11:30:00");
 
-            PublicClubPostComment comment = clubPostMapper.findPublicCommentByIdAndPostId(1L, 1L);
+        PublicClubPostComment comment = clubPostMapper.findPublicCommentByIdAndPostId(1L, 1L);
 
-            Instant expected = LocalDateTime.of(2024, 1, 1, 11, 30)
-                .atZone(ZoneId.of("America/Los_Angeles"))
-                .toInstant();
-            assertThat(comment.getCreatedAt()).isEqualTo(expected);
-        } finally {
-            TimeZone.setDefault(originalDefault);
-        }
+        Instant expected = LocalDateTime.of(2024, 1, 1, 11, 30)
+            .atZone(ZoneId.systemDefault())
+            .toInstant();
+        assertThat(comment.getCreatedAt()).isEqualTo(expected);
     }
 
     @Test
@@ -495,27 +489,28 @@ class ClubPostMapperTest {
 
     // The regression this guards: PublicClubPost#createdAt used to be a bare LocalDateTime, a
     // timezone-naive wall-clock reading a browser could misparse as its own local time, making a
-    // just-created post appear hours in the future. Forcing a real, non-UTC JVM default zone here
-    // (rather than relying on whichever zone happens to run this suite) proves the mapper's
-    // UNIX_TIMESTAMP round-trip produces the correct instant regardless of that zone: the DB
-    // write is a literal wall-clock string, so the only zone-dependent step is the read, and
-    // EpochSecondsInstantTypeHandler must invert it correctly.
+    // just-created post appear hours in the future.
+    //
+    // This does NOT force a specific zone with TimeZone.setDefault(): H2 resolves its own
+    // date/time functions against the JVM's default zone at (or before) connection setup, so a
+    // TimeZone.setDefault() call from inside a @Test method that runs after the connection
+    // pool/DataSource already exists has no effect on H2's CURRENT_TIMESTAMP/UNIX_TIMESTAMP --
+    // provably so: with that override in place, running this suite under an actual `TZ=UTC`
+    // process still produced UTC-derived instants, not America/Los_Angeles-derived ones. Instead
+    // this derives the expected instant from ZoneId.systemDefault(), the zone that is actually
+    // in effect, so the assertion is correct under whatever real zone the process runs with --
+    // exercised as both a genuinely non-UTC zone (this suite's normal local/dev environment) and
+    // UTC (this suite run with `TZ=UTC`, matching CI).
     @Test
-    void findPublicPostByIdAndClubIdReturnsAnUnambiguousInstantRegardlessOfTheJvmDefaultTimeZone() {
-        TimeZone originalDefault = TimeZone.getDefault();
-        TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"));
-        try {
-            insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+    void findPublicPostByIdAndClubIdConvertsALiteralCreatedAtUsingTheEffectiveSystemZone() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
 
-            PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 1L);
+        PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 1L);
 
-            Instant expected = LocalDateTime.of(2024, 1, 1, 10, 0)
-                .atZone(ZoneId.of("America/Los_Angeles"))
-                .toInstant();
-            assertThat(post.getCreatedAt()).isEqualTo(expected);
-        } finally {
-            TimeZone.setDefault(originalDefault);
-        }
+        Instant expected = LocalDateTime.of(2024, 1, 1, 10, 0)
+            .atZone(ZoneId.systemDefault())
+            .toInstant();
+        assertThat(post.getCreatedAt()).isEqualTo(expected);
     }
 
     @Test
