@@ -277,9 +277,10 @@ Useful for presidents, but it needs careful data modeling and should come after 
 
 ### 23. Media area and media timeline (Shipped)
 
-This item was originally deferred here because a social feed or story-like timeline creates
-moderation, storage, abuse, and deletion requirements. It shipped as a per-club photo post
-feed (club media, implemented in issues bangxiao0927/HSclubs#76 through bangxiao0927/HSclubs#82,
+This item was originally deferred under "P4 - Defer" because a social feed or story-like
+timeline creates moderation, storage, abuse, and deletion requirements. It shipped as a
+per-club photo post feed (club media, implemented in issues bangxiao0927/HSclubs#76 through
+bangxiao0927/HSclubs#82,
 PRs bangxiao0927/HSclubs#84, bangxiao0927/HSclubs#85, bangxiao0927/HSclubs#86,
 bangxiao0927/HSclubs#87, bangxiao0927/HSclubs#88, bangxiao0927/HSclubs#89, and
 bangxiao0927/HSclubs#91; bangxiao0927/HSclubs#83 is this documentation reconciliation itself,

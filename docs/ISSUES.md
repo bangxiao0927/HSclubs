@@ -503,9 +503,11 @@ gained an explicit `X-Content-Type-Options: nosniff` header via bangxiao0927/HSc
 the resource mapping itself is unchanged since the 2025-07-17 pass). Both original gaps are
 closed: `ClubImageController#uploadImage` deletes the
 previous `imageUrl` file after the new one is committed (bangxiao0927/HSclubs#45), and
-`UploadCleanupService` runs a nightly (3 AM) scheduled sweep with a 10-minute grace period
-(bangxiao0927/HSclubs#45, scope widened to also cover `club-posts/` -- while explicitly
-excluding the Instagram avatar cache -- by bangxiao0927/HSclubs#85). No open gap remains.
+`UploadCleanupService` runs a nightly (3 AM) scheduled sweep, introduced in
+bangxiao0927/HSclubs#45. That original sweep had neither a grace period nor any notion of
+`club-posts/` (club posts did not exist yet); bangxiao0927/HSclubs#85 later added the
+10-minute grace period, widened the scope to also walk `club-posts/` recursively, and
+explicitly excluded the Instagram avatar cache. No open gap remains.
 
 **Problem (Verification):**
 `ClubImageController.java` saves images to `backend/uploads/` with UUID filenames and returns `/uploads/{uuid}.{ext}` URLs. Need to verify:
