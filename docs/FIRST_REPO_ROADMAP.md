@@ -275,11 +275,34 @@ Useful for events, but it should reuse a stable application flow.
 
 Useful for presidents, but it needs careful data modeling and should come after membership workflows are dependable.
 
+### 23. Media area and media timeline (Shipped)
+
+This item was originally deferred here because a social feed or story-like timeline creates
+moderation, storage, abuse, and deletion requirements. It shipped as a per-club photo post
+feed (club media, tracked in issues bangxiao0927/HSclubs#78 through bangxiao0927/HSclubs#83,
+PRs bangxiao0927/HSclubs#84, bangxiao0927/HSclubs#85, bangxiao0927/HSclubs#86,
+bangxiao0927/HSclubs#87, bangxiao0927/HSclubs#88, bangxiao0927/HSclubs#89, and
+bangxiao0927/HSclubs#91), with the original concerns addressed directly rather than avoided:
+
+- **Moderation:** a club's own president, or a platform owner, can delete any post or comment
+  in that club; only members can publish a post or a comment; comments are capped at 50 per
+  post.
+- **Storage:** every non-GIF upload is re-encoded to a single flattened, EXIF-stripped JPEG
+  (capped at 1600px on the long edge, ~5MB source limit before re-encoding), GIFs are capped
+  at 2MB and stored as-is, and a nightly scheduled job reclaims any file on disk no club or
+  club post still references.
+- **Deletion:** deleting a post removes its photo file from disk, not just its database row.
+- **Abuse:** partially addressed. The per-file size caps and the 50-comment-per-post cap bound
+  a single request, but nothing yet bounds how often a member can publish a post or a comment.
+  Rate limiting on media publishing remains an open gap -- see `docs/ISSUES.md`.
+
+Photo URLs are unauthenticated, unguessable UUID capability URLs
+(`/uploads/club-posts/<uuid>.jpg`), served by a static resource handler that does not check
+club status, visibility, or authentication, even though the feed JSON itself is gated on
+`clubs.status = 'active'`. This is a deliberate trade-off, not an oversight -- see
+`docs/API.md` for the reasoning.
+
 ## P4 - Defer
-
-### 23. Media area and media timeline
-
-Defer this work. A social feed or story-like timeline creates moderation, storage, abuse, and deletion requirements. It is not the right first feature for a low-maintenance school project.
 
 ### 24. 2nd repo creation
 

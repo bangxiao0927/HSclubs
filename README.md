@@ -69,6 +69,12 @@ Instaloader must use an authenticated Instagram session; anonymous access is not
 If Instaloader cannot resolve a profile picture, the backend also tries Instagram's web profile API before returning the short-lived SVG fallback.
 The backend preloads avatars for clubs with an `instagramUrl`, stores them under `backend/uploads/avatar-cache/instagram`, and refreshes cached files after 60 days. The scheduler checks twice daily, but it only contacts Instagram for missing or expired files. Keep the upload directory and Instaloader session file on persistent, private storage in production.
 
+Club post photos (the club media feed) are stored under `${app.upload.dir}/club-posts/`
+(same upload root as the avatar cache, default `backend/uploads`). Like the avatar cache,
+this directory must live on persistent, private storage in production: it is not backed up
+by the database, and a nightly job only reclaims files no club post still references -- it
+does not recreate anything lost.
+
 Frontend:
 
 ```bash
