@@ -107,20 +107,23 @@ const buildAuthUser = (overrides: Partial<AuthUser> = {}): AuthUser => ({
   ...overrides,
 })
 
-// Lets a test control exactly when a mocked fetchClubMediaFeed call resolves, so an ordering
-// scenario (an older request's response arriving after a newer one) can be reproduced
-// deterministically instead of hoping a real race happens to line up the same way.
+// Lets a test control exactly when and how a mocked fetch call settles (resolve or reject), so
+// an ordering scenario (an older request's response arriving after a newer one) can be
+// reproduced deterministically instead of hoping a real race happens to line up the same way.
 interface Deferred<T> {
   promise: Promise<T>
   resolve: (value: T) => void
+  reject: (reason: unknown) => void
 }
 
 const createDeferred = <T,>(): Deferred<T> => {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
     resolve = res
+    reject = rej
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 let router: Router
@@ -706,7 +709,8 @@ describe('ClubMediaView comment form', () => {
   it('submits a comment, appends it to the list, and bumps the comment count without a manual reload', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
     fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7, commentCount: 0 })], total: 1 }))
-    fetchClubPostCommentsMock.mockResolvedValue([])
+    fetchClubPostCommentsMock.mockResolvedValueOnce([])
+    fetchClubPostCommentsMock.mockResolvedValueOnce([buildComment({ id: 5, body: 'Nice photo!' })])
     createClubPostCommentMock.mockResolvedValue(buildComment({ id: 5, body: 'Nice photo!' }))
 
     const wrapper = await mountAtMediaRoute()
@@ -722,6 +726,12 @@ describe('ClubMediaView comment form', () => {
     expect(wrapper.find('.mv-comment-body').text()).toBe('Nice photo!')
     expect(wrapper.text()).toContain('Hide comments')
     expect(wrapper.find('.mv-comment-form .mv-comment-input').element).toHaveProperty('value', '')
+
+    // The comment count comes from the reconciled server list's own length (1), not the
+    // optimistic +1 layered on top of it -- collapsing back to the toggle's own label is what
+    // surfaces post.commentCount, proving the two were never added together.
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    expect(wrapper.text()).toContain('Show comments (1)')
   })
 
   it('surfaces the comment cap error message verbatim', async () => {
@@ -740,6 +750,92 @@ describe('ClubMediaView comment form', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('This post already has 50 comments')
+  })
+
+  // The final #82 review finding: a comments GET issued before a submit (e.g. from expanding
+  // the panel) can still be in flight when that submit's own reconciliation fetch completes.
+  // Deterministic via a manually-resolved (deferred) promise for the original GET, so the exact
+  // "older request settles after the newer one" ordering is forced rather than hoped for.
+  it('shows the complete server list and ignores a stale GET that resolves after a submit made while the initial load was still pending', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7, commentCount: 1 })], total: 1 }))
+    const initialGetDeferred = createDeferred<ClubPostComment[]>()
+    fetchClubPostCommentsMock.mockReturnValueOnce(initialGetDeferred.promise)
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 5, body: 'Earlier comment' }),
+      buildComment({ id: 6, body: 'Nice photo!' }),
+    ])
+    createClubPostCommentMock.mockResolvedValue(buildComment({ id: 6, body: 'Nice photo!' }))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    // Expanding comments issues a GET that is deliberately left pending below.
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Loading comments')
+
+    // The member submits a comment while that GET is still in flight.
+    await wrapper.find('.mv-comment-form .mv-comment-input').setValue('Nice photo!')
+    await wrapper.find('.mv-comment-form').trigger('submit')
+    await flushPromises()
+
+    const commentBodies = () => wrapper.findAll('.mv-comment-body').map((node) => node.text())
+
+    // The submit's own reconciliation fetch (the newer, second mocked call) has already
+    // resolved with the authoritative, complete list -- immediate, useful feedback, not just
+    // a lone optimistic comment.
+    expect(wrapper.text()).not.toContain('Loading comments')
+    expect(commentBodies()).toEqual(['Earlier comment', 'Nice photo!'])
+
+    // The original, now-stale GET finally resolves with a pre-submission snapshot that is
+    // missing the new comment entirely.
+    initialGetDeferred.resolve([])
+    await flushPromises()
+
+    // That stale response must be discarded outright: the complete list stays exactly as the
+    // reconciliation left it, and the new comment is never dropped.
+    expect(commentBodies()).toEqual(['Earlier comment', 'Nice photo!'])
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    expect(wrapper.text()).toContain('Show comments (2)')
+  })
+
+  // Same race as above, but the stale, older GET settles by rejecting instead of resolving --
+  // proving the generation guard discards a late error the same way it discards a late success.
+  it('shows the complete server list and ignores a stale GET that errors after a submit made while the initial load was still pending', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7, commentCount: 1 })], total: 1 }))
+    const initialGetDeferred = createDeferred<ClubPostComment[]>()
+    fetchClubPostCommentsMock.mockReturnValueOnce(initialGetDeferred.promise)
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 5, body: 'Earlier comment' }),
+      buildComment({ id: 6, body: 'Nice photo!' }),
+    ])
+    createClubPostCommentMock.mockResolvedValue(buildComment({ id: 6, body: 'Nice photo!' }))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Loading comments')
+
+    await wrapper.find('.mv-comment-form .mv-comment-input').setValue('Nice photo!')
+    await wrapper.find('.mv-comment-form').trigger('submit')
+    await flushPromises()
+
+    const commentBodies = () => wrapper.findAll('.mv-comment-body').map((node) => node.text())
+    expect(commentBodies()).toEqual(['Earlier comment', 'Nice photo!'])
+
+    // The original GET finally settles, but by erroring rather than resolving.
+    initialGetDeferred.reject(new Error('Network error'))
+    await flushPromises()
+
+    // The stale rejection must not revert the panel to an error state or drop the new comment.
+    expect(commentBodies()).toEqual(['Earlier comment', 'Nice photo!'])
+    expect(wrapper.text()).not.toContain('Network error')
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    expect(wrapper.text()).toContain('Show comments (2)')
   })
 })
 

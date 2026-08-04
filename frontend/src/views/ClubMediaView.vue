@@ -55,6 +55,13 @@ const error = ref('')
 
 const expandedPostIds = ref<Set<number>>(new Set())
 const commentsByPost = ref<Record<number, CommentsEntry>>({})
+// A per-post monotonically increasing counter, never reset (not even by `load()`'s own state
+// reset): the single source of truth for "which in-flight comments request is the newest one"
+// for a given post. Comparing a response's captured generation against the live one at
+// resolution time is what lets loadComments and reconcileCommentsAfterSubmit below tell a
+// still-relevant response apart from a stale one that must be discarded, regardless of which
+// of two in-flight requests happens to resolve (or reject) last.
+const commentsRequestGeneration = ref<Record<number, number>>({})
 let loadedClubId: string | null = null
 
 const routeClubId = computed(() => {
@@ -147,18 +154,37 @@ const isExpanded = (postId: number) => expandedPostIds.value.has(postId)
 const emptyCommentsEntry: CommentsEntry = { loading: false, error: '', comments: [] }
 const commentsState = (postId: number) => commentsByPost.value[postId] ?? emptyCommentsEntry
 
+// Claims the next generation number for a post's comments request and records it as the live
+// one; a caller compares its own captured number against `commentsRequestGeneration.value[postId]`
+// once its request settles to know whether it is still the newest one.
+const bumpCommentsGeneration = (postId: number) => {
+  const next = (commentsRequestGeneration.value[postId] ?? 0) + 1
+  commentsRequestGeneration.value = { ...commentsRequestGeneration.value, [postId]: next }
+  return next
+}
+
 const loadComments = async (postId: number) => {
+  const generation = bumpCommentsGeneration(postId)
   commentsByPost.value = {
     ...commentsByPost.value,
     [postId]: { loading: true, error: '', comments: [] },
   }
   try {
     const comments = await fetchClubPostComments(routeClubId.value, postId)
+    if (commentsRequestGeneration.value[postId] !== generation) {
+      // A newer request for this same post (another loadComments call, or a post-submit
+      // reconciliation) has since superseded this one; applying this stale response now would
+      // silently undo whatever that newer request already wrote.
+      return
+    }
     commentsByPost.value = {
       ...commentsByPost.value,
       [postId]: { loading: false, error: '', comments },
     }
   } catch (err) {
+    if (commentsRequestGeneration.value[postId] !== generation) {
+      return
+    }
     const message = err instanceof Error ? err.message : 'Failed to load comments'
     commentsByPost.value = {
       ...commentsByPost.value,
@@ -265,6 +291,10 @@ const submitComment = async (postId: number) => {
   commentForms.value = { ...commentForms.value, [postId]: { ...state, submitting: true, error: '' } }
   try {
     const created = await createClubPostComment(routeClubId.value, postId, state.body)
+    // Immediate, useful feedback: show the just-created comment right away, appended to
+    // whatever is currently displayed -- even if that is empty because the list was still
+    // loading or had errored. reconcileCommentsAfterSubmit below replaces this with the
+    // authoritative server list right after, so this optimistic view is never the last word.
     const existing = commentsState(postId)
     commentsByPost.value = {
       ...commentsByPost.value,
@@ -274,12 +304,43 @@ const submitComment = async (postId: number) => {
       post.id === postId ? { ...post, commentCount: post.commentCount + 1 } : post,
     )
     commentForms.value = { ...commentForms.value, [postId]: { ...emptyCommentFormState } }
+    await reconcileCommentsAfterSubmit(postId)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to post comment'
     commentForms.value = {
       ...commentForms.value,
       [postId]: { ...state, submitting: false, error: message },
     }
+  }
+}
+
+// A comment box is usable even while its post's comment list is still loading or has errored
+// (the form does not wait on that state -- see the template), so the optimistic append in
+// submitComment above can start from an incomplete or empty list. Worse, an older loadComments
+// GET issued before this submit (e.g. from expanding the comments panel) can still be in flight
+// and would otherwise resolve afterwards with a pre-submission snapshot that clobbers the new
+// comment. Refetching here under the same generation-token guard loadComments uses fixes both:
+// whichever request for this post is actually the newest is the only one ever applied, and the
+// comment count is set from the authoritative list's own length rather than layered on top of
+// the optimistic +1 above, so the two can never double-count.
+const reconcileCommentsAfterSubmit = async (postId: number) => {
+  const generation = bumpCommentsGeneration(postId)
+  try {
+    const comments = await fetchClubPostComments(routeClubId.value, postId)
+    if (commentsRequestGeneration.value[postId] !== generation) {
+      return
+    }
+    commentsByPost.value = {
+      ...commentsByPost.value,
+      [postId]: { loading: false, error: '', comments },
+    }
+    posts.value = posts.value.map((post) =>
+      post.id === postId ? { ...post, commentCount: comments.length } : post,
+    )
+  } catch {
+    // The comment itself was already posted successfully -- the optimistic append above is
+    // still visible -- so a failed reconciliation fetch does not surface a second, confusing
+    // error for an action that already succeeded.
   }
 }
 
