@@ -15,6 +15,16 @@ const jsonResponse = (body: unknown) => ({
   json: async () => body,
 })
 
+// Mirrors what ApiExceptionHandler actually produces on the real server for a
+// ResponseStatusException (see docs/API.md's shared error response shape): a real
+// application/problem+json body with title/status/detail/instance.
+const problemDetailResponse = (status: number, title: string, detail: string, instance: string) => ({
+  ok: false,
+  status,
+  headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/problem+json' : null) },
+  text: async () => JSON.stringify({ title, status, detail, instance }),
+})
+
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -67,22 +77,18 @@ describe('publishClubPost', () => {
     )
   })
 
-  // Spring's own multipart-size rejection (see MultipartUploadExceptionHandler and
+  // Spring's own multipart-size rejection (see ApiExceptionHandler and
   // docs/API.md's 413 row): an application/problem+json body, not plain text -- the one case
   // resolveErrorMessage exists to translate into a readable message instead of raw JSON.
   it('rejects with the ProblemDetail detail message on a 413 application/problem+json response', async () => {
-    const problemBody = JSON.stringify({
-      title: 'Content Too Large',
-      status: 413,
-      detail: 'The uploaded file is too large. Please choose a smaller file and try again.',
-      instance: '/api/clubs/1/posts',
-    })
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 413,
-      headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/problem+json' : null) },
-      text: async () => problemBody,
-    })
+    fetchMock.mockResolvedValue(
+      problemDetailResponse(
+        413,
+        'Content Too Large',
+        'The uploaded file is too large. Please choose a smaller file and try again.',
+        '/api/clubs/1/posts',
+      ),
+    )
 
     await expect(
       publishClubPost('1', 'Meeting recap', new File(['image'], 'huge.jpg')),
@@ -136,6 +142,17 @@ describe('deleteClubPost', () => {
 
     await expect(deleteClubPost('1', 9)).rejects.toThrow('You do not have access to delete this post')
   })
+
+  // Over a real embedded server, this 403 is actually an application/problem+json body (see
+  // ApiExceptionHandler), not the plain text above -- this proves deleteClubPost, which now goes
+  // through the shared request() helper's resolveErrorMessage call, extracts its detail.
+  it('rejects with the ProblemDetail detail message on a 403 application/problem+json response', async () => {
+    fetchMock.mockResolvedValue(
+      problemDetailResponse(403, 'Forbidden', 'You do not have access to delete this post', '/api/clubs/1/posts/9'),
+    )
+
+    await expect(deleteClubPost('1', 9)).rejects.toThrow('You do not have access to delete this post')
+  })
 })
 
 describe('pinClubPost and unpinClubPost', () => {
@@ -168,6 +185,19 @@ describe('pinClubPost and unpinClubPost', () => {
 
     await expect(pinClubPost('1', 9)).rejects.toThrow('At most 3 posts can be pinned. Unpin one first.')
   })
+
+  it('rejects with the ProblemDetail detail message on a 409 application/problem+json response', async () => {
+    fetchMock.mockResolvedValue(
+      problemDetailResponse(
+        409,
+        'Conflict',
+        'At most 3 posts can be pinned. Unpin one first.',
+        '/api/clubs/1/posts/9/pin',
+      ),
+    )
+
+    await expect(pinClubPost('1', 9)).rejects.toThrow('At most 3 posts can be pinned. Unpin one first.')
+  })
 })
 
 describe('createClubPostComment', () => {
@@ -193,6 +223,21 @@ describe('createClubPostComment', () => {
       'This post already has the maximum number of comments',
     )
   })
+
+  it('rejects with the ProblemDetail detail message on a 409 application/problem+json response', async () => {
+    fetchMock.mockResolvedValue(
+      problemDetailResponse(
+        409,
+        'Conflict',
+        'This post already has the maximum number of comments',
+        '/api/clubs/1/posts/9/comments',
+      ),
+    )
+
+    await expect(createClubPostComment('1', 9, 'Nice!')).rejects.toThrow(
+      'This post already has the maximum number of comments',
+    )
+  })
 })
 
 describe('deleteClubPostComment', () => {
@@ -204,5 +249,20 @@ describe('deleteClubPostComment', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('http://localhost:8080/api/clubs/1/posts/9/comments/5')
     expect(init.method).toBe('DELETE')
+  })
+
+  it('rejects with the ProblemDetail detail message on a 403 application/problem+json response', async () => {
+    fetchMock.mockResolvedValue(
+      problemDetailResponse(
+        403,
+        'Forbidden',
+        'You do not have access to delete this comment',
+        '/api/clubs/1/posts/9/comments/5',
+      ),
+    )
+
+    await expect(deleteClubPostComment('1', 9, 5)).rejects.toThrow(
+      'You do not have access to delete this comment',
+    )
   })
 })

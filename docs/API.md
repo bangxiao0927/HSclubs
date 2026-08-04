@@ -185,9 +185,9 @@ the 400s below. The two limits are deliberately layered (6MB above the applicati
 JPEG/PNG/WebP limit): if they were equal, Spring would take the file before the readable
 400 could ever be produced, turning that validation into dead code.
 
-That 413 body is a real `application/problem+json` document (verified end to end by
-`MultipartUploadExceptionHandlerIntegrationTest`, not asserted from reading the handler alone),
-written by `MultipartUploadExceptionHandler`:
+That 413 body -- and every 400/403/404 status below -- is a real `application/problem+json`
+document (verified end to end by `ApiExceptionHandlerIntegrationTest`, not asserted from
+reading the handler alone), written by `ApiExceptionHandler`:
 ```json
 {
   "title": "Content Too Large",
@@ -196,13 +196,18 @@ written by `MultipartUploadExceptionHandler`:
   "instance": "/api/clubs/42/posts"
 }
 ```
-`title` is `HttpStatus.CONTENT_TOO_LARGE`'s own reason phrase, not chosen by the handler.
-`detail` is the one string the handler does set. `instance` is filled in by Spring's own
-`ProblemDetail` return-value handling from the request's actual path, not by the handler --
-expect the real path hit (e.g. `/api/clubs/42/posts`), not a fixed placeholder. `type` is a
-fifth field `ProblemDetail` supports, but this handler never sets one: an unset `type` is
-omitted from the JSON entirely (Jackson never writes it, not even as `null` or the RFC 9457
-default of `"about:blank"`) -- do not expect a `type` key in the actual response body.
+`title` is the status's own HTTP reason phrase (`HttpStatus.CONTENT_TOO_LARGE`'s "Content Too
+Large" for 413; for every other status below, whatever `ResponseStatusException` derives from
+the thrown `HttpStatus`), not chosen by either handler method. `detail` is the exact English
+message the throwing code passed: the multipart handler's own fixed string for 413, or, for
+every 400/403/404 below, the literal `reason` argument the controller/service passed to
+`new ResponseStatusException(status, reason)` (e.g. `"Title must be 140 characters or fewer"`).
+`instance` is filled in by Spring's own `ProblemDetail` return-value handling from the
+request's actual path, not by either handler -- expect the real path hit (e.g.
+`/api/clubs/42/posts`), not a fixed placeholder. `type` is a fifth field `ProblemDetail`
+supports, but neither handler method ever sets one: an unset `type` is omitted from the JSON
+entirely (Jackson never writes it, not even as `null` or the RFC 9457 default of
+`"about:blank"`) -- do not expect a `type` key in any of these response bodies.
 
 Response: 201 with a `PublicClubPost` body (shape above).
 
@@ -364,12 +369,23 @@ Before any of these are implemented, the proposer should:
 
 ## Error Responses
 
+Every 400/403/404/409/413 body below is `application/problem+json` with `title`/`status`/
+`detail`/`instance` (see the publish endpoint's own section above for the exact shape,
+including why `type` is never present), written by `ApiExceptionHandler` from either a
+`ResponseStatusException` the throwing controller/service raised itself, or, for 413 only,
+Spring's own multipart-size rejection. **401 is the one exception:** it is Spring Security's
+own `HttpStatusEntryPoint`, which runs entirely outside `DispatcherServlet` (before a request
+is even routed to a controller) and calls only `HttpServletResponse#setStatus` -- a bare status
+with no body of any kind, not `application/problem+json`, not plain text, nothing.
+`ApiExceptionHandler` deliberately never touches this, or any other Spring Security
+authentication/authorization rejection -- see that class's own Javadoc for why.
+
 | Code | Meaning |
 |------|---------|
-| 400 | Bad request (validation) |
-| 401 | Not authenticated |
-| 403 | Permission denied |
-| 404 | Resource not found |
-| 409 | Conflict (duplicate request) |
-| 413 | Any multipart upload (e.g. `POST /api/clubs/{clubSlugOrId}/posts` above) exceeded `spring.servlet.multipart.max-file-size` (6MB per part) or `max-request-size` (8MB total). Body is `application/problem+json` with `title`/`status`/`detail`/`instance` (see the publish endpoint above for the exact shape and why `type` is never present). A request whose raw body exceeds `server.tomcat.max-swallow-size` (10MB) may instead have its connection aborted before this response body can be delivered. |
+| 400 | Bad request (validation). `detail` is the exact validation message, e.g. "Title must be 140 characters or fewer". |
+| 401 | Not authenticated. Bare status, no body -- see above. |
+| 403 | Permission denied. `detail` is the exact reason, e.g. "You do not have access to delete this post". |
+| 404 | Resource not found. `detail` is the exact reason, e.g. "Club not found". |
+| 409 | Conflict: a duplicate request, or a concurrency cap already reached. `detail` is the exact reason, e.g. "At most 3 posts can be pinned. Unpin one first.". |
+| 413 | Any multipart upload (e.g. `POST /api/clubs/{clubSlugOrId}/posts` above) exceeded `spring.servlet.multipart.max-file-size` (6MB per part) or `max-request-size` (8MB total). A request whose raw body exceeds `server.tomcat.max-swallow-size` (10MB) may instead have its connection aborted before this response body can be delivered. |
 | 500 | Internal server error |

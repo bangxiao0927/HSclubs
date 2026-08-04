@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { resolveErrorMessage } from './httpErrorMessage'
 
-const jsonResponse = (body: string) =>
-  new Response(body, { status: 413, headers: { 'Content-Type': 'application/problem+json' } })
+const problemResponse = (body: string, status = 413) =>
+  new Response(body, { status, headers: { 'Content-Type': 'application/problem+json' } })
 
 const textResponse = (body: string, status = 400) =>
   new Response(body, { status, headers: { 'Content-Type': 'text/plain' } })
@@ -17,25 +17,45 @@ describe('resolveErrorMessage', () => {
       instance: '/api/clubs/42/posts',
     })
 
-    const message = await resolveErrorMessage(jsonResponse(body), 'fallback')
+    const message = await resolveErrorMessage(problemResponse(body), 'fallback')
 
     expect(message).toBe('The uploaded file is too large. Please choose a smaller file and try again.')
   })
 
-  it('returns an ordinary plain-text error body verbatim', async () => {
+  // Every ResponseStatusException this backend's own controllers/services raise (400/403/404/409)
+  // is now also application/problem+json (see ApiExceptionHandler); this covers the same
+  // extraction for a representative non-413 status.
+  it('extracts detail from a real application/problem+json 403 body', async () => {
+    const body = JSON.stringify({
+      title: 'Forbidden',
+      status: 403,
+      detail: 'You do not have access to delete this post',
+      instance: '/api/clubs/1/posts/9',
+    })
+
+    const message = await resolveErrorMessage(problemResponse(body, 403), 'fallback')
+
+    expect(message).toBe('You do not have access to delete this post')
+  })
+
+  // Defensive fallback, not a realistic shape of this app's own errors anymore: every
+  // ResponseStatusException this app raises is application/problem+json today. This still
+  // matters for anything outside that -- a reverse proxy's own error page, or an exception type
+  // ApiExceptionHandler does not (and, per its own Javadoc, must not) handle.
+  it('returns a plain-text error body verbatim', async () => {
     const message = await resolveErrorMessage(
-      textResponse('Title must be 140 characters or fewer'),
+      textResponse('Service temporarily unavailable'),
       'fallback',
     )
 
-    expect(message).toBe('Title must be 140 characters or fewer')
+    expect(message).toBe('Service temporarily unavailable')
   })
 
   it('falls back to the raw body verbatim when the body is malformed JSON', async () => {
     // Declares a JSON content type but the body itself is truncated/invalid -- must not throw,
     // and must not silently swallow the (still useful to a developer) raw text either.
     const malformed = '{"detail": "The uploaded file is too'
-    const message = await resolveErrorMessage(jsonResponse(malformed), 'fallback')
+    const message = await resolveErrorMessage(problemResponse(malformed), 'fallback')
 
     expect(message).toBe(malformed)
   })
@@ -49,7 +69,7 @@ describe('resolveErrorMessage', () => {
   it('falls back to the raw JSON body verbatim when it has no string detail field', async () => {
     const body = JSON.stringify({ title: 'Conflict', status: 409 })
 
-    const message = await resolveErrorMessage(jsonResponse(body), 'fallback')
+    const message = await resolveErrorMessage(problemResponse(body, 409), 'fallback')
 
     expect(message).toBe(body)
   })

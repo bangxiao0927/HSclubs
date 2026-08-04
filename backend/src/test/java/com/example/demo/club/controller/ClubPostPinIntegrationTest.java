@@ -164,7 +164,11 @@ class ClubPostPinIntegrationTest {
         mockMvc.perform(put("/api/clubs/" + clubId + "/posts/" + fourthPostId + "/pin")
                 .with(authentication(oauthToken(PRESIDENT_EMAIL))))
             .andExpect(status().isConflict())
-            .andExpect(status().reason("At most 3 posts can be pinned. Unpin one first."));
+            // Not status().reason(): ApiExceptionHandler now handles ResponseStatusException
+            // itself, via @ExceptionHandler, so the response body -- not
+            // MockHttpServletResponse#getErrorMessage(), which only ResponseStatusExceptionResolver's
+            // own sendError() populates -- is where the message actually lives now.
+            .andExpect(jsonPath("$.detail").value("At most 3 posts can be pinned. Unpin one first."));
 
         List<Long> stillPinned = jdbcTemplate.queryForList(
             "SELECT id FROM club_post WHERE club_id = ? AND pinned_at IS NOT NULL ORDER BY id", Long.class, clubId);

@@ -426,7 +426,11 @@ class ClubPostControllerTest {
 
         mockMvc.perform(put("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
             .andExpect(status().isConflict())
-            .andExpect(status().reason("At most 3 posts can be pinned. Unpin one first."));
+            // Not status().reason(): ApiExceptionHandler now handles ResponseStatusException
+            // itself, via @ExceptionHandler, so the response body -- not
+            // MockHttpServletResponse#getErrorMessage(), which only ResponseStatusExceptionResolver's
+            // own sendError() populates -- is where the message actually lives now.
+            .andExpect(jsonPath("$.detail").value("At most 3 posts can be pinned. Unpin one first."));
     }
 
     @Test

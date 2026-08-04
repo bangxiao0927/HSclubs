@@ -9,8 +9,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: init?.credentials ?? 'include',
   })
   if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `Request failed with status ${response.status}`)
+    const message = await resolveErrorMessage(response, `Request failed with status ${response.status}`)
+    throw new Error(message)
   }
   const raw = await response.text()
   if (!raw) return undefined as T

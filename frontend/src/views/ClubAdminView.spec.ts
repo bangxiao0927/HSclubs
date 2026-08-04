@@ -186,7 +186,7 @@ describe('ClubAdminView member count', () => {
     expect(invalidateClubCacheMock).not.toHaveBeenCalled()
   })
 
-  // Spring's own multipart-size rejection (see MultipartUploadExceptionHandler and
+  // Spring's own multipart-size rejection (see ApiExceptionHandler and
   // docs/API.md's 413 row): an application/problem+json body, not plain text.
   it('shows the ProblemDetail detail message when the image upload is rejected as too large', async () => {
     const club = buildClub({ imageUrl: 'https://cdn.example.com/old.png' })
