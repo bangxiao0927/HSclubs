@@ -1,12 +1,12 @@
 package com.example.demo.club.service;
 
-import net.coobird.thumbnailator.Thumbnails;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
@@ -14,17 +14,21 @@ import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Locale;
+import java.util.concurrent.Semaphore;
 import java.util.regex.Pattern;
 import java.util.UUID;
 
@@ -47,9 +51,20 @@ public class ImageStorageService {
 
     private static final long MAX_GIF_BYTES = 2L * 1024 * 1024;
     private static final long MAX_OTHER_BYTES = 5L * 1024 * 1024;
-    private static final long MAX_PIXELS = 50_000_000L;
+    // Lowered from the original 50,000,000: this endpoint only ever needs a MAX_DIMENSION
+    // derivative, and 30MP still comfortably covers ordinary phone/camera photos. This bound
+    // is defense in depth, not the primary memory guard -- see decodeFullImage below for that.
+    private static final long MAX_PIXELS = 30_000_000L;
     private static final int MAX_DIMENSION = 1600;
     private static final float JPEG_QUALITY = 0.82f;
+    private static final int EXIF_ORIENTATION_TAG = 0x0112;
+
+    // Bounds how many decodes (the memory- and CPU-heavy part of store()) run at once. Peak
+    // memory per decode is now bounded (see decodeFullImage), but bounding concurrency too is
+    // cheap insurance against many simultaneous uploads each holding their own bounded-but-
+    // nonzero decode buffers at the same time.
+    private static final int MAX_CONCURRENT_DECODES = Math.max(2, Runtime.getRuntime().availableProcessors());
+    private final Semaphore decodeSemaphore = new Semaphore(MAX_CONCURRENT_DECODES);
 
     // Named once so every "we could not sniff a supported format" site (the type is genuinely
     // unsupported, the stream has no readers at all, or the bytes are truncated before a
@@ -120,7 +135,7 @@ public class ImageStorageService {
             outputBytes = bytes;
             extension = ".gif";
         } else {
-            outputBytes = reencodeToJpeg(bytes, dimensions);
+            outputBytes = reencodeToJpeg(bytes, dimensions, format);
             extension = ".jpg";
         }
 
@@ -220,33 +235,315 @@ public class ImageStorageService {
         }
     }
 
-    // EXIF orientation must be applied here, from the original InputStream: the JDK JPEG reader
-    // does not expose it in usable form, and any BufferedImage decoded beforehand has already
-    // lost that metadata. Never upscale past the original resolution: only constrain to
-    // MAX_DIMENSION when the source is already larger than that.
-    private byte[] reencodeToJpeg(byte[] bytes, Dimensions original) throws IOException {
-        BufferedImage decoded = decodeFullImage(bytes, original);
-        BufferedImage flattened = flattenToWhiteBackground(decoded);
-        return encodeJpeg(flattened);
+    private byte[] reencodeToJpeg(byte[] bytes, Dimensions original, ImageFormat format) throws IOException {
+        decodeSemaphore.acquireUninterruptibly();
+        try {
+            BufferedImage decoded = decodeFullImage(bytes, original, format);
+            BufferedImage flattened = flattenToWhiteBackground(decoded);
+            return encodeJpeg(flattened);
+        } finally {
+            decodeSemaphore.release();
+        }
     }
 
+    // Progressive (and other non-baseline/non-extended-sequential) JPEG needs a full-size
+    // internal buffer in the default JDK decoder no matter what output size is requested --
+    // unlike baseline JPEG, PNG, and WebP, which all decode row-by-row and are safe to fully
+    // decode up to MAX_PIXELS (confirmed empirically; see the reproduction referenced from
+    // ImageStorageServiceOomHarness). So only that specific case is decoded at a reader-
+    // subsampled resolution (bounded, at the cost of some sharpness); everything else is fully
+    // decoded and resized with a quality-preserving multi-step downscale.
+    //
     // The header/dimensions read earlier in the pipeline only parses enough of the file to find
     // width and height; it does not guarantee the pixel data or embedded metadata (e.g. an ICC
     // profile) that comes after is intact. A file that fails here (IIOException) still passed
     // that earlier header read, so this is the full-decode failure mode of a corrupt or
     // truncated upload -- bad client input, not a server failure.
-    private static BufferedImage decodeFullImage(byte[] bytes, Dimensions original) {
-        try (InputStream in = new ByteArrayInputStream(bytes)) {
-            Thumbnails.Builder<? extends InputStream> builder = Thumbnails.of(in).useExifOrientation(true);
-            if (original.width() > MAX_DIMENSION || original.height() > MAX_DIMENSION) {
-                builder = builder.size(MAX_DIMENSION, MAX_DIMENSION).keepAspectRatio(true);
-            } else {
-                builder = builder.scale(1.0);
+    private static BufferedImage decodeFullImage(byte[] bytes, Dimensions original, ImageFormat format) {
+        JpegHeader jpegHeader = format == ImageFormat.JPEG ? scanJpegHeader(bytes) : NO_JPEG_HEADER;
+
+        if (format == ImageFormat.JPEG && !isBaselineOrExtendedSequential(jpegHeader.sofMarker())) {
+            int subsamplingFactor = computeSubsamplingFactor(original.width(), original.height());
+            BufferedImage subsampled = readAtResolution(bytes, subsamplingFactor);
+            BufferedImage oriented = applyExifOrientation(subsampled, jpegHeader.orientationValue());
+            return fitWithinMaxDimension(oriented);
+        }
+
+        BufferedImage full = readAtResolution(bytes, 1);
+        BufferedImage oriented = applyExifOrientation(full, jpegHeader.orientationValue());
+        return fitWithinMaxDimensionProgressively(oriented);
+    }
+
+    private static final JpegHeader NO_JPEG_HEADER = new JpegHeader(null, null);
+
+    private static boolean isBaselineOrExtendedSequential(Integer sofMarker) {
+        return sofMarker != null && (sofMarker == 0xC0 || sofMarker == 0xC1);
+    }
+
+    // Uniform integer subsampling, derived from whichever side is larger, mirrors the aspect-
+    // ratio-preserving fit into the (square) MAX_DIMENSION x MAX_DIMENSION box that the final
+    // image must land in; keeping it uniform (not independent per axis) is what keeps this
+    // consistent with the never-upscale and keep-aspect-ratio behavior below. Never subsamples
+    // an image that already fits, so small images are still decoded at full resolution.
+    private static int computeSubsamplingFactor(int width, int height) {
+        int largerDimension = Math.max(width, height);
+        if (largerDimension <= MAX_DIMENSION) {
+            return 1;
+        }
+        return largerDimension / MAX_DIMENSION;
+    }
+
+    private static BufferedImage readAtResolution(byte[] bytes, int subsamplingFactor) {
+        try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
+            if (!readers.hasNext()) {
+                throw new IllegalArgumentException(UNSUPPORTED_IMAGE_TYPE_MESSAGE);
             }
-            return builder.asBufferedImage();
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(iis);
+                ImageReadParam param = reader.getDefaultReadParam();
+                param.setSourceSubsampling(subsamplingFactor, subsamplingFactor, 0, 0);
+                return reader.read(0, param);
+            } finally {
+                reader.dispose();
+            }
         } catch (IOException e) {
             throw new IllegalArgumentException("Unreadable or corrupt image", e);
         }
+    }
+
+    // Scales the already-subsampled (and already-oriented) image down to fit inside the
+    // MAX_DIMENSION x MAX_DIMENSION box, preserving aspect ratio. Integer subsampling above
+    // only coarsens resolution in whole-pixel steps, so the subsampled image can still be up
+    // to roughly twice MAX_DIMENSION on a side; this final single-step resize (well within
+    // quality range for a sub-2x downscale) brings it the rest of the way to the target size.
+    // Never upscales: an image that already fits is returned unchanged.
+    private static BufferedImage fitWithinMaxDimension(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        if (width <= MAX_DIMENSION && height <= MAX_DIMENSION) {
+            return image;
+        }
+        double scale = Math.min((double) MAX_DIMENSION / width, (double) MAX_DIMENSION / height);
+        int targetWidth = Math.max(1, (int) Math.round(width * scale));
+        int targetHeight = Math.max(1, (int) Math.round(height * scale));
+        return resizeTo(image, targetWidth, targetHeight, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+    }
+
+    // A single large-ratio Graphics2D resize aliases fine detail into visible noise (it does
+    // not average away source pixels the way a genuine downsampling filter would). Halving
+    // repeatedly until within 2x of the target -- each individual step small enough for
+    // bilinear interpolation to look like a proper box average -- avoids that; this is the
+    // same technique Thumbnailator itself uses for its own large-ratio thumbnails. Never
+    // upscales: an image that already fits is returned unchanged.
+    private static BufferedImage fitWithinMaxDimensionProgressively(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        if (width <= MAX_DIMENSION && height <= MAX_DIMENSION) {
+            return image;
+        }
+        double scale = Math.min((double) MAX_DIMENSION / width, (double) MAX_DIMENSION / height);
+        int targetWidth = Math.max(1, (int) Math.round(width * scale));
+        int targetHeight = Math.max(1, (int) Math.round(height * scale));
+
+        BufferedImage current = image;
+        int currentWidth = width;
+        int currentHeight = height;
+        while (currentWidth / 2 >= targetWidth && currentHeight / 2 >= targetHeight) {
+            int nextWidth = Math.max(targetWidth, currentWidth / 2);
+            int nextHeight = Math.max(targetHeight, currentHeight / 2);
+            current = resizeTo(current, nextWidth, nextHeight, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            currentWidth = nextWidth;
+            currentHeight = nextHeight;
+        }
+        return resizeTo(current, targetWidth, targetHeight, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+    }
+
+    private static BufferedImage resizeTo(BufferedImage source, int targetWidth, int targetHeight, Object interpolationHint) {
+        BufferedImage resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = resized.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, interpolationHint);
+        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        graphics.drawImage(source, 0, 0, targetWidth, targetHeight, null);
+        graphics.dispose();
+        return resized;
+    }
+
+    // Applies the rotation/flip that the Exif Orientation tag (1-8) calls for. Each case is
+    // built from the same handful of primitive transforms (see below), matching the mapping
+    // exiftool reports for these values; verified against the orientation=6 fixture this
+    // service is tested with (see ImageStorageServiceTest#orientationSixDisplaysTheRightWayUp).
+    private static BufferedImage applyExifOrientation(BufferedImage source, Integer orientation) {
+        int value = orientation == null ? 1 : orientation;
+        switch (value) {
+            case 2:
+                return flipHorizontal(source);
+            case 3:
+                return rotate180(source);
+            case 4:
+                return flipVertical(source);
+            case 5:
+                return flipHorizontal(rotate90Clockwise(source));
+            case 6:
+                return rotate90Clockwise(source);
+            case 7:
+                return flipHorizontal(rotate90CounterClockwise(source));
+            case 8:
+                return rotate90CounterClockwise(source);
+            default:
+                return source;
+        }
+    }
+
+    private static BufferedImage flipHorizontal(BufferedImage source) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        BufferedImage dest = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = dest.createGraphics();
+        graphics.scale(-1.0, 1.0);
+        graphics.translate(-width, 0);
+        graphics.drawImage(source, 0, 0, null);
+        graphics.dispose();
+        return dest;
+    }
+
+    private static BufferedImage flipVertical(BufferedImage source) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        BufferedImage dest = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = dest.createGraphics();
+        graphics.scale(1.0, -1.0);
+        graphics.translate(0, -height);
+        graphics.drawImage(source, 0, 0, null);
+        graphics.dispose();
+        return dest;
+    }
+
+    private static BufferedImage rotate180(BufferedImage source) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        BufferedImage dest = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = dest.createGraphics();
+        graphics.translate(width, height);
+        graphics.rotate(Math.PI);
+        graphics.drawImage(source, 0, 0, null);
+        graphics.dispose();
+        return dest;
+    }
+
+    private static BufferedImage rotate90Clockwise(BufferedImage source) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        BufferedImage dest = new BufferedImage(height, width, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = dest.createGraphics();
+        graphics.translate(height, 0);
+        graphics.rotate(Math.PI / 2);
+        graphics.drawImage(source, 0, 0, null);
+        graphics.dispose();
+        return dest;
+    }
+
+    private static BufferedImage rotate90CounterClockwise(BufferedImage source) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        BufferedImage dest = new BufferedImage(height, width, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = dest.createGraphics();
+        graphics.translate(0, width);
+        graphics.rotate(-Math.PI / 2);
+        graphics.drawImage(source, 0, 0, null);
+        graphics.dispose();
+        return dest;
+    }
+
+    private record JpegHeader(Integer orientationValue, Integer sofMarker) {
+    }
+
+    // A single pass over JPEG marker segments from the start of the file, collecting the
+    // Exif Orientation tag (from an APP1 "Exif\0\0" segment's TIFF IFD0) and which Start-Of-
+    // Frame marker encodes this JPEG (0xC0 baseline, 0xC2 progressive, etc.) -- entirely
+    // independently of ImageIO's own metadata reader, which throws when Exif is the very
+    // first marker after SOI, before any JFIF APP0 (a real camera/phone JPEG layout this
+    // service is also tested against; see
+    // ImageStorageServiceTest#orientationSixDisplaysTheRightWayUp).
+    private static JpegHeader scanJpegHeader(byte[] bytes) {
+        if (bytes.length < 4 || (bytes[0] & 0xFF) != 0xFF || (bytes[1] & 0xFF) != 0xD8) {
+            return NO_JPEG_HEADER;
+        }
+        Integer orientation = null;
+        Integer sofMarker = null;
+        int position = 2;
+        while (position + 4 <= bytes.length) {
+            if ((bytes[position] & 0xFF) != 0xFF) {
+                break;
+            }
+            int marker = bytes[position + 1] & 0xFF;
+            position += 2;
+            if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
+                continue;
+            }
+            if (marker == 0xD9 || marker == 0xDA) {
+                break;
+            }
+            if (position + 2 > bytes.length) {
+                break;
+            }
+            int segmentLength = ((bytes[position] & 0xFF) << 8) | (bytes[position + 1] & 0xFF);
+            int segmentStart = position + 2;
+            int segmentEnd = position + segmentLength;
+            if (segmentLength < 2 || segmentEnd > bytes.length) {
+                break;
+            }
+            if (orientation == null && marker == 0xE1 && isExifApp1Segment(bytes, segmentStart, segmentEnd)) {
+                byte[] tiff = Arrays.copyOfRange(bytes, segmentStart + 6, segmentEnd);
+                orientation = readOrientationFromTiff(tiff);
+            } else if (sofMarker == null && isStartOfFrameMarker(marker)) {
+                sofMarker = marker;
+            }
+            position = segmentEnd;
+        }
+        return new JpegHeader(orientation, sofMarker);
+    }
+
+    // SOF0-SOF15 (0xC0-0xCF), excluding the three codes in that range reserved for other
+    // purposes: DHT (0xC4), JPG/reserved (0xC8), and DAC (0xCC).
+    private static boolean isStartOfFrameMarker(int marker) {
+        return marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC;
+    }
+
+    private static boolean isExifApp1Segment(byte[] bytes, int segmentStart, int segmentEnd) {
+        return segmentEnd - segmentStart >= 6
+            && bytes[segmentStart] == 'E' && bytes[segmentStart + 1] == 'x'
+            && bytes[segmentStart + 2] == 'i' && bytes[segmentStart + 3] == 'f'
+            && bytes[segmentStart + 4] == 0 && bytes[segmentStart + 5] == 0;
+    }
+
+    private static Integer readOrientationFromTiff(byte[] tiff) {
+        if (tiff.length < 8) {
+            return null;
+        }
+        boolean littleEndian = tiff[0] == 'I' && tiff[1] == 'I';
+        boolean bigEndian = tiff[0] == 'M' && tiff[1] == 'M';
+        if (!littleEndian && !bigEndian) {
+            return null;
+        }
+        ByteBuffer buffer = ByteBuffer.wrap(tiff).order(littleEndian ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN);
+        int ifd0Offset = buffer.getInt(4);
+        if (ifd0Offset < 0 || ifd0Offset + 2 > tiff.length) {
+            return null;
+        }
+        int entryCount = buffer.getShort(ifd0Offset) & 0xFFFF;
+        for (int i = 0; i < entryCount; i++) {
+            int entryOffset = ifd0Offset + 2 + i * 12;
+            if (entryOffset + 12 > tiff.length) {
+                break;
+            }
+            int tag = buffer.getShort(entryOffset) & 0xFFFF;
+            if (tag == EXIF_ORIENTATION_TAG) {
+                return buffer.getShort(entryOffset + 8) & 0xFFFF;
+            }
+        }
+        return null;
     }
 
     // JPEG has no transparency; Thumbnailator's own JPEG writer flattens onto black (see its

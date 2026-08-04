@@ -100,7 +100,7 @@ class ImageStorageServiceTest {
 
     // A PNG truncated right after its IHDR chunk has a fully readable header (width/height
     // parse fine, so the sniff and megapixel-guard steps both pass) but no IDAT/IEND at all,
-    // so the *full* decode Thumbnailator performs during re-encoding throws IIOException
+    // so the *full* decode performed during re-encoding throws IIOException
     // ("Error reading PNG metadata"). That is still bad client input, not a server failure,
     // and must surface the same way a header-read failure does: IllegalArgumentException / 400.
     @Test
@@ -219,7 +219,7 @@ class ImageStorageServiceTest {
     }
 
     @Test
-    void rejectsAnImageOverFiftyMegapixelsBeforeFullDecode() throws IOException {
+    void rejectsAnImageOverTheMaximumAllowedMegapixelsBeforeFullDecode() throws IOException {
         ImageStorageService service = service(uploadDir);
         byte[] hugeHeaderPng = solidColorPng(8000, 7000, Color.BLACK, false);
         MockMultipartFile file = new MockMultipartFile("file", "huge.png", "image/png", hugeHeaderPng);
