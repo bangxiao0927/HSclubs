@@ -63,6 +63,15 @@ const commentsByPost = ref<Record<number, CommentsEntry>>({})
 // of two in-flight requests happens to resolve (or reject) last.
 const commentsRequestGeneration = ref<Record<number, number>>({})
 let loadedClubId: string | null = null
+// A monotonically increasing counter shared by every request that writes to posts/page/size/
+// total/club/error (load() and backfillCurrentPageAfterPostDeletion): the single source of
+// truth for "which of those requests is the newest one". A fresh load() (a route/page/club
+// change) and a delete's backfill both bump this before starting their request and compare
+// their own captured number against the live one once the response settles, so whichever
+// request is actually the newest is the only one ever allowed to write -- regardless of which
+// kind of request it is, or which one happens to resolve (or reject) last. Same pattern as
+// commentsRequestGeneration above, at the whole-feed level instead of per-post.
+let feedRequestGeneration = 0
 
 const routeClubId = computed(() => {
   const raw = route.params.id
@@ -95,6 +104,7 @@ const load = async () => {
     return
   }
 
+  const generation = ++feedRequestGeneration
   loading.value = true
   error.value = ''
   expandedPostIds.value = new Set()
@@ -120,6 +130,11 @@ const load = async () => {
       needsClub ? fetchClubById(clubIdOrSlug) : Promise.resolve(club.value),
       fetchClubMediaFeed(clubIdOrSlug, requestedPage, requestedSize),
     ])
+    if (generation !== feedRequestGeneration) {
+      // A newer load() (or a delete's backfill) has since superseded this request; applying
+      // this stale response now would silently undo whatever that newer request already wrote.
+      return
+    }
     if (needsClub) {
       club.value = clubResponse
       loadedClubId = clubIdOrSlug
@@ -129,12 +144,17 @@ const load = async () => {
     size.value = feed.size
     total.value = feed.total
   } catch (err) {
+    if (generation !== feedRequestGeneration) {
+      return
+    }
     error.value = err instanceof Error ? err.message : 'Failed to load club media'
     club.value = null
     posts.value = []
     loadedClubId = null
   } finally {
-    loading.value = false
+    if (generation === feedRequestGeneration) {
+      loading.value = false
+    }
   }
 }
 
@@ -389,25 +409,20 @@ const handleDeletePost = async (postId: number) => {
 // on a page with nothing to show, so this navigates back to the previous (now-valid) page
 // instead, which itself reloads through the normal query-driven `load()` path.
 //
-// The request's own club id, page, and size are captured up front, before the `await`, and
-// re-checked against the live route once the response arrives: a fast Next/Previous click (or a
-// club navigation) issued while this backfill is still in flight must not let this now-stale
-// response overwrite whatever that newer navigation's own `load()` call already wrote -- last
-// network response to resolve is not necessarily the last request the viewer actually intended.
+// Guarded by the same feedRequestGeneration counter load() uses (see its declaration above),
+// not just a route-context comparison: two backfills from two deletes in quick succession share
+// the same route/page/size throughout, so a route check alone cannot tell them apart -- only a
+// monotonic counter can guarantee the older of the two never wins just because its response
+// happened to resolve last.
 const backfillCurrentPageAfterPostDeletion = async () => {
   const requestedClubId = routeClubId.value
   const requestedPage = page.value
   const requestedSize = size.value
-  const requestedQueryPage = route.query.page
-  const requestedQuerySize = route.query.size
-  const isStillTheSameFeedContext = () =>
-    routeClubId.value === requestedClubId &&
-    route.query.page === requestedQueryPage &&
-    route.query.size === requestedQuerySize
+  const generation = ++feedRequestGeneration
 
   try {
     const feed = await fetchClubMediaFeed(requestedClubId, requestedPage, requestedSize)
-    if (!isStillTheSameFeedContext()) {
+    if (generation !== feedRequestGeneration) {
       return
     }
     if (feed.items.length === 0 && requestedPage > 0) {
@@ -419,6 +434,9 @@ const backfillCurrentPageAfterPostDeletion = async () => {
     size.value = feed.size
     total.value = feed.total
   } catch {
+    if (generation !== feedRequestGeneration) {
+      return
+    }
     // The delete itself already succeeded; a failed backfill just leaves the optimistic,
     // already-shorter local list in place rather than surfacing a second, confusing error.
   }
@@ -616,7 +634,10 @@ watch(
         </form>
       </section>
 
-      <p v-if="posts.length === 0" class="mv-empty">No posts yet. Check back soon.</p>
+      <p v-if="posts.length === 0 && total === 0" class="mv-empty">No posts yet. Check back soon.</p>
+      <p v-else-if="posts.length === 0" class="mv-empty">
+        No posts on this page. Use the pagination below to go back.
+      </p>
 
       <ul v-else class="mv-post-list">
         <li v-for="post in posts" :key="post.id" class="mv-post-card">
@@ -732,7 +753,7 @@ watch(
         </li>
       </ul>
 
-      <nav v-if="posts.length" class="mv-pagination">
+      <nav v-if="posts.length || page > 0" class="mv-pagination">
         <button type="button" :disabled="!hasPreviousPage" @click="goToPage(page - 1)">Previous</button>
         <span class="mv-pagination-status">Page {{ page + 1 }} of {{ totalPages }}</span>
         <button type="button" :disabled="!hasNextPage" @click="goToPage(page + 1)">Next</button>
