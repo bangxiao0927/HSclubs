@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchClubById } from '../services/clubService'
 import {
@@ -12,6 +13,7 @@ import {
   createClubPostComment,
   deleteClubPostComment,
 } from '../services/clubPostService'
+import { useAuthStore } from '../stores/auth'
 import type { Club } from '../types/club'
 import type { ClubPost, ClubPostComment } from '../types/clubPost'
 import { clubPostImage } from '../utils/clubImages'
@@ -40,6 +42,8 @@ interface CommentFormState {
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
+const { currentUser } = storeToRefs(authStore)
 
 const club = ref<Club | null>(null)
 const posts = ref<ClubPost[]>([])
@@ -58,6 +62,11 @@ const routeClubId = computed(() => {
   const value = Array.isArray(raw) ? raw[0] : raw
   return value ?? ''
 })
+
+// Pin/unpin is an editorial power over the whole club, not tied to any one post's authorship:
+// the club's own president (club.canManage) or a platform owner (currentUser.isOwner), the
+// same club.canManage-or-owner pattern ClubAdminView's canManageMembers already uses.
+const canManagePins = computed(() => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner))
 
 const commentsRegionId = (postId: number) => `club-media-comments-${postId}`
 
@@ -83,6 +92,15 @@ const load = async () => {
   error.value = ''
   expandedPostIds.value = new Set()
   commentsByPost.value = {}
+  // A page/club navigation leaves the previous page's posts and comments behind entirely, so
+  // any in-flight action error or unsent comment draft tied to those (now off-screen) post/
+  // comment ids must not silently reappear if a later page happens to reuse the same ids.
+  commentForms.value = {}
+  postActionError.value = {}
+  commentActionError.value = {}
+  deletingPostIds.value = new Set()
+  pinningPostIds.value = new Set()
+  deletingCommentIds.value = new Set()
 
   const requestedPage = Math.max(0, parseQueryInt(route.query.page, 0))
   const requestedSize = Math.max(1, parseQueryInt(route.query.size, DEFAULT_PAGE_SIZE))
@@ -289,6 +307,7 @@ const handleDeletePost = async (postId: number) => {
     await deleteClubPost(routeClubId.value, postId)
     posts.value = posts.value.filter((post) => post.id !== postId)
     total.value = Math.max(0, total.value - 1)
+    await backfillCurrentPageAfterPostDeletion()
   } catch (err) {
     postActionError.value = {
       ...postActionError.value,
@@ -298,6 +317,30 @@ const handleDeletePost = async (postId: number) => {
     const cleared = new Set(deletingPostIds.value)
     cleared.delete(postId)
     deletingPostIds.value = cleared
+  }
+}
+
+// Deleting a post shrinks the current page below a full page's worth of items without ever
+// pulling in the item that should now slide up from the next page -- the local, optimistic
+// removal above only ever shrinks the list. This re-fetches the same page from the server so
+// that backfill can happen, still without a manual browser reload: if the current page is a
+// nonzero page and the re-fetch shows it is now empty, the viewer would otherwise be stranded
+// on a page with nothing to show, so this navigates back to the previous (now-valid) page
+// instead, which itself reloads through the normal query-driven `load()` path.
+const backfillCurrentPageAfterPostDeletion = async () => {
+  try {
+    const feed = await fetchClubMediaFeed(routeClubId.value, page.value, size.value)
+    if (feed.items.length === 0 && page.value > 0) {
+      goToPage(page.value - 1)
+      return
+    }
+    posts.value = feed.items
+    page.value = feed.page
+    size.value = feed.size
+    total.value = feed.total
+  } catch {
+    // The delete itself already succeeded; a failed backfill just leaves the optimistic,
+    // already-shorter local list in place rather than surfacing a second, confusing error.
   }
 }
 
@@ -529,9 +572,9 @@ watch(
               {{ postActionError[post.id] }}
             </p>
 
-            <div v-if="club?.canManage || post.viewerCanDelete" class="mv-post-actions">
+            <div v-if="canManagePins || post.viewerCanDelete" class="mv-post-actions">
               <button
-                v-if="club?.canManage"
+                v-if="canManagePins"
                 type="button"
                 class="mv-pin-toggle"
                 :disabled="isPinningPost(post.id)"

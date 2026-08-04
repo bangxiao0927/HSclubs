@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -28,6 +29,8 @@ import {
   createClubPostComment,
   deleteClubPostComment,
 } from '../services/clubPostService'
+import { useAuthStore } from '../stores/auth'
+import type { AuthUser } from '../types/auth'
 import type { Club } from '../types/club'
 import type { ClubPost, ClubPostComment, ClubPostFeedPage } from '../types/clubPost'
 import ClubMediaView from './ClubMediaView.vue'
@@ -94,6 +97,16 @@ const buildComment = (overrides: Partial<ClubPostComment> = {}): ClubPostComment
   ...overrides,
 })
 
+const buildAuthUser = (overrides: Partial<AuthUser> = {}): AuthUser => ({
+  id: '1',
+  email: 'owner@example.com',
+  displayName: 'Platform Owner',
+  avatarUrl: '',
+  provider: 'google',
+  isOwner: true,
+  ...overrides,
+})
+
 let router: Router
 
 const mountAtMediaRoute = async (path = '/clubs/1/media') => {
@@ -107,6 +120,7 @@ const mountAtMediaRoute = async (path = '/clubs/1/media') => {
 }
 
 beforeEach(() => {
+  setActivePinia(createPinia())
   fetchClubByIdMock.mockReset()
   fetchClubMediaFeedMock.mockReset()
   fetchClubPostCommentsMock.mockReset()
@@ -296,6 +310,45 @@ describe('ClubMediaView pagination', () => {
 
     expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
     expect(fetchClubByIdMock).toHaveBeenCalledTimes(1)
+  })
+
+  // A stale post/comment action error or an unsent comment draft must never survive a feed
+  // context reload: it is scoped to a specific post id on the page the viewer just left, and a
+  // later page reusing that same id (however unlikely in production) must start clean rather
+  // than silently resurface someone else's leftover error text or half-typed comment.
+  it('clears a stale per-post action error and an unsent comment draft when the page changes', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 7, viewerCanDelete: true })], page: 0, size: 12, total: 24 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 7 })], page: 1, size: 12, total: 24 }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValue([])
+    deleteClubPostMock.mockRejectedValue(new Error('You do not have access to delete this post'))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('You do not have access to delete this post')
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.find('.mv-comment-form .mv-comment-input').setValue('Draft that should not survive a page change')
+    expect(wrapper.find<HTMLTextAreaElement>('.mv-comment-form .mv-comment-input').element.value).toBe(
+      'Draft that should not survive a page change',
+    )
+
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('You do not have access to delete this post')
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+    expect(wrapper.find<HTMLTextAreaElement>('.mv-comment-form .mv-comment-input').element.value).toBe('')
   })
 })
 
@@ -695,11 +748,12 @@ describe('ClubMediaView post and comment deletion', () => {
     expect(cards[1]!.find('.mv-post-delete').exists()).toBe(false)
   })
 
-  it('deletes a post and removes it from the feed without a manual reload', async () => {
+  it('deletes a post, backfills the current page from the server, and removes it from the feed without a manual reload', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub())
-    fetchClubMediaFeedMock.mockResolvedValue(
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
       buildFeed({ items: [buildPost({ id: 1, viewerCanDelete: true })], total: 1 }),
     )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed({ items: [], total: 0 }))
     deleteClubPostMock.mockResolvedValue(undefined)
 
     const wrapper = await mountAtMediaRoute()
@@ -709,7 +763,8 @@ describe('ClubMediaView post and comment deletion', () => {
     await flushPromises()
 
     expect(deleteClubPostMock).toHaveBeenCalledWith('1', 1)
-    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(1)
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(2, '1', 0, 12)
     expect(wrapper.find('li.mv-post-card').exists()).toBe(false)
     expect(wrapper.text()).toContain('No posts yet.')
   })
@@ -769,9 +824,139 @@ describe('ClubMediaView post and comment deletion', () => {
   })
 })
 
+describe('ClubMediaView post deletion pagination regressions', () => {
+  it('backfills the current page with the item that slides up from the next page after a delete', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true }),
+          buildPost({ id: 2, title: 'Post 2' }),
+        ],
+        page: 0,
+        size: 2,
+        total: 3,
+      }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [buildPost({ id: 2, title: 'Post 2' }), buildPost({ id: 3, title: 'Post 3' })],
+        page: 0,
+        size: 2,
+        total: 2,
+      }),
+    )
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(2, '1', 0, 2)
+    const titles = wrapper.findAll('.mv-post-title').map((node) => node.text())
+    expect(titles).toEqual(['Post 2', 'Post 3'])
+  })
+
+  // The stranding scenario the issue calls out: deleting the only post on a nonzero page must
+  // not leave the viewer looking at an empty page when earlier pages still have content.
+  it('navigates back to the previous page when deleting the last item strands the viewer on an emptied nonzero page', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 2, title: 'Post 2', viewerCanDelete: true })], page: 1, size: 1, total: 2 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed({ items: [], page: 1, size: 1, total: 1 }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1' })], page: 0, size: 1, total: 1 }),
+    )
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=1&size=1')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Post 2')
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(3)
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(2, '1', 1, 1)
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(3, '1', 0, 1)
+    expect(router.currentRoute.value.query.page).toBe('0')
+    expect(wrapper.text()).toContain('Post 1')
+    expect(wrapper.text()).toContain('Page 1 of 1')
+  })
+
+  it('does not navigate away when deleting the last item leaves page zero empty', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, viewerCanDelete: true })], page: 0, size: 12, total: 1 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed({ items: [], page: 0, size: 12, total: 0 }))
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
+    expect(router.currentRoute.value.query.page).toBeUndefined()
+    expect(wrapper.text()).toContain('No posts yet.')
+  })
+})
+
 describe('ClubMediaView pin and unpin', () => {
   it('shows pin controls only when the viewer canManage the club', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: false }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 1 })], total: 1 }))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-pin-toggle').exists()).toBe(false)
+  })
+
+  // A platform owner is not necessarily a member of every club, so they will never be its
+  // president -- club.canManage stays false for them -- but the pin/unpin power must still
+  // reach them, the same club.canManage-or-owner pattern ClubAdminView already relies on.
+  it('shows pin controls for a platform owner even when the club reports canManage as false', async () => {
+    const authStore = useAuthStore()
+    authStore.currentUser = buildAuthUser({ isOwner: true })
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: false }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 1 })], total: 1 }))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-pin-toggle').exists()).toBe(true)
+  })
+
+  it('pins a post as a platform owner who is not the club president', async () => {
+    const authStore = useAuthStore()
+    authStore.currentUser = buildAuthUser({ isOwner: true })
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: false }))
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 1, pinnedAt: null })], total: 1 }),
+    )
+    pinClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-pin-toggle').trigger('click')
+    await flushPromises()
+
+    expect(pinClubPostMock).toHaveBeenCalledWith('1', 1)
+    expect(wrapper.find('.mv-badge-pinned').exists()).toBe(true)
+  })
+
+  it('hides pin controls from an ordinary member who is neither the president nor a platform owner', async () => {
+    const authStore = useAuthStore()
+    authStore.currentUser = buildAuthUser({ isOwner: false })
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: false, viewerIsMember: true }))
     fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 1 })], total: 1 }))
 
     const wrapper = await mountAtMediaRoute()
