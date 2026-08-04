@@ -26,22 +26,21 @@ Work through issues in this order. Completed issues are collapsed at the bottom.
 | Seq | # | Issue | Status | Priority | Effort |
 |-----|---|-------|--------|----------|--------|
 | 1 | #9 | Verify president permissions | open | P0 | Small |
-| 2 | #17 | Club image storage verify & cleanup | open | P0 | Small |
-| 3 | #7 | Club creation UI in admin page | open | P0 | Medium |
-| 4 | #18 | Document SecurityConfig authorization model | open | P0 | Tiny |
-| 5 | #5 | Account creation data collection (home school) | open | P1 | Medium |
-| 6 | #8 | President assignment page | open | P1 | Medium |
-| 7 | #14 | Profile page completeness | open | P1 | Small |
-| 8 | #6 | Homepage images from DB | open | P1 | Small |
-| 9 | #3 | Club summary API | open | P1 | Medium |
-| 10 | #16 | Login remember period | open | P2 | Small |
-| 11 | #15 | Theme matching design PDF | open | P2 | Medium |
-| 12 | #11 | Club recommendation page | open | P2 | Medium |
-| 13 | #10 | Comment & rating system | deferred | P3 | Large |
-| 14 | #12 | QR code club application | deferred | P3 | Medium |
-| 15 | #13 | Meeting attendance system | deferred | P3 | Large |
-| 16 | #20 | Define `clubs.visibility` semantics | open | P3 | Medium |
-| 17 | #21 | Rate limiting on media publishing | open | P3 | Small |
+| 2 | #7 | Club creation UI in admin page | open | P0 | Medium |
+| 3 | #18 | Document SecurityConfig authorization model | open | P0 | Tiny |
+| 4 | #5 | Account creation data collection (home school) | open | P1 | Medium |
+| 5 | #8 | President assignment page | open | P1 | Medium |
+| 6 | #14 | Profile page completeness | open | P1 | Small |
+| 7 | #6 | Homepage images from DB | open | P1 | Small |
+| 8 | #3 | Club summary API | open | P1 | Medium |
+| 9 | #16 | Login remember period | open | P2 | Small |
+| 10 | #15 | Theme matching design PDF | open | P2 | Medium |
+| 11 | #11 | Club recommendation page | open | P2 | Medium |
+| 12 | #10 | Comment & rating system | deferred | P3 | Large |
+| 13 | #12 | QR code club application | deferred | P3 | Medium |
+| 14 | #13 | Meeting attendance system | deferred | P3 | Large |
+| 15 | #20 | Define `clubs.visibility` semantics | open | P3 | Medium |
+| 16 | #21 | Rate limiting on media publishing | open | P3 | Small |
 
 ---
 
@@ -497,9 +496,16 @@ CREATE TABLE persistent_logins (
 
 ## Issue #17: Verify Club Image Storage & Serving
 
-**Status:** `open`
-**PR:** —
-**Verified:** 2025-07-17 — WebConfig.java serves /uploads/** correctly. Gaps: old image not deleted on replacement (orphan leak), no scheduled cleanup of unreferenced files.
+**Status:** `done`
+**PR:** bangxiao0927/HSclubs#45, bangxiao0927/HSclubs#85
+**Verified:** 2026-08-04 — `WebConfig.java` still serves `/uploads/**` correctly (it later
+gained an explicit `X-Content-Type-Options: nosniff` header via bangxiao0927/HSclubs#85, but
+the resource mapping itself is unchanged since the 2025-07-17 pass). Both original gaps are
+closed: `ClubImageController#uploadImage` deletes the
+previous `imageUrl` file after the new one is committed (bangxiao0927/HSclubs#45), and
+`UploadCleanupService` runs a nightly (3 AM) scheduled sweep with a 10-minute grace period
+(bangxiao0927/HSclubs#45, scope widened to also cover `club-posts/` -- while explicitly
+excluding the Instagram avatar cache -- by bangxiao0927/HSclubs#85). No open gap remains.
 
 **Problem (Verification):**
 `ClubImageController.java` saves images to `backend/uploads/` with UUID filenames and returns `/uploads/{uuid}.{ext}` URLs. Need to verify:
@@ -512,12 +518,16 @@ CREATE TABLE persistent_logins (
 1. Confirm Spring Boot serves `/uploads/**` from the `uploads/` directory (check `WebConfig.java` or `application.yaml`).
 2. Test upload flow end-to-end: select file -> upload -> verify image displays.
 3. Delete old image file when a club's image is updated (currently the old file is orphaned).
+   -- Done in bangxiao0927/HSclubs#45.
 4. Add a scheduled task to clean up orphaned upload files not referenced by any club.
+   -- Done in bangxiao0927/HSclubs#45; rescoped to also walk `club-posts/` (and stay isolated
+   from the Instagram avatar cache) in bangxiao0927/HSclubs#85.
 
 **Expected Outcome:**
 - Club images upload and display correctly.
 - Old images are deleted when replaced.
-- No disk space leaks from orphaned files.
+- No disk space leaks from orphaned files under the legacy top-level upload location or
+  `club-posts/`.
 
 ---
 
@@ -682,7 +692,7 @@ anywhere in the codebase yet.
 | 14 | Profile page completeness | open | P1 | Small |
 | 15 | Theme matching PDF | open | P2 | Medium |
 | 16 | Login remember period | open | P2 | Small |
-| 17 | Club image storage verify | open | P0 | Small |
+| 17 | Club image storage verify & cleanup | done | — | — |
 | 18 | Document SecurityConfig | open | P0 | Tiny |
 | 19 | Club media - photo feed, comments, pinning | done | — | — |
 | 20 | Define `clubs.visibility` semantics | open | P3 | Medium |

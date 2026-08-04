@@ -176,12 +176,23 @@ the database: JPEG/PNG/WebP are flattened, EXIF-stripped, and re-encoded to JPEG
 5MB for JPEG/PNG/WebP, 2MB for GIF. Both the format and these limits are enforced from the
 file's sniffed magic bytes, never the client-declared `Content-Type`.
 
+These are application-level limits, checked by `ImageStorageService` only after the request
+has already cleared a stricter, earlier ceiling: Spring's own
+`spring.servlet.multipart.max-file-size` (6MB per part) and `max-request-size` (8MB total).
+A file larger than that multipart ceiling never reaches `ImageStorageService` at all -- Spring
+rejects it first with a 413, before the title is even read, so it cannot also produce one of
+the 400s below. The two limits are deliberately layered (6MB above the application's own 5MB
+JPEG/PNG/WebP limit): if they were equal, Spring would take the file before the readable
+400 could ever be produced, turning that validation into dead code.
+
 Response: 201 with a `PublicClubPost` body (shape above).
 
 Status: 201 | 400 (missing/empty title or file, title over 140 characters, unsupported or
-corrupt image, image over its format's size or resolution limit) | 403 (authenticated but not
-a member of this club) | 404 (club not found) | 500 (rare: the post could not be read back
-immediately after being written, or the file could not be stored)
+corrupt image, or image over its *application-level* format size or resolution limit -- see
+above) | 403 (authenticated but not a member of this club) | 404 (club not found) | 413 (the
+file or overall request exceeded Spring's multipart ceiling before any application code ran --
+see "Error Responses" below) | 500 (rare: the post could not be read back immediately after
+being written, or the file could not be stored)
 
 ### GET /api/clubs/{clubSlugOrId}/posts
 Read a club's public post feed, newest and pinned-first. Public; no authentication required,
@@ -341,4 +352,5 @@ Before any of these are implemented, the proposer should:
 | 403 | Permission denied |
 | 404 | Resource not found |
 | 409 | Conflict (duplicate request) |
+| 413 | Any multipart upload (e.g. `POST /api/clubs/{clubSlugOrId}/posts` above) exceeded `spring.servlet.multipart.max-file-size` (6MB per part) or `max-request-size` (8MB total). A request whose raw body exceeds `server.tomcat.max-swallow-size` (10MB) may instead have its connection aborted before this response body can be delivered. |
 | 500 | Internal server error |
