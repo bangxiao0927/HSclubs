@@ -185,6 +185,25 @@ the 400s below. The two limits are deliberately layered (6MB above the applicati
 JPEG/PNG/WebP limit): if they were equal, Spring would take the file before the readable
 400 could ever be produced, turning that validation into dead code.
 
+That 413 body is a real `application/problem+json` document (verified end to end by
+`MultipartUploadExceptionHandlerIntegrationTest`, not asserted from reading the handler alone),
+written by `MultipartUploadExceptionHandler`:
+```json
+{
+  "title": "Content Too Large",
+  "status": 413,
+  "detail": "The uploaded file is too large. Please choose a smaller file and try again.",
+  "instance": "/api/clubs/42/posts"
+}
+```
+`title` is `HttpStatus.CONTENT_TOO_LARGE`'s own reason phrase, not chosen by the handler.
+`detail` is the one string the handler does set. `instance` is filled in by Spring's own
+`ProblemDetail` return-value handling from the request's actual path, not by the handler --
+expect the real path hit (e.g. `/api/clubs/42/posts`), not a fixed placeholder. `type` is a
+fifth field `ProblemDetail` supports, but this handler never sets one: an unset `type` is
+omitted from the JSON entirely (Jackson never writes it, not even as `null` or the RFC 9457
+default of `"about:blank"`) -- do not expect a `type` key in the actual response body.
+
 Response: 201 with a `PublicClubPost` body (shape above).
 
 Status: 201 | 400 (missing/empty title or file, title over 140 characters, unsupported or
@@ -352,5 +371,5 @@ Before any of these are implemented, the proposer should:
 | 403 | Permission denied |
 | 404 | Resource not found |
 | 409 | Conflict (duplicate request) |
-| 413 | Any multipart upload (e.g. `POST /api/clubs/{clubSlugOrId}/posts` above) exceeded `spring.servlet.multipart.max-file-size` (6MB per part) or `max-request-size` (8MB total). A request whose raw body exceeds `server.tomcat.max-swallow-size` (10MB) may instead have its connection aborted before this response body can be delivered. |
+| 413 | Any multipart upload (e.g. `POST /api/clubs/{clubSlugOrId}/posts` above) exceeded `spring.servlet.multipart.max-file-size` (6MB per part) or `max-request-size` (8MB total). Body is `application/problem+json` with `title`/`status`/`detail`/`instance` (see the publish endpoint above for the exact shape and why `type` is never present). A request whose raw body exceeds `server.tomcat.max-swallow-size` (10MB) may instead have its connection aborted before this response body can be delivered. |
 | 500 | Internal server error |

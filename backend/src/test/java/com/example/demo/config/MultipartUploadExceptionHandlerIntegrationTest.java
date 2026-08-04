@@ -2,6 +2,8 @@ package com.example.demo.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -104,8 +106,27 @@ class MultipartUploadExceptionHandlerIntegrationTest {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
         assertThat(response.statusCode()).isEqualTo(413);
-        assertThat(response.body()).contains("\"status\":413");
-        assertThat(response.body()).contains("too large");
+        // Content-Type is application/problem+json, not a bare "application/json": this is the
+        // RFC 9457 media type ProblemDetail's own message converter registers, and docs/API.md
+        // documents it explicitly rather than leaving it to guesswork.
+        assertThat(response.headers().firstValue("Content-Type"))
+            .hasValueSatisfying(contentType -> assertThat(contentType).startsWith("application/problem+json"));
+
+        // Asserts the exact, stable fields docs/API.md documents -- not a substring match, so a
+        // field this test doesn't know about being added or removed is caught precisely, and a
+        // future change to the handler's own message is caught here before it silently drifts
+        // out of sync with the docs.
+        JsonNode body = new ObjectMapper().readTree(response.body());
+        assertThat(body.get("status").asInt()).isEqualTo(413);
+        assertThat(body.get("title").asText()).isEqualTo("Content Too Large");
+        assertThat(body.get("detail").asText())
+            .isEqualTo("The uploaded file is too large. Please choose a smaller file and try again.");
+        assertThat(body.get("instance").asText()).isEqualTo("/internal-test/multipart-probe");
+        // ProblemDetail's "type" defaults to unset (RFC 9457 then treats it as "about:blank"),
+        // and MultipartUploadExceptionHandler never sets one -- so, unlike the other four
+        // fields above, it is never actually present in the response body. Documenting it as
+        // present in docs/API.md would overpromise a field this handler does not emit.
+        assertThat(body.has("type")).isFalse();
     }
 
     // Companion to the oversized case above: proves the probe/multipart pipeline itself works
