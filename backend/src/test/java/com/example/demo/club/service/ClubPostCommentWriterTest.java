@@ -3,6 +3,7 @@ package com.example.demo.club.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -68,7 +69,7 @@ class ClubPostCommentWriterTest {
         when(clubPostMapper.countCommentsByPostId(1L)).thenReturn(49);
         PublicClubPostComment readBack = new PublicClubPostComment();
         readBack.setBody("Nice!");
-        when(clubPostMapper.findPublicCommentByIdAndPostId(99L, 1L)).thenReturn(readBack);
+        when(clubPostMapper.findPublicCommentByIdAndPostId(99L, 1L, 5L, false)).thenReturn(readBack);
 
         clubPostCommentWriter.lockCountAndInsert(10L, 1L, 5L, "Nice!");
 
@@ -86,7 +87,7 @@ class ClubPostCommentWriterTest {
         PublicClubPostComment readBack = new PublicClubPostComment();
         readBack.setId(99L);
         readBack.setAuthorDisplayName("Ada Lovelace");
-        when(clubPostMapper.findPublicCommentByIdAndPostId(99L, 1L)).thenReturn(readBack);
+        when(clubPostMapper.findPublicCommentByIdAndPostId(99L, 1L, 5L, false)).thenReturn(readBack);
 
         PublicClubPostComment result = clubPostCommentWriter.lockCountAndInsert(10L, 1L, 5L, "Nice!");
 
@@ -97,7 +98,7 @@ class ClubPostCommentWriterTest {
     void lockCountAndInsertThrowsWhenTheReadBackFindsNoRow() {
         when(clubPostMapper.lockPostIdForUpdate(1L, 10L)).thenReturn(1L);
         when(clubPostMapper.countCommentsByPostId(1L)).thenReturn(0);
-        when(clubPostMapper.findPublicCommentByIdAndPostId(99L, 1L)).thenReturn(null);
+        when(clubPostMapper.findPublicCommentByIdAndPostId(99L, 1L, 5L, false)).thenReturn(null);
 
         assertThatThrownBy(() -> clubPostCommentWriter.lockCountAndInsert(10L, 1L, 5L, "Nice!"))
             .isInstanceOf(IllegalStateException.class);
@@ -109,7 +110,8 @@ class ClubPostCommentWriterTest {
     void lockCountAndInsertLocksBeforeCountingBeforeInserting() {
         when(clubPostMapper.lockPostIdForUpdate(1L, 10L)).thenReturn(1L);
         when(clubPostMapper.countCommentsByPostId(1L)).thenReturn(0);
-        when(clubPostMapper.findPublicCommentByIdAndPostId(any(), any())).thenReturn(new PublicClubPostComment());
+        when(clubPostMapper.findPublicCommentByIdAndPostId(any(), any(), any(), anyBoolean()))
+            .thenReturn(new PublicClubPostComment());
 
         clubPostCommentWriter.lockCountAndInsert(10L, 1L, 5L, "Nice!");
 

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -180,31 +181,34 @@ class ClubPostServiceTest {
 
     @Test
     void findPublicFeedPassesTheClampedOffsetAndLimitToTheMapper() {
-        when(clubPostMapper.findPublicFeedByClubId(eq(1L), anyInt(), anyInt())).thenReturn(List.of());
+        when(clubPostMapper.findPublicFeedByClubId(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
+            .thenReturn(List.of());
         when(clubPostMapper.countFeedByClubId(1L)).thenReturn(0);
 
-        clubPostService.findPublicFeed(1L, 2, 10);
+        clubPostService.findPublicFeed(1L, 2, 10, 7L, false);
 
-        verify(clubPostMapper).findPublicFeedByClubId(1L, 20, 10);
+        verify(clubPostMapper).findPublicFeedByClubId(1L, 20, 10, 7L, false);
     }
 
     @Test
     void findPublicFeedEchoesTheClampedSizeNotTheRequestedOne() {
-        when(clubPostMapper.findPublicFeedByClubId(eq(1L), anyInt(), anyInt())).thenReturn(List.of());
+        when(clubPostMapper.findPublicFeedByClubId(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
+            .thenReturn(List.of());
         when(clubPostMapper.countFeedByClubId(1L)).thenReturn(0);
 
-        ClubPostService.PostFeedPage feedPage = clubPostService.findPublicFeed(1L, 0, 1000);
+        ClubPostService.PostFeedPage feedPage = clubPostService.findPublicFeed(1L, 0, 1000, null, false);
 
         assertThat(feedPage.size()).isEqualTo(100);
-        verify(clubPostMapper).findPublicFeedByClubId(1L, 0, 100);
+        verify(clubPostMapper).findPublicFeedByClubId(1L, 0, 100, null, false);
     }
 
     @Test
     void findPublicFeedEchoesTheClampedPageForANegativeRequestedPage() {
-        when(clubPostMapper.findPublicFeedByClubId(eq(1L), anyInt(), anyInt())).thenReturn(List.of());
+        when(clubPostMapper.findPublicFeedByClubId(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
+            .thenReturn(List.of());
         when(clubPostMapper.countFeedByClubId(1L)).thenReturn(0);
 
-        ClubPostService.PostFeedPage feedPage = clubPostService.findPublicFeed(1L, -5, 10);
+        ClubPostService.PostFeedPage feedPage = clubPostService.findPublicFeed(1L, -5, 10, null, false);
 
         assertThat(feedPage.page()).isEqualTo(0);
     }
@@ -212,15 +216,30 @@ class ClubPostServiceTest {
     @Test
     void findPublicFeedReportsTotalFromTheSharedCountQuery() {
         PublicClubPost item = new PublicClubPost();
-        when(clubPostMapper.findPublicFeedByClubId(eq(1L), anyInt(), anyInt())).thenReturn(List.of(item));
+        when(clubPostMapper.findPublicFeedByClubId(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
+            .thenReturn(List.of(item));
         when(clubPostMapper.countFeedByClubId(1L)).thenReturn(57);
 
-        ClubPostService.PostFeedPage feedPage = clubPostService.findPublicFeed(1L, 0, 12);
+        ClubPostService.PostFeedPage feedPage = clubPostService.findPublicFeed(1L, 0, 12, null, false);
 
         assertThat(feedPage.items()).containsExactly(item);
         assertThat(feedPage.total()).isEqualTo(57);
         assertThat(feedPage.page()).isEqualTo(0);
         assertThat(feedPage.size()).isEqualTo(12);
+    }
+
+    // The new capability-plumbing contract: whatever the caller passes as the viewer's identity
+    // and moderation power must reach the mapper unchanged, since PublicClubPost#viewerCanDelete
+    // is computed entirely by the mapper's own SQL (see ClubPostMapper.xml's PublicPostColumnList).
+    @Test
+    void findPublicFeedPassesTheViewerIdentityAndModerationPowerToTheMapperUnchanged() {
+        when(clubPostMapper.findPublicFeedByClubId(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
+            .thenReturn(List.of());
+        when(clubPostMapper.countFeedByClubId(1L)).thenReturn(0);
+
+        clubPostService.findPublicFeed(1L, 0, 10, 42L, true);
+
+        verify(clubPostMapper).findPublicFeedByClubId(1L, 0, 10, 42L, true);
     }
 
     // ---- pin ----

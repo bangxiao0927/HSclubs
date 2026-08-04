@@ -9,10 +9,25 @@ vi.mock('../services/clubService', () => ({
 vi.mock('../services/clubPostService', () => ({
   fetchClubMediaFeed: vi.fn(),
   fetchClubPostComments: vi.fn(),
+  publishClubPost: vi.fn(),
+  deleteClubPost: vi.fn(),
+  pinClubPost: vi.fn(),
+  unpinClubPost: vi.fn(),
+  createClubPostComment: vi.fn(),
+  deleteClubPostComment: vi.fn(),
 }))
 
 import { fetchClubById } from '../services/clubService'
-import { fetchClubMediaFeed, fetchClubPostComments } from '../services/clubPostService'
+import {
+  fetchClubMediaFeed,
+  fetchClubPostComments,
+  publishClubPost,
+  deleteClubPost,
+  pinClubPost,
+  unpinClubPost,
+  createClubPostComment,
+  deleteClubPostComment,
+} from '../services/clubPostService'
 import type { Club } from '../types/club'
 import type { ClubPost, ClubPostComment, ClubPostFeedPage } from '../types/clubPost'
 import ClubMediaView from './ClubMediaView.vue'
@@ -20,6 +35,12 @@ import ClubMediaView from './ClubMediaView.vue'
 const fetchClubByIdMock = vi.mocked(fetchClubById)
 const fetchClubMediaFeedMock = vi.mocked(fetchClubMediaFeed)
 const fetchClubPostCommentsMock = vi.mocked(fetchClubPostComments)
+const publishClubPostMock = vi.mocked(publishClubPost)
+const deleteClubPostMock = vi.mocked(deleteClubPost)
+const pinClubPostMock = vi.mocked(pinClubPost)
+const unpinClubPostMock = vi.mocked(unpinClubPost)
+const createClubPostCommentMock = vi.mocked(createClubPostComment)
+const deleteClubPostCommentMock = vi.mocked(deleteClubPostComment)
 
 const buildClub = (overrides: Partial<Club> = {}): Club => ({
   id: 1,
@@ -35,6 +56,7 @@ const buildClub = (overrides: Partial<Club> = {}): Club => ({
   imageUrl: null,
   memberCount: 42,
   achievements: [],
+  viewerIsMember: false,
   canManage: false,
   ...overrides,
 })
@@ -49,6 +71,7 @@ const buildPost = (overrides: Partial<ClubPost> = {}): ClubPost => ({
   authorDisplayName: 'Ada Lovelace',
   authorAvatarUrl: '/uploads/avatar-cache/ada.jpg',
   commentCount: 0,
+  viewerCanDelete: false,
   ...overrides,
 })
 
@@ -67,6 +90,7 @@ const buildComment = (overrides: Partial<ClubPostComment> = {}): ClubPostComment
   authorAvatarUrl: null,
   body: 'Great photo!',
   createdAt: new Date().toISOString(),
+  viewerCanDelete: false,
   ...overrides,
 })
 
@@ -86,10 +110,21 @@ beforeEach(() => {
   fetchClubByIdMock.mockReset()
   fetchClubMediaFeedMock.mockReset()
   fetchClubPostCommentsMock.mockReset()
+  publishClubPostMock.mockReset()
+  deleteClubPostMock.mockReset()
+  pinClubPostMock.mockReset()
+  unpinClubPostMock.mockReset()
+  createClubPostCommentMock.mockReset()
+  deleteClubPostCommentMock.mockReset()
+  vi.stubGlobal('URL', Object.assign(URL, {
+    createObjectURL: vi.fn(() => 'blob:mock-preview'),
+    revokeObjectURL: vi.fn(),
+  }))
 })
 
 afterEach(() => {
   document.head.querySelectorAll('meta[name="robots"]').forEach((node) => node.remove())
+  vi.unstubAllGlobals()
 })
 
 describe('ClubMediaView loading, error and empty states', () => {
@@ -385,6 +420,418 @@ describe('ClubMediaView comments', () => {
 
     expect(toggle.attributes('aria-expanded')).toBe('true')
     expect(toggle.attributes('aria-controls')).toBe(regionId)
+  })
+})
+
+describe('ClubMediaView publish form', () => {
+  it('hides the publish form from a non-member', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: false }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-publish').exists()).toBe(false)
+  })
+
+  it('shows the publish form, a public-visibility notice, and the supported formats to a member', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    const publishSection = wrapper.find('.mv-publish')
+    expect(publishSection.exists()).toBe(true)
+    expect(publishSection.text()).toContain('visible to anyone')
+    expect(publishSection.text()).toContain('logged in')
+    expect(publishSection.text()).toContain('JPEG')
+    expect(publishSection.text()).toContain('PNG')
+    expect(publishSection.text()).toContain('WebP')
+    expect(publishSection.text()).toContain('GIF')
+    expect(publishSection.text()).toContain('HEIC')
+    expect(publishSection.text()).toContain('not supported')
+  })
+
+  it('counts down the title character limit as the member types', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-publish .mv-counter').text()).toBe('0/140')
+
+    await wrapper.find('.mv-publish-title-input').setValue('Meeting recap')
+
+    expect(wrapper.find('.mv-publish .mv-counter').text()).toBe('13/140')
+  })
+
+  it('shows a local preview of the selected photo via URL.createObjectURL and revokes it when a new file replaces it', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-publish-preview').exists()).toBe(false)
+
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    const firstFile = new File(['a'], 'first.jpg', { type: 'image/jpeg' })
+    Object.defineProperty(fileInput.element, 'files', { configurable: true, value: [firstFile] })
+    await fileInput.trigger('change')
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(firstFile)
+    expect(wrapper.find('.mv-publish-preview').attributes('src')).toBe('blob:mock-preview')
+
+    const secondFile = new File(['b'], 'second.jpg', { type: 'image/jpeg' })
+    Object.defineProperty(fileInput.element, 'files', { configurable: true, value: [secondFile] })
+    await fileInput.trigger('change')
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-preview')
+    expect(URL.createObjectURL).toHaveBeenCalledWith(secondFile)
+  })
+
+  it('revokes the preview URL on unmount', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [new File(['a'], 'first.jpg', { type: 'image/jpeg' })],
+    })
+    await fileInput.trigger('change')
+
+    wrapper.unmount()
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-preview')
+  })
+
+  it('submits the title and file via publishClubPost and prepends the created post without a manual reload', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Existing post' })], total: 1 }),
+    )
+    const created = buildPost({ id: 99, title: 'Meeting recap', viewerCanDelete: true })
+    publishClubPostMock.mockResolvedValue(created)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-publish-title-input').setValue('Meeting recap')
+    const file = new File(['a'], 'photo.jpg', { type: 'image/jpeg' })
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    Object.defineProperty(fileInput.element, 'files', { configurable: true, value: [file] })
+    await fileInput.trigger('change')
+
+    await wrapper.find('.mv-publish-form').trigger('submit')
+    await flushPromises()
+
+    expect(publishClubPostMock).toHaveBeenCalledWith('1', 'Meeting recap', file)
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(1)
+    const titles = wrapper.findAll('.mv-post-title').map((node) => node.text())
+    expect(titles).toEqual(['Meeting recap', 'Existing post'])
+  })
+
+  it('clears the form after a successful publish', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+    publishClubPostMock.mockResolvedValue(buildPost({ id: 99 }))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-publish-title-input').setValue('Meeting recap')
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [new File(['a'], 'photo.jpg', { type: 'image/jpeg' })],
+    })
+    await fileInput.trigger('change')
+
+    await wrapper.find('.mv-publish-form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find<HTMLInputElement>('.mv-publish-title-input').element.value).toBe('')
+    expect(wrapper.find('.mv-publish-preview').exists()).toBe(false)
+  })
+
+  it('shows a required-photo message and does not call publishClubPost when no file is selected', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-publish-title-input').setValue('Meeting recap')
+    await wrapper.find('.mv-publish-form').trigger('submit')
+    await flushPromises()
+
+    expect(publishClubPostMock).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('A photo is required')
+  })
+
+  it('surfaces the server error message verbatim, including the unsupported-format wording', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+    publishClubPostMock.mockRejectedValue(
+      new Error('Unsupported image type. Supported formats are JPEG, PNG, WebP, and GIF; HEIC is not supported.'),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-publish-title-input').setValue('Meeting recap')
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [new File(['a'], 'photo.heic', { type: 'image/heic' })],
+    })
+    await fileInput.trigger('change')
+    await wrapper.find('.mv-publish-form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(
+      'Unsupported image type. Supported formats are JPEG, PNG, WebP, and GIF; HEIC is not supported.',
+    )
+  })
+})
+
+describe('ClubMediaView comment form', () => {
+  it('hides the comment form from a non-member', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: false }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7 })], total: 1 }))
+    fetchClubPostCommentsMock.mockResolvedValue([])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.mv-comment-form').exists()).toBe(false)
+  })
+
+  it('shows a comment form with a 300 character counter to a member', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7 })], total: 1 }))
+    fetchClubPostCommentsMock.mockResolvedValue([])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    const form = wrapper.find('.mv-comment-form')
+    expect(form.exists()).toBe(true)
+    expect(form.find('.mv-counter').text()).toBe('0/300')
+
+    await form.find('.mv-comment-input').setValue('Nice photo!')
+
+    expect(form.find('.mv-counter').text()).toBe('11/300')
+  })
+
+  it('submits a comment, appends it to the list, and bumps the comment count without a manual reload', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7, commentCount: 0 })], total: 1 }))
+    fetchClubPostCommentsMock.mockResolvedValue([])
+    createClubPostCommentMock.mockResolvedValue(buildComment({ id: 5, body: 'Nice photo!' }))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.mv-comment-form .mv-comment-input').setValue('Nice photo!')
+    await wrapper.find('.mv-comment-form').trigger('submit')
+    await flushPromises()
+
+    expect(createClubPostCommentMock).toHaveBeenCalledWith('1', 7, 'Nice photo!')
+    expect(wrapper.find('.mv-comment-body').text()).toBe('Nice photo!')
+    expect(wrapper.text()).toContain('Hide comments')
+    expect(wrapper.find('.mv-comment-form .mv-comment-input').element).toHaveProperty('value', '')
+  })
+
+  it('surfaces the comment cap error message verbatim', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7 })], total: 1 }))
+    fetchClubPostCommentsMock.mockResolvedValue([])
+    createClubPostCommentMock.mockRejectedValue(new Error('This post already has 50 comments'))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.mv-comment-form .mv-comment-input').setValue('One more!')
+    await wrapper.find('.mv-comment-form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('This post already has 50 comments')
+  })
+})
+
+describe('ClubMediaView post and comment deletion', () => {
+  it('shows a delete button on a post only when the post grants viewerCanDelete', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, viewerCanDelete: true }),
+          buildPost({ id: 2, viewerCanDelete: false }),
+        ],
+        total: 2,
+      }),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    const cards = wrapper.findAll('li.mv-post-card')
+    expect(cards[0]!.find('.mv-post-delete').exists()).toBe(true)
+    expect(cards[1]!.find('.mv-post-delete').exists()).toBe(false)
+  })
+
+  it('deletes a post and removes it from the feed without a manual reload', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 1, viewerCanDelete: true })], total: 1 }),
+    )
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    expect(deleteClubPostMock).toHaveBeenCalledWith('1', 1)
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('li.mv-post-card').exists()).toBe(false)
+    expect(wrapper.text()).toContain('No posts yet.')
+  })
+
+  it('surfaces a 403 delete error message verbatim and keeps the post visible', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 1, viewerCanDelete: true })], total: 1 }),
+    )
+    deleteClubPostMock.mockRejectedValue(new Error('You do not have access to delete this post'))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('You do not have access to delete this post')
+    expect(wrapper.find('li.mv-post-card').exists()).toBe(true)
+  })
+
+  it('shows a delete button on a comment only when the comment grants viewerCanDelete', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7 })], total: 1 }))
+    fetchClubPostCommentsMock.mockResolvedValue([
+      buildComment({ id: 1, viewerCanDelete: true }),
+      buildComment({ id: 2, viewerCanDelete: false }),
+    ])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    const comments = wrapper.findAll('li.mv-comment')
+    expect(comments[0]!.find('.mv-comment-delete').exists()).toBe(true)
+    expect(comments[1]!.find('.mv-comment-delete').exists()).toBe(false)
+  })
+
+  it('deletes a comment and decrements the comment count without a manual reload', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 7, commentCount: 1 })], total: 1 }))
+    fetchClubPostCommentsMock.mockResolvedValue([buildComment({ id: 1, viewerCanDelete: true })])
+    deleteClubPostCommentMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.mv-comment-delete').trigger('click')
+    await flushPromises()
+
+    expect(deleteClubPostCommentMock).toHaveBeenCalledWith('1', 7, 1)
+    expect(wrapper.find('.mv-comment').exists()).toBe(false)
+    expect(wrapper.text()).toContain('No comments yet.')
+  })
+})
+
+describe('ClubMediaView pin and unpin', () => {
+  it('shows pin controls only when the viewer canManage the club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: false }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [buildPost({ id: 1 })], total: 1 }))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-pin-toggle').exists()).toBe(false)
+  })
+
+  it('pins an unpinned post and relabels the control to Unpin', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 1, pinnedAt: null })], total: 1 }),
+    )
+    pinClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-pin-toggle').text()).toBe('Pin')
+    await wrapper.find('.mv-pin-toggle').trigger('click')
+    await flushPromises()
+
+    expect(pinClubPostMock).toHaveBeenCalledWith('1', 1)
+    expect(wrapper.find('.mv-pin-toggle').text()).toBe('Unpin')
+    expect(wrapper.find('.mv-badge-pinned').exists()).toBe(true)
+  })
+
+  it('unpins a pinned post and relabels the control to Pin', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 1, pinnedAt: '2024-06-01T00:00:00Z' })], total: 1 }),
+    )
+    unpinClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-pin-toggle').text()).toBe('Unpin')
+    await wrapper.find('.mv-pin-toggle').trigger('click')
+    await flushPromises()
+
+    expect(unpinClubPostMock).toHaveBeenCalledWith('1', 1)
+    expect(wrapper.find('.mv-pin-toggle').text()).toBe('Pin')
+    expect(wrapper.find('.mv-badge-pinned').exists()).toBe(false)
+  })
+
+  it('surfaces the pin cap 409 message verbatim', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 1, pinnedAt: null })], total: 1 }),
+    )
+    pinClubPostMock.mockRejectedValue(new Error('At most 3 posts can be pinned. Unpin one first.'))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-pin-toggle').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('At most 3 posts can be pinned. Unpin one first.')
   })
 })
 

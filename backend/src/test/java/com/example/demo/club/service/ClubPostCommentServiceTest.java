@@ -84,10 +84,22 @@ class ClubPostCommentServiceTest {
     @Test
     void findPublicCommentsDelegatesToTheMapper() {
         PublicClubPostComment comment = new PublicClubPostComment();
-        when(clubPostMapper.findPublicCommentsByPostId(10L)).thenReturn(List.of(comment));
+        when(clubPostMapper.findPublicCommentsByPostId(10L, 42L, true)).thenReturn(List.of(comment));
 
-        List<PublicClubPostComment> comments = clubPostCommentService.findPublicComments(10L);
+        List<PublicClubPostComment> comments = clubPostCommentService.findPublicComments(10L, 42L, true);
 
         assertThat(comments).containsExactly(comment);
+    }
+
+    // Mirrors ClubPostServiceTest's own capability-plumbing test: the viewer's identity and
+    // moderation power must reach the mapper unchanged, since PublicClubPostComment#viewerCanDelete
+    // is computed entirely by the mapper's own SQL.
+    @Test
+    void findPublicCommentsPassesTheViewerIdentityAndModerationPowerToTheMapperUnchanged() {
+        when(clubPostMapper.findPublicCommentsByPostId(10L, null, false)).thenReturn(List.of());
+
+        clubPostCommentService.findPublicComments(10L, null, false);
+
+        verify(clubPostMapper).findPublicCommentsByPostId(10L, null, false);
     }
 }

@@ -46,7 +46,12 @@ class ClubPostWriter {
         post.setImageUrl(imageUrl);
         clubPostMapper.insert(post);
 
-        PublicClubPost created = clubPostMapper.findPublicPostByIdAndClubId(post.getId(), clubId);
+        // The just-created post's own author is always the viewer here, so viewerCanDelete
+        // reads back true through the exact same authorship rule the feed applies to every
+        // other viewer (see ClubPostMapper.xml's PublicPostColumnList) -- viewerCanModerateAnyPost
+        // does not matter in this call because isAuthor already makes the CASE WHEN true.
+        PublicClubPost created = clubPostMapper.findPublicPostByIdAndClubId(
+            post.getId(), clubId, authorOauthUserId, false);
         if (created == null) {
             throw new IllegalStateException(
                 "Post " + post.getId() + " was not found immediately after being inserted");

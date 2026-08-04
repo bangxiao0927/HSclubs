@@ -26,6 +26,10 @@ public class PublicClubPostComment {
     private String authorDisplayName;
     private String authorAvatarUrl;
 
+    // Same computed capability as PublicClubPost#isViewerCanDelete: never the viewer's or the
+    // author's oauth_user_id, just the boolean outcome of comparing them server-side.
+    private boolean viewerCanDelete;
+
     public Long getId() {
         return id;
     }
@@ -72,5 +76,13 @@ public class PublicClubPostComment {
 
     public void setAuthorAvatarUrl(String authorAvatarUrl) {
         this.authorAvatarUrl = authorAvatarUrl;
+    }
+
+    public boolean isViewerCanDelete() {
+        return viewerCanDelete;
+    }
+
+    public void setViewerCanDelete(boolean viewerCanDelete) {
+        this.viewerCanDelete = viewerCanDelete;
     }
 }

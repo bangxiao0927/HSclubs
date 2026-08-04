@@ -60,12 +60,14 @@ public class ClubPostService {
         }
     }
 
-    public PostFeedPage findPublicFeed(Long clubId, int page, int size) {
+    public PostFeedPage findPublicFeed(Long clubId, int page, int size, Long viewerOauthUserId,
+                                        boolean viewerCanModerateAnyPost) {
         int limit = PaginationClamps.clampPageSize(size);
         int offset = PaginationClamps.clampOffset(page, limit);
         int clampedPage = PaginationClamps.clampPage(page);
 
-        List<PublicClubPost> items = clubPostMapper.findPublicFeedByClubId(clubId, offset, limit);
+        List<PublicClubPost> items = clubPostMapper.findPublicFeedByClubId(
+            clubId, offset, limit, viewerOauthUserId, viewerCanModerateAnyPost);
         int total = clubPostMapper.countFeedByClubId(clubId);
 
         return new PostFeedPage(items, clampedPage, limit, total);

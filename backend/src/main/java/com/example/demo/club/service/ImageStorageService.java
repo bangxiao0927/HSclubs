@@ -51,6 +51,15 @@ public class ImageStorageService {
     private static final int MAX_DIMENSION = 1600;
     private static final float JPEG_QUALITY = 0.82f;
 
+    // Named once so every "we could not sniff a supported format" site (the type is genuinely
+    // unsupported, the stream has no readers at all, or the bytes are truncated before a
+    // reader is even chosen) shows the same actionable copy: which formats are accepted, and
+    // why the iPhone default (HEIC) so often trips this -- iOS Safari's own file picker usually
+    // converts to JPEG for web uploads, but a raw .heic pulled from the Files app is not decodable
+    // here (see #82).
+    private static final String UNSUPPORTED_IMAGE_TYPE_MESSAGE =
+        "Unsupported image type. Supported formats are JPEG, PNG, WebP, and GIF; HEIC is not supported.";
+
     // A UUID (as produced by UUID.randomUUID()) followed by an extension store() could have
     // written: ".jpg"/".gif" under club-posts/, since that is all store() has ever produced;
     // the wider extension set for the flat legacy pattern below matches what the pre-
@@ -167,11 +176,11 @@ public class ImageStorageService {
     private ImageFormat sniffFormat(byte[] bytes) {
         try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
             if (iis == null) {
-                throw new IllegalArgumentException("Unsupported image type");
+                throw new IllegalArgumentException(UNSUPPORTED_IMAGE_TYPE_MESSAGE);
             }
             Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
             if (!readers.hasNext()) {
-                throw new IllegalArgumentException("Unsupported image type");
+                throw new IllegalArgumentException(UNSUPPORTED_IMAGE_TYPE_MESSAGE);
             }
             ImageReader reader = readers.next();
             try {
@@ -193,7 +202,7 @@ public class ImageStorageService {
         try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
             if (!readers.hasNext()) {
-                throw new IllegalArgumentException("Unsupported image type");
+                throw new IllegalArgumentException(UNSUPPORTED_IMAGE_TYPE_MESSAGE);
             }
             ImageReader reader = readers.next();
             try {
@@ -294,7 +303,7 @@ public class ImageStorageService {
                     return GIF;
                 }
             }
-            throw new IllegalArgumentException("Unsupported image type");
+            throw new IllegalArgumentException(UNSUPPORTED_IMAGE_TYPE_MESSAGE);
         }
     }
 }

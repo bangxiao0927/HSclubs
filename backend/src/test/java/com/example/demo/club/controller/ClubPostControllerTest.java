@@ -3,6 +3,7 @@ package com.example.demo.club.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -246,7 +247,7 @@ class ClubPostControllerTest {
         club.setId(1L);
         club.setStatus("active");
         when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
-        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
             .thenReturn(new ClubPostService.PostFeedPage(List.of(), 0, 12, 0));
 
         mockMvc.perform(get("/api/clubs/1/posts"))
@@ -266,12 +267,51 @@ class ClubPostControllerTest {
         PublicClubPost post = new PublicClubPost();
         post.setId(9L);
         post.setCommentCount(3);
-        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
             .thenReturn(new ClubPostService.PostFeedPage(List.of(post), 0, 12, 1));
 
         mockMvc.perform(get("/api/clubs/1/posts"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].commentCount").value(3));
+    }
+
+    // The capability field the frontend uses to show a delete control to a post's own author
+    // without ever seeing an oauth_user_id: the controller must forward the club's own
+    // canManage/platform-owner outcome, not recompute it differently from deletePost's own check.
+    @Test
+    void feedItemsCarryViewerCanDeleteFromTheServiceUnchanged() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setStatus("active");
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        PublicClubPost post = new PublicClubPost();
+        post.setId(9L);
+        post.setViewerCanDelete(true);
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
+            .thenReturn(new ClubPostService.PostFeedPage(List.of(post), 0, 12, 1));
+
+        mockMvc.perform(get("/api/clubs/1/posts"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(true));
+    }
+
+    // A club's own president must give the controller a viewerCanModerateAnyPost of true, so
+    // the feed's viewerCanDelete can reflect the president's own moderation power over posts
+    // they did not author -- the exact ClubContentModerationPolicy matrix deletePost enforces.
+    @Test
+    void feedComputesViewerCanModerateAnyPostFromTheClubsCanManage() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setStatus("active");
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), eq(true)))
+            .thenReturn(new ClubPostService.PostFeedPage(List.of(), 0, 12, 0));
+
+        mockMvc.perform(get("/api/clubs/1/posts").principal(oauthToken(PRESIDENT_EMAIL)))
+            .andExpect(status().isOk());
+
+        verify(clubPostService).findPublicFeed(eq(1L), anyInt(), anyInt(), any(), eq(true));
     }
 
     @Test
@@ -302,7 +342,7 @@ class ClubPostControllerTest {
         club.setStatus("pending");
         club.setViewerIsMember(true);
         when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
-        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
             .thenReturn(new ClubPostService.PostFeedPage(List.of(), 0, 12, 0));
 
         mockMvc.perform(get("/api/clubs/1/posts").principal(oauthToken(MEMBER_EMAIL)))

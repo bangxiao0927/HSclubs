@@ -104,7 +104,10 @@ public class ClubPostController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
 
-        return clubPostService.findPublicFeed(club.getId(), page, size);
+        Long viewerOauthUserId = viewerEmail != null ? oAuthUserMapper.findIdByEmail(viewerEmail) : null;
+        boolean viewerCanModerateAnyPost = Boolean.TRUE.equals(club.getCanManage())
+            || authenticatedUserResolver.isPlatformOwner(authentication);
+        return clubPostService.findPublicFeed(club.getId(), page, size, viewerOauthUserId, viewerCanModerateAnyPost);
     }
 
     // ---- Pinning (president or platform owner only) ----

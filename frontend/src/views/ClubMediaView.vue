@@ -2,7 +2,16 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchClubById } from '../services/clubService'
-import { fetchClubMediaFeed, fetchClubPostComments } from '../services/clubPostService'
+import {
+  fetchClubMediaFeed,
+  fetchClubPostComments,
+  publishClubPost,
+  deleteClubPost,
+  pinClubPost,
+  unpinClubPost,
+  createClubPostComment,
+  deleteClubPostComment,
+} from '../services/clubPostService'
 import type { Club } from '../types/club'
 import type { ClubPost, ClubPostComment } from '../types/clubPost'
 import { clubPostImage } from '../utils/clubImages'
@@ -10,11 +19,23 @@ import { userAvatar } from '../utils/avatarImages'
 import BackButton from '../components/BackButton.vue'
 
 const DEFAULT_PAGE_SIZE = 12
+const TITLE_MAX_LENGTH = 140
+const COMMENT_MAX_LENGTH = 300
+const SUPPORTED_FORMATS_NOTICE =
+  'Supported formats: JPEG, PNG, WebP, and GIF. HEIC (the default photo format on many iPhones) is not supported.'
+const PUBLIC_VISIBILITY_NOTICE =
+  'This photo will be visible to anyone who visits this page, including people who are not logged in.'
 
 interface CommentsEntry {
   loading: boolean
   error: string
   comments: ClubPostComment[]
+}
+
+interface CommentFormState {
+  body: string
+  submitting: boolean
+  error: string
 }
 
 const route = useRoute()
@@ -143,6 +164,203 @@ const toggleComments = (postId: number) => {
   }
 }
 
+// ---- Publishing (member-only) ----
+
+const publishTitle = ref('')
+const publishFile = ref<File | null>(null)
+const publishPreviewUrl = ref('')
+const publishing = ref(false)
+const publishError = ref('')
+const publishFileInput = ref<HTMLInputElement | null>(null)
+
+const revokePublishPreview = () => {
+  if (publishPreviewUrl.value) {
+    URL.revokeObjectURL(publishPreviewUrl.value)
+    publishPreviewUrl.value = ''
+  }
+}
+
+const handlePublishFileChange = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  revokePublishPreview()
+  publishFile.value = file
+  if (file) {
+    publishPreviewUrl.value = URL.createObjectURL(file)
+  }
+}
+
+const resetPublishForm = () => {
+  publishTitle.value = ''
+  publishFile.value = null
+  revokePublishPreview()
+  if (publishFileInput.value) {
+    publishFileInput.value.value = ''
+  }
+}
+
+// Raw fetch with FormData and no explicit Content-Type (see publishClubPost's own Javadoc-style
+// comment): the created post is prepended locally so the feed updates without a page reload or
+// a second round trip back to the server.
+const handlePublish = async () => {
+  if (!club.value || publishing.value) {
+    return
+  }
+  if (!publishFile.value) {
+    publishError.value = 'A photo is required'
+    return
+  }
+
+  publishing.value = true
+  publishError.value = ''
+  try {
+    const created = await publishClubPost(routeClubId.value, publishTitle.value, publishFile.value)
+    posts.value = [created, ...posts.value]
+    total.value += 1
+    resetPublishForm()
+  } catch (err) {
+    publishError.value = err instanceof Error ? err.message : 'Failed to publish post'
+  } finally {
+    publishing.value = false
+  }
+}
+
+// ---- Commenting (member-only) ----
+
+const commentForms = ref<Record<number, CommentFormState>>({})
+const emptyCommentFormState: CommentFormState = { body: '', submitting: false, error: '' }
+
+const commentFormState = (postId: number) => commentForms.value[postId] ?? emptyCommentFormState
+
+const updateCommentBody = (postId: number, body: string) => {
+  commentForms.value = {
+    ...commentForms.value,
+    [postId]: { ...commentFormState(postId), body },
+  }
+}
+
+const submitComment = async (postId: number) => {
+  const state = commentFormState(postId)
+  if (state.submitting) {
+    return
+  }
+  commentForms.value = { ...commentForms.value, [postId]: { ...state, submitting: true, error: '' } }
+  try {
+    const created = await createClubPostComment(routeClubId.value, postId, state.body)
+    const existing = commentsState(postId)
+    commentsByPost.value = {
+      ...commentsByPost.value,
+      [postId]: { loading: false, error: '', comments: [...existing.comments, created] },
+    }
+    posts.value = posts.value.map((post) =>
+      post.id === postId ? { ...post, commentCount: post.commentCount + 1 } : post,
+    )
+    commentForms.value = { ...commentForms.value, [postId]: { ...emptyCommentFormState } }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to post comment'
+    commentForms.value = {
+      ...commentForms.value,
+      [postId]: { ...state, submitting: false, error: message },
+    }
+  }
+}
+
+// ---- Post deletion, pin/unpin, and comment deletion ----
+
+const postActionError = ref<Record<number, string>>({})
+const deletingPostIds = ref<Set<number>>(new Set())
+const pinningPostIds = ref<Set<number>>(new Set())
+const commentActionError = ref<Record<number, string>>({})
+const deletingCommentIds = ref<Set<number>>(new Set())
+
+const isDeletingPost = (postId: number) => deletingPostIds.value.has(postId)
+const isPinningPost = (postId: number) => pinningPostIds.value.has(postId)
+const isDeletingComment = (commentId: number) => deletingCommentIds.value.has(commentId)
+
+const handleDeletePost = async (postId: number) => {
+  if (isDeletingPost(postId)) {
+    return
+  }
+  const next = new Set(deletingPostIds.value)
+  next.add(postId)
+  deletingPostIds.value = next
+  postActionError.value = { ...postActionError.value, [postId]: '' }
+  try {
+    await deleteClubPost(routeClubId.value, postId)
+    posts.value = posts.value.filter((post) => post.id !== postId)
+    total.value = Math.max(0, total.value - 1)
+  } catch (err) {
+    postActionError.value = {
+      ...postActionError.value,
+      [postId]: err instanceof Error ? err.message : 'Failed to delete post',
+    }
+  } finally {
+    const cleared = new Set(deletingPostIds.value)
+    cleared.delete(postId)
+    deletingPostIds.value = cleared
+  }
+}
+
+const handleTogglePin = async (post: ClubPost) => {
+  if (isPinningPost(post.id)) {
+    return
+  }
+  const next = new Set(pinningPostIds.value)
+  next.add(post.id)
+  pinningPostIds.value = next
+  postActionError.value = { ...postActionError.value, [post.id]: '' }
+  try {
+    if (post.pinnedAt) {
+      await unpinClubPost(routeClubId.value, post.id)
+      posts.value = posts.value.map((p) => (p.id === post.id ? { ...p, pinnedAt: null } : p))
+    } else {
+      await pinClubPost(routeClubId.value, post.id)
+      posts.value = posts.value.map((p) =>
+        p.id === post.id ? { ...p, pinnedAt: new Date().toISOString() } : p,
+      )
+    }
+  } catch (err) {
+    postActionError.value = {
+      ...postActionError.value,
+      [post.id]: err instanceof Error ? err.message : 'Failed to update pin',
+    }
+  } finally {
+    const cleared = new Set(pinningPostIds.value)
+    cleared.delete(post.id)
+    pinningPostIds.value = cleared
+  }
+}
+
+const handleDeleteComment = async (postId: number, commentId: number) => {
+  if (isDeletingComment(commentId)) {
+    return
+  }
+  const next = new Set(deletingCommentIds.value)
+  next.add(commentId)
+  deletingCommentIds.value = next
+  commentActionError.value = { ...commentActionError.value, [commentId]: '' }
+  try {
+    await deleteClubPostComment(routeClubId.value, postId, commentId)
+    const existing = commentsState(postId)
+    commentsByPost.value = {
+      ...commentsByPost.value,
+      [postId]: { ...existing, comments: existing.comments.filter((comment) => comment.id !== commentId) },
+    }
+    posts.value = posts.value.map((post) =>
+      post.id === postId ? { ...post, commentCount: Math.max(0, post.commentCount - 1) } : post,
+    )
+  } catch (err) {
+    commentActionError.value = {
+      ...commentActionError.value,
+      [commentId]: err instanceof Error ? err.message : 'Failed to delete comment',
+    }
+  } finally {
+    const cleared = new Set(deletingCommentIds.value)
+    cleared.delete(commentId)
+    deletingCommentIds.value = cleared
+  }
+}
+
 const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
 const relativeTimeDivisions: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ['year', 60 * 60 * 24 * 365],
@@ -191,6 +409,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  revokePublishPreview()
   const existing = document.head.querySelector('meta[name="robots"]')
   if (!existing) {
     return
@@ -229,6 +448,51 @@ watch(
         <p class="mv-subtitle">Activity photos and updates shared by club members.</p>
       </header>
 
+      <section v-if="club?.viewerIsMember" class="mv-publish">
+        <h2 class="mv-publish-title">Share an update</h2>
+        <p class="mv-publish-notice">{{ PUBLIC_VISIBILITY_NOTICE }}</p>
+        <form class="mv-publish-form" @submit.prevent="handlePublish">
+          <label class="mv-field">
+            <span>Title</span>
+            <input
+              v-model="publishTitle"
+              type="text"
+              class="mv-publish-title-input"
+              :maxlength="TITLE_MAX_LENGTH"
+              placeholder="What's happening?"
+              :disabled="publishing"
+            />
+          </label>
+          <p class="mv-counter">{{ publishTitle.length }}/{{ TITLE_MAX_LENGTH }}</p>
+
+          <label class="mv-field">
+            <span>Photo</span>
+            <input
+              ref="publishFileInput"
+              type="file"
+              class="mv-publish-file-input"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              :disabled="publishing"
+              @change="handlePublishFileChange"
+            />
+          </label>
+          <p class="mv-format-notice">{{ SUPPORTED_FORMATS_NOTICE }}</p>
+
+          <img
+            v-if="publishPreviewUrl"
+            :src="publishPreviewUrl"
+            alt="Selected photo preview"
+            class="mv-publish-preview"
+          />
+
+          <p v-if="publishError" class="mv-status mv-status--error">{{ publishError }}</p>
+
+          <button type="submit" class="mv-publish-submit" :disabled="publishing">
+            {{ publishing ? 'Publishing…' : 'Publish' }}
+          </button>
+        </form>
+      </section>
+
       <p v-if="posts.length === 0" class="mv-empty">No posts yet. Check back soon.</p>
 
       <ul v-else class="mv-post-list">
@@ -260,6 +524,32 @@ watch(
             >
               {{ isExpanded(post.id) ? 'Hide comments' : `Show comments (${post.commentCount})` }}
             </button>
+
+            <p v-if="postActionError[post.id]" class="mv-status mv-status--error">
+              {{ postActionError[post.id] }}
+            </p>
+
+            <div v-if="club?.canManage || post.viewerCanDelete" class="mv-post-actions">
+              <button
+                v-if="club?.canManage"
+                type="button"
+                class="mv-pin-toggle"
+                :disabled="isPinningPost(post.id)"
+                @click="handleTogglePin(post)"
+              >
+                {{ post.pinnedAt ? 'Unpin' : 'Pin' }}
+              </button>
+              <button
+                v-if="post.viewerCanDelete"
+                type="button"
+                class="mv-post-delete"
+                :disabled="isDeletingPost(post.id)"
+                @click="handleDeletePost(post.id)"
+              >
+                Delete post
+              </button>
+            </div>
+
             <div
               v-show="isExpanded(post.id)"
               :id="commentsRegionId(post.id)"
@@ -279,8 +569,41 @@ watch(
                   <p class="mv-comment-author">{{ comment.authorDisplayName }}</p>
                   <p class="mv-comment-body">{{ comment.body }}</p>
                   <p class="mv-comment-time">{{ formatRelativeTime(comment.createdAt) }}</p>
+                  <button
+                    v-if="comment.viewerCanDelete"
+                    type="button"
+                    class="mv-comment-delete"
+                    :disabled="isDeletingComment(comment.id)"
+                    @click="handleDeleteComment(post.id, comment.id)"
+                  >
+                    Delete
+                  </button>
+                  <p v-if="commentActionError[comment.id]" class="mv-status mv-status--error">
+                    {{ commentActionError[comment.id] }}
+                  </p>
                 </li>
               </ul>
+
+              <form v-if="club?.viewerIsMember" class="mv-comment-form" @submit.prevent="submitComment(post.id)">
+                <label class="mv-field">
+                  <span class="mv-visually-hidden">Add a comment</span>
+                  <textarea
+                    :value="commentFormState(post.id).body"
+                    class="mv-comment-input"
+                    :maxlength="COMMENT_MAX_LENGTH"
+                    placeholder="Add a comment"
+                    :disabled="commentFormState(post.id).submitting"
+                    @input="updateCommentBody(post.id, ($event.target as HTMLTextAreaElement).value)"
+                  ></textarea>
+                </label>
+                <p class="mv-counter">{{ commentFormState(post.id).body.length }}/{{ COMMENT_MAX_LENGTH }}</p>
+                <p v-if="commentFormState(post.id).error" class="mv-status mv-status--error">
+                  {{ commentFormState(post.id).error }}
+                </p>
+                <button type="submit" class="mv-comment-submit" :disabled="commentFormState(post.id).submitting">
+                  Post comment
+                </button>
+              </form>
             </div>
           </div>
         </li>
@@ -342,6 +665,121 @@ watch(
   padding: 1.5rem;
   text-align: center;
   color: var(--mv-text-faint);
+}
+
+.mv-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mv-publish {
+  border-radius: 24px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-card);
+  box-shadow: var(--mv-shadow-card);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mv-publish-title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.mv-publish-notice,
+.mv-format-notice {
+  margin: 0;
+  color: var(--mv-text-faint);
+  font-size: 0.9rem;
+}
+
+.mv-publish-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.mv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mv-field input,
+.mv-field textarea {
+  border-radius: 12px;
+  border: 1px solid var(--mv-border);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  background: var(--mv-surface-muted);
+  color: inherit;
+}
+
+.mv-counter {
+  margin: 0;
+  align-self: flex-end;
+  font-size: 0.8rem;
+  color: var(--mv-text-dim);
+}
+
+.mv-publish-preview {
+  max-width: 240px;
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+.mv-publish-submit,
+.mv-comment-submit {
+  align-self: flex-start;
+  border-radius: 999px;
+  border: 1px solid var(--mv-border-strong);
+  background: var(--mv-surface-accent);
+  color: var(--mv-gold);
+  font-weight: 600;
+  padding: 0.45rem 1.2rem;
+  cursor: pointer;
+}
+
+.mv-publish-submit:disabled,
+.mv-comment-submit:disabled,
+.mv-pin-toggle:disabled,
+.mv-post-delete:disabled,
+.mv-comment-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mv-post-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mv-pin-toggle,
+.mv-post-delete,
+.mv-comment-delete {
+  border-radius: 999px;
+  border: 1px solid var(--mv-border);
+  padding: 0.35rem 0.9rem;
+  background: var(--mv-surface-muted);
+  color: var(--mv-text-soft);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mv-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
 }
 
 .mv-post-list {

@@ -2,6 +2,7 @@ package com.example.demo.club.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -118,11 +119,32 @@ class ClubPostCommentControllerTest {
         when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(post);
         PublicClubPostComment comment = new PublicClubPostComment();
         comment.setBody("Nice!");
-        when(clubPostCommentService.findPublicComments(9L)).thenReturn(List.of(comment));
+        when(clubPostCommentService.findPublicComments(eq(9L), any(), anyBoolean())).thenReturn(List.of(comment));
 
         mockMvc.perform(get("/api/clubs/1/posts/9/comments"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].body").value("Nice!"));
+    }
+
+    // Mirrors ClubPostControllerTest's own capability-field test: the delete control for a
+    // comment's own author is driven by this same viewerCanDelete flag, not by comparing display
+    // names.
+    @Test
+    void listItemsCarryViewerCanDeleteFromTheServiceUnchanged() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setStatus("active");
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        ClubPost post = new ClubPost();
+        post.setId(9L);
+        when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(post);
+        PublicClubPostComment comment = new PublicClubPostComment();
+        comment.setViewerCanDelete(true);
+        when(clubPostCommentService.findPublicComments(eq(9L), any(), anyBoolean())).thenReturn(List.of(comment));
+
+        mockMvc.perform(get("/api/clubs/1/posts/9/comments"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].viewerCanDelete").value(true));
     }
 
     @Test
@@ -170,7 +192,7 @@ class ClubPostCommentControllerTest {
         ClubPost post = new ClubPost();
         post.setId(9L);
         when(clubPostService.findByIdAndClubId(9L, 1L)).thenReturn(post);
-        when(clubPostCommentService.findPublicComments(9L)).thenReturn(List.of());
+        when(clubPostCommentService.findPublicComments(eq(9L), any(), anyBoolean())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/clubs/1/posts/9/comments").principal(oauthToken(MEMBER_EMAIL)))
             .andExpect(status().isOk());
