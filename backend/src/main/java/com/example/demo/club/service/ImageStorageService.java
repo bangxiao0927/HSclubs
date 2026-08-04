@@ -53,8 +53,16 @@ public class ImageStorageService {
     private static final long MAX_OTHER_BYTES = 5L * 1024 * 1024;
     // Lowered from the original 50,000,000: this endpoint only ever needs a MAX_DIMENSION
     // derivative, and 30MP still comfortably covers ordinary phone/camera photos. This bound
-    // is defense in depth, not the primary memory guard -- see decodeFullImage below for that.
+    // is defense in depth, not the primary memory guard for JPEG/PNG -- see decodeFullImage
+    // below for that (reader-level subsampling, which both formats honour).
     private static final long MAX_PIXELS = 30_000_000L;
+    // WebP has no equivalent primary guard: TwelveMonkeys' WebPImageReader does not honour
+    // ImageReadParam.setSourceSubsampling at all (confirmed empirically -- it fully decodes
+    // the VP8 frame regardless of the requested subsampling factor, needing roughly 1GB of
+    // heap for a 30-megapixel image even when subsampling is requested). This is therefore
+    // WebP's *only* memory guard, and must be low enough on its own: a 3-megapixel WebP was
+    // confirmed safe to fully decode at a 96MB heap.
+    private static final long MAX_WEBP_PIXELS = 3_000_000L;
     private static final int MAX_DIMENSION = 1600;
     private static final float JPEG_QUALITY = 0.82f;
     private static final int EXIF_ORIENTATION_TAG = 0x0112;
@@ -62,9 +70,18 @@ public class ImageStorageService {
     // Bounds how many decodes (the memory- and CPU-heavy part of store()) run at once. Peak
     // memory per decode is now bounded (see decodeFullImage), but bounding concurrency too is
     // cheap insurance against many simultaneous uploads each holding their own bounded-but-
-    // nonzero decode buffers at the same time.
-    private static final int MAX_CONCURRENT_DECODES = Math.max(2, Runtime.getRuntime().availableProcessors());
+    // nonzero decode buffers at the same time. Sized from the configured heap rather than CPU
+    // count: CPU count does not track how much memory a small/constrained container actually
+    // has, which is exactly the axis this bound needs to track.
+    private static final long ASSUMED_PEAK_DECODE_BYTES = 250L * 1024 * 1024;
+    private static final int MAX_CONCURRENT_DECODES = computeMaxConcurrentDecodes();
     private final Semaphore decodeSemaphore = new Semaphore(MAX_CONCURRENT_DECODES);
+
+    private static int computeMaxConcurrentDecodes() {
+        long maxMemory = Runtime.getRuntime().maxMemory();
+        long byMemory = maxMemory / ASSUMED_PEAK_DECODE_BYTES;
+        return (int) Math.max(1, Math.min(byMemory, 16));
+    }
 
     // Named once so every "we could not sniff a supported format" site (the type is genuinely
     // unsupported, the stream has no readers at all, or the bytes are truncated before a
@@ -125,7 +142,9 @@ public class ImageStorageService {
         validateSize(format, bytes.length);
 
         Dimensions dimensions = readDimensions(bytes);
-        if ((long) dimensions.width() * dimensions.height() > MAX_PIXELS) {
+        long pixelCount = (long) dimensions.width() * dimensions.height();
+        long maxPixelsForFormat = format == ImageFormat.WEBP ? MAX_WEBP_PIXELS : MAX_PIXELS;
+        if (pixelCount > maxPixelsForFormat) {
             throw new IllegalArgumentException("Image exceeds the maximum allowed resolution");
         }
 
@@ -246,13 +265,18 @@ public class ImageStorageService {
         }
     }
 
-    // Progressive (and other non-baseline/non-extended-sequential) JPEG needs a full-size
-    // internal buffer in the default JDK decoder no matter what output size is requested --
-    // unlike baseline JPEG, PNG, and WebP, which all decode row-by-row and are safe to fully
-    // decode up to MAX_PIXELS (confirmed empirically; see the reproduction referenced from
-    // ImageStorageServiceOomHarness). So only that specific case is decoded at a reader-
-    // subsampled resolution (bounded, at the cost of some sharpness); everything else is fully
-    // decoded and resized with a quality-preserving multi-step downscale.
+    // Every accepted format's peak decode memory must be bounded regardless of its own
+    // internal encoding (this was previously assumed true for baseline JPEG and PNG "because
+    // they decode row-by-row", which turned out to be wrong: a large-enough raster still
+    // needs a full-size destination buffer even when the *source* decode is row-by-row --
+    // see the RGB PNG reproduction in ImageStorageServiceOomRegressionTest). So JPEG and PNG
+    // both always decode at a reader-subsampled resolution once the source exceeds
+    // MAX_DIMENSION, via ImageReadParam.setSourceSubsampling, which both readers honour.
+    //
+    // WebP is the exception: TwelveMonkeys' WebPImageReader does not honour
+    // setSourceSubsampling at all (confirmed empirically -- see MAX_WEBP_PIXELS above), so
+    // subsampling cannot bound its memory; MAX_WEBP_PIXELS alone does that instead, and a
+    // WebP that reaches this method is already small enough to decode at full resolution.
     //
     // The header/dimensions read earlier in the pipeline only parses enough of the file to find
     // width and height; it does not guarantee the pixel data or embedded metadata (e.g. an ICC
@@ -260,24 +284,13 @@ public class ImageStorageService {
     // that earlier header read, so this is the full-decode failure mode of a corrupt or
     // truncated upload -- bad client input, not a server failure.
     private static BufferedImage decodeFullImage(byte[] bytes, Dimensions original, ImageFormat format) {
-        JpegHeader jpegHeader = format == ImageFormat.JPEG ? scanJpegHeader(bytes) : NO_JPEG_HEADER;
-
-        if (format == ImageFormat.JPEG && !isBaselineOrExtendedSequential(jpegHeader.sofMarker())) {
-            int subsamplingFactor = computeSubsamplingFactor(original.width(), original.height());
-            BufferedImage subsampled = readAtResolution(bytes, subsamplingFactor);
-            BufferedImage oriented = applyExifOrientation(subsampled, jpegHeader.orientationValue());
-            return fitWithinMaxDimension(oriented);
-        }
-
-        BufferedImage full = readAtResolution(bytes, 1);
-        BufferedImage oriented = applyExifOrientation(full, jpegHeader.orientationValue());
-        return fitWithinMaxDimensionProgressively(oriented);
-    }
-
-    private static final JpegHeader NO_JPEG_HEADER = new JpegHeader(null, null);
-
-    private static boolean isBaselineOrExtendedSequential(Integer sofMarker) {
-        return sofMarker != null && (sofMarker == 0xC0 || sofMarker == 0xC1);
+        Integer orientation = format == ImageFormat.JPEG ? safeReadJpegExifOrientation(bytes) : null;
+        int subsamplingFactor = format == ImageFormat.WEBP
+            ? 1
+            : computeSubsamplingFactor(original.width(), original.height());
+        BufferedImage decoded = readAtResolution(bytes, subsamplingFactor);
+        BufferedImage oriented = applyExifOrientation(decoded, orientation);
+        return fitWithinMaxDimension(oriented);
     }
 
     // Uniform integer subsampling, derived from whichever side is larger, mirrors the aspect-
@@ -331,35 +344,6 @@ public class ImageStorageService {
         return resizeTo(image, targetWidth, targetHeight, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
     }
 
-    // A single large-ratio Graphics2D resize aliases fine detail into visible noise (it does
-    // not average away source pixels the way a genuine downsampling filter would). Halving
-    // repeatedly until within 2x of the target -- each individual step small enough for
-    // bilinear interpolation to look like a proper box average -- avoids that; this is the
-    // same technique Thumbnailator itself uses for its own large-ratio thumbnails. Never
-    // upscales: an image that already fits is returned unchanged.
-    private static BufferedImage fitWithinMaxDimensionProgressively(BufferedImage image) {
-        int width = image.getWidth();
-        int height = image.getHeight();
-        if (width <= MAX_DIMENSION && height <= MAX_DIMENSION) {
-            return image;
-        }
-        double scale = Math.min((double) MAX_DIMENSION / width, (double) MAX_DIMENSION / height);
-        int targetWidth = Math.max(1, (int) Math.round(width * scale));
-        int targetHeight = Math.max(1, (int) Math.round(height * scale));
-
-        BufferedImage current = image;
-        int currentWidth = width;
-        int currentHeight = height;
-        while (currentWidth / 2 >= targetWidth && currentHeight / 2 >= targetHeight) {
-            int nextWidth = Math.max(targetWidth, currentWidth / 2);
-            int nextHeight = Math.max(targetHeight, currentHeight / 2);
-            current = resizeTo(current, nextWidth, nextHeight, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            currentWidth = nextWidth;
-            currentHeight = nextHeight;
-        }
-        return resizeTo(current, targetWidth, targetHeight, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-    }
-
     private static BufferedImage resizeTo(BufferedImage source, int targetWidth, int targetHeight, Object interpolationHint) {
         BufferedImage resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = resized.createGraphics();
@@ -373,7 +357,7 @@ public class ImageStorageService {
     // Applies the rotation/flip that the Exif Orientation tag (1-8) calls for. Each case is
     // built from the same handful of primitive transforms (see below), matching the mapping
     // exiftool reports for these values; verified against the orientation=6 fixture this
-    // service is tested with (see ImageStorageServiceTest#orientationSixDisplaysTheRightWayUp).
+    // service is tested with (see ImageStorageServiceTest#everyExifOrientationValueDisplaysTheRightWayUp).
     private static BufferedImage applyExifOrientation(BufferedImage source, Integer orientation) {
         int value = orientation == null ? 1 : orientation;
         switch (value) {
@@ -456,22 +440,34 @@ public class ImageStorageService {
         return dest;
     }
 
-    private record JpegHeader(Integer orientationValue, Integer sofMarker) {
+    // Wraps readJpegExifOrientation so a malformed or hostile Exif segment can never escape as
+    // an uncaught exception (a 500): it degrades to "no orientation" instead. The bounds
+    // checks in readJpegExifOrientation/readOrientationFromTiff are believed to already
+    // reject every malformed offset safely on their own; this is a deliberate second layer,
+    // since the cost of a mis-rotated-but-otherwise-fine upload is far lower than a 500 for
+    // metadata we are about to strip by re-encoding regardless.
+    private static Integer safeReadJpegExifOrientation(byte[] bytes) {
+        try {
+            return readJpegExifOrientation(bytes);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
-    // A single pass over JPEG marker segments from the start of the file, collecting the
-    // Exif Orientation tag (from an APP1 "Exif\0\0" segment's TIFF IFD0) and which Start-Of-
-    // Frame marker encodes this JPEG (0xC0 baseline, 0xC2 progressive, etc.) -- entirely
+    // A single pass over JPEG marker segments from the start of the file, looking for the
+    // Exif Orientation tag inside an APP1 "Exif\0\0" segment's TIFF IFD0 -- entirely
     // independently of ImageIO's own metadata reader, which throws when Exif is the very
     // first marker after SOI, before any JFIF APP0 (a real camera/phone JPEG layout this
     // service is also tested against; see
-    // ImageStorageServiceTest#orientationSixDisplaysTheRightWayUp).
-    private static JpegHeader scanJpegHeader(byte[] bytes) {
+    // ImageStorageServiceTest#everyExifOrientationValueDisplaysTheRightWayUp). Every offset
+    // computed here is derived from -- and bounded by -- `position`, which is itself bounded
+    // by bytes.length (already capped at 5MB by validateSize before this is ever called), so
+    // none of the additions below can overflow. The TIFF payload's *own* embedded offsets are
+    // a different story -- see readOrientationFromTiff.
+    private static Integer readJpegExifOrientation(byte[] bytes) {
         if (bytes.length < 4 || (bytes[0] & 0xFF) != 0xFF || (bytes[1] & 0xFF) != 0xD8) {
-            return NO_JPEG_HEADER;
+            return null;
         }
-        Integer orientation = null;
-        Integer sofMarker = null;
         int position = 2;
         while (position + 4 <= bytes.length) {
             if ((bytes[position] & 0xFF) != 0xFF) {
@@ -494,21 +490,13 @@ public class ImageStorageService {
             if (segmentLength < 2 || segmentEnd > bytes.length) {
                 break;
             }
-            if (orientation == null && marker == 0xE1 && isExifApp1Segment(bytes, segmentStart, segmentEnd)) {
+            if (marker == 0xE1 && isExifApp1Segment(bytes, segmentStart, segmentEnd)) {
                 byte[] tiff = Arrays.copyOfRange(bytes, segmentStart + 6, segmentEnd);
-                orientation = readOrientationFromTiff(tiff);
-            } else if (sofMarker == null && isStartOfFrameMarker(marker)) {
-                sofMarker = marker;
+                return readOrientationFromTiff(tiff);
             }
             position = segmentEnd;
         }
-        return new JpegHeader(orientation, sofMarker);
-    }
-
-    // SOF0-SOF15 (0xC0-0xCF), excluding the three codes in that range reserved for other
-    // purposes: DHT (0xC4), JPG/reserved (0xC8), and DAC (0xCC).
-    private static boolean isStartOfFrameMarker(int marker) {
-        return marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC;
+        return null;
     }
 
     private static boolean isExifApp1Segment(byte[] bytes, int segmentStart, int segmentEnd) {
@@ -518,6 +506,13 @@ public class ImageStorageService {
             && bytes[segmentStart + 4] == 0 && bytes[segmentStart + 5] == 0;
     }
 
+    // ifd0Offset and entryOffset below are read from the file's own bytes (buffer.getInt/
+    // getShort), not derived from tiff.length -- a hostile file can set them to any 32-bit
+    // value, including one near Integer.MAX_VALUE. Validating with `offset + length >
+    // tiff.length`-style addition is exactly what let a hostile offset (e.g. 0x7FFFFFFF)
+    // overflow into a small/negative number and slip past the check, so isWithinBounds below
+    // only ever subtracts two already-small, trusted values (tiff.length and length) instead
+    // of adding to the untrusted offset.
     private static Integer readOrientationFromTiff(byte[] tiff) {
         if (tiff.length < 8) {
             return null;
@@ -529,13 +524,17 @@ public class ImageStorageService {
         }
         ByteBuffer buffer = ByteBuffer.wrap(tiff).order(littleEndian ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN);
         int ifd0Offset = buffer.getInt(4);
-        if (ifd0Offset < 0 || ifd0Offset + 2 > tiff.length) {
+        if (!isWithinBounds(ifd0Offset, 2, tiff.length)) {
             return null;
         }
         int entryCount = buffer.getShort(ifd0Offset) & 0xFFFF;
         for (int i = 0; i < entryCount; i++) {
+            // ifd0Offset is already validated within [0, tiff.length), and tiff.length is a
+            // small, trusted value (an APP1 segment payload, capped well under 64KB) -- so
+            // this addition (unlike the untrusted offsets it is validated against) cannot
+            // overflow even for the maximum possible entryCount (65535).
             int entryOffset = ifd0Offset + 2 + i * 12;
-            if (entryOffset + 12 > tiff.length) {
+            if (!isWithinBounds(entryOffset, 12, tiff.length)) {
                 break;
             }
             int tag = buffer.getShort(entryOffset) & 0xFFFF;
@@ -544,6 +543,15 @@ public class ImageStorageService {
             }
         }
         return null;
+    }
+
+    // True if and only if [offset, offset + length) is entirely within [0, arrayLength),
+    // without adding to the untrusted `offset` value: `arrayLength - length` is a subtraction
+    // of two small, trusted values (never near Integer.MIN_VALUE/MAX_VALUE), so it cannot
+    // overflow regardless of what `offset` itself is -- including Integer.MAX_VALUE or a
+    // negative number from a hostile/corrupt file.
+    private static boolean isWithinBounds(int offset, int length, int arrayLength) {
+        return offset >= 0 && offset <= arrayLength - length;
     }
 
     // JPEG has no transparency; Thumbnailator's own JPEG writer flattens onto black (see its

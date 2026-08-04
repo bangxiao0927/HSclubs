@@ -22,13 +22,16 @@ import javax.imageio.stream.ImageOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-// P1 from the media-decode-hardening audit: a small progressive JPEG whose header claims a
-// large resolution used to force ImageStorageService to materialize the full-resolution
-// raster (Thumbnailator's subsampling only ever helped baseline JPEG and PNG, never
-// progressive JPEG), letting a handful of small uploads OOM the whole JVM. This test
-// reproduces that failure mode directly -- not just a 400 assertion -- by running the real
-// store() pipeline in a separate, heap-constrained JVM process and checking that process's
-// exit code, the same way the audit's own repro did.
+// P1 from the media-decode-hardening audit: a small file whose header claims a large
+// resolution used to force ImageStorageService to materialize the full-resolution raster
+// during decode, letting a handful of small uploads OOM the whole JVM. This was first found
+// via progressive JPEG (Thumbnailator's own subsampling only ever helped baseline JPEG and
+// PNG, never progressive JPEG), then independently reproduced via a solid-colour RGB PNG
+// (the full-decode path that remained for non-progressive-JPEG formats was never actually
+// safe up to MAX_PIXELS -- see decodeFullImage's own comment). Both tests reproduce their
+// failure mode directly -- not just a 400 assertion -- by running the real store() pipeline
+// in a separate, heap-constrained JVM process and checking that process's exit code, the
+// same way the audit's own repro did.
 class ImageStorageServiceOomRegressionTest {
 
     @TempDir
@@ -41,6 +44,27 @@ class ImageStorageServiceOomRegressionTest {
         Path uploadDir = tempDir.resolve("uploads");
 
         HarnessResult result = runHarnessInAConstrainedJvm(uploadDir, imageFile, "160m");
+
+        assertThat(result.exitCode())
+            .withFailMessage(
+                "harness process should not crash/OOM under a constrained heap%nstdout:%n%s%nstderr:%n%s",
+                result.stdout(), result.stderr())
+            .isZero();
+        assertThat(result.stdout()).contains("ACCEPTED");
+    }
+
+    // The independent review's own reproduction: a baseline (non-progressive) RGB PNG at
+    // exactly MAX_PIXELS still OOMs a constrained heap, because it took the "safe to fully
+    // decode" path -- the peak decode buffer for a full raster scales with pixel count and
+    // colour bands (RGB/ARGB) regardless of format, so PNG (and baseline JPEG) needed the
+    // same reader-level subsampling defense as progressive JPEG, not just a lower MAX_PIXELS.
+    @Test
+    void rgbPngAtTheMegapixelLimitIsHandledWithoutUnboundedDecodeMemory() throws Exception {
+        Path imageFile = tempDir.resolve("rgb.png");
+        Files.write(imageFile, solidWhiteRgbPng(6000, 5000));
+        Path uploadDir = tempDir.resolve("uploads");
+
+        HarnessResult result = runHarnessInAConstrainedJvm(uploadDir, imageFile, "128m");
 
         assertThat(result.exitCode())
             .withFailMessage(
@@ -98,5 +122,20 @@ class ImageStorageServiceOomRegressionTest {
         } finally {
             writer.dispose();
         }
+    }
+
+    // TYPE_INT_RGB, not grayscale: the reviewer's own finding was that peak PNG decode memory
+    // scales with colour bands, so a grayscale PNG of the same dimensions does not reproduce
+    // the OOM -- only a genuine multi-band raster does, matching a real photo upload.
+    private static byte[] solidWhiteRgbPng(int width, int height) throws IOException {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setColor(Color.WHITE);
+        graphics.fillRect(0, 0, width, height);
+        graphics.dispose();
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", out);
+        return out.toByteArray();
     }
 }

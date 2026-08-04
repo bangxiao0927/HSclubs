@@ -14,6 +14,7 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.stream.Stream;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -27,6 +28,9 @@ import javax.imageio.stream.ImageOutputStream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -177,6 +181,33 @@ class ImageStorageServiceTest {
         assertThat(isJpeg(readStoredFile(imageUrl))).isTrue();
     }
 
+    // WebP's own megapixel cap is much stricter than the general one: TwelveMonkeys'
+    // WebPImageReader does not honour ImageReadParam.setSourceSubsampling (confirmed
+    // empirically -- it always fully decodes the VP8 frame regardless of the requested
+    // subsampling factor), so this is WebP's *only* memory guard, not just defense in depth.
+    @Test
+    void storesAWebpJustUnderItsOwnStricterMegapixelLimit() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] webpBytes = new ClassPathResource("images/near-limit.webp").getContentAsByteArray();
+        MockMultipartFile file = new MockMultipartFile("file", "photo.webp", "image/webp", webpBytes);
+
+        String imageUrl = service.store(file);
+
+        assertThat(imageUrl).endsWith(".jpg");
+        assertThat(isJpeg(readStoredFile(imageUrl))).isTrue();
+    }
+
+    @Test
+    void rejectsAWebpOverItsOwnStricterMegapixelLimitEvenThoughItIsUnderTheGeneralLimit() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] webpBytes = new ClassPathResource("images/oversized.webp").getContentAsByteArray();
+        MockMultipartFile file = new MockMultipartFile("file", "photo.webp", "image/webp", webpBytes);
+
+        assertThatThrownBy(() -> service.store(file))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("maximum allowed resolution");
+    }
+
     @Test
     void storesAGifUnchangedWithAGifExtension() throws IOException {
         ImageStorageService service = service(uploadDir);
@@ -270,19 +301,59 @@ class ImageStorageServiceTest {
     // bottom-left -> displayed top-left, top-left -> top-right, top-right -> bottom-right,
     // bottom-right -> bottom-left. Verified independently against this exact fixture with
     // `exiftool` and a standalone Thumbnailator invocation before being hardcoded here.
-    @Test
-    void orientationSixDisplaysTheRightWayUp() throws IOException {
+    //
+    // All 8 Exif Orientation values are parameterized here, not just 6: each of the expected
+    // quadrant layouts below was independently verified against this exact fixture with
+    // `exiftool`, both at baseline and progressive JPEG encoding, before being hardcoded --
+    // regression protection for the mirrored cases (2, 4, 5, 7), which a single orientation=6
+    // case leaves entirely unasserted.
+    @ParameterizedTest
+    @MethodSource("orientationExpectations")
+    void everyExifOrientationValueDisplaysTheRightWayUp(
+            int orientation, Color expectedTopLeft, Color expectedTopRight,
+            Color expectedBottomLeft, Color expectedBottomRight) throws IOException {
         ImageStorageService service = service(uploadDir);
-        byte[] jpegWithExif = jpegWithOrientationAndGps(6);
+        byte[] jpegWithExif = jpegWithOrientationAndGps(orientation);
         MockMultipartFile file = new MockMultipartFile("file", "phone-photo.jpg", "image/jpeg", jpegWithExif);
 
         String imageUrl = service.store(file);
         BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(readStoredFile(imageUrl)));
 
-        assertColorCloseTo(colorAt(decoded, 8, 8), Color.BLUE);
-        assertColorCloseTo(colorAt(decoded, 24, 8), Color.RED);
-        assertColorCloseTo(colorAt(decoded, 8, 24), Color.YELLOW);
-        assertColorCloseTo(colorAt(decoded, 24, 24), Color.GREEN);
+        assertColorCloseTo(colorAt(decoded, 8, 8), expectedTopLeft);
+        assertColorCloseTo(colorAt(decoded, 24, 8), expectedTopRight);
+        assertColorCloseTo(colorAt(decoded, 8, 24), expectedBottomLeft);
+        assertColorCloseTo(colorAt(decoded, 24, 24), expectedBottomRight);
+    }
+
+    private static Stream<Arguments> orientationExpectations() {
+        return Stream.of(
+            Arguments.of(1, Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW),
+            Arguments.of(2, Color.GREEN, Color.RED, Color.YELLOW, Color.BLUE),
+            Arguments.of(3, Color.YELLOW, Color.BLUE, Color.GREEN, Color.RED),
+            Arguments.of(4, Color.BLUE, Color.YELLOW, Color.RED, Color.GREEN),
+            Arguments.of(5, Color.RED, Color.BLUE, Color.GREEN, Color.YELLOW),
+            Arguments.of(6, Color.BLUE, Color.RED, Color.YELLOW, Color.GREEN),
+            Arguments.of(7, Color.YELLOW, Color.GREEN, Color.BLUE, Color.RED),
+            Arguments.of(8, Color.GREEN, Color.YELLOW, Color.RED, Color.BLUE));
+    }
+
+    // The reviewer's own reproduction: an Exif IFD0 offset of 0x7FFFFFFF (as bytes FF FF FF 7F,
+    // little-endian) makes naive bounds arithmetic like `ifd0Offset + 2 > tiff.length` overflow
+    // (wrapping negative) instead of correctly rejecting the offset, so the subsequent
+    // buffer.getShort(ifd0Offset) throws an unchecked IndexOutOfBoundsException that is not an
+    // IllegalArgumentException and would escape store() as an uncaught 500. A malformed Exif
+    // offset like this must degrade to "no orientation" -- the image itself decodes fine, and
+    // its (corrupt) Exif metadata is stripped by re-encoding regardless.
+    @Test
+    void toleratesAHostileExifIfdOffsetThatWouldOverflowIntArithmeticInsteadOfFailingWithA500() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] hostileJpeg = jpegWithHostileExifIfdOffset();
+        MockMultipartFile file = new MockMultipartFile("file", "hostile.jpg", "image/jpeg", hostileJpeg);
+
+        String imageUrl = service.store(file);
+
+        assertThat(imageUrl).endsWith(".jpg");
+        assertThat(isJpeg(readStoredFile(imageUrl))).isTrue();
     }
 
     @Test
@@ -480,6 +551,36 @@ class ImageStorageServiceTest {
         out.write(app1);
         out.write(quadrants, 2, quadrants.length - 2);
         return out.toByteArray();
+    }
+
+    // Splices an APP1 "Exif\0\0" segment containing only a bare, minimal TIFF header --
+    // "II*\0" (little-endian marker) followed by an IFD0 offset of FF FF FF 7F, i.e.
+    // 0x7FFFFFFF (Integer.MAX_VALUE) -- right after the JPEG SOI marker. This is the
+    // reviewer's own reproduction for the int-overflow bounds-check bug: no IFD0, no
+    // Orientation tag, just a hostile offset.
+    private static byte[] jpegWithHostileExifIfdOffset() throws IOException {
+        byte[] quadrants = quadrantJpeg();
+        byte[] app1 = buildHostileExifApp1Segment();
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(quadrants, 0, 2); // SOI
+        out.write(app1);
+        out.write(quadrants, 2, quadrants.length - 2);
+        return out.toByteArray();
+    }
+
+    private static byte[] buildHostileExifApp1Segment() {
+        byte[] exifHeader = {'E', 'x', 'i', 'f', 0, 0};
+        byte[] tiff = {'I', 'I', 0x2A, 0x00, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 0x7F};
+        int payloadLength = exifHeader.length + tiff.length;
+        int segmentLength = 2 + payloadLength;
+
+        ByteBuffer buffer = ByteBuffer.allocate(2 + 2 + payloadLength).order(ByteOrder.BIG_ENDIAN);
+        buffer.put((byte) 0xFF).put((byte) 0xE1);
+        buffer.putShort((short) segmentLength);
+        buffer.put(exifHeader);
+        buffer.put(tiff);
+        return buffer.array();
     }
 
     private static byte[] quadrantJpeg() throws IOException {

@@ -148,7 +148,14 @@ class ClubPostFeedIntegrationTest {
     }
 
     @Test
-    void memberCanPublishAndTheStoredFileIsShrunkBelowFourHundredKilobytesWithNoExif() throws Exception {
+    // The stored ceiling here is looser than it once was: peak decode memory must now be
+    // bounded for every accepted format/encoding, not just progressive JPEG (see
+    // ImageStorageService#decodeFullImage and ImageStorageServiceOomRegressionTest), so a
+    // large baseline JPEG like this one now also decodes via reader-level subsampling rather
+    // than a full decode -- a real, accepted trade-off of some sharpness/compression
+    // efficiency for a hard memory bound. 700KB is still a large reduction from the original
+    // ~4MB upload and catches a genuine regression (e.g. skipping re-encoding entirely).
+    void memberCanPublishAndTheStoredFileIsShrunkWellBelowTheOriginalSizeWithNoExif() throws Exception {
         long clubId = createActiveClubWithAMember();
         byte[] fourMegabyteJpeg = fourMegabyteJpegWithExif();
 
@@ -164,7 +171,7 @@ class ClubPostFeedIntegrationTest {
         Path storedFile = uploadDir.resolve(imageUrl.substring("/uploads/".length()));
         assertThat(Files.exists(storedFile)).isTrue();
         byte[] storedBytes = Files.readAllBytes(storedFile);
-        assertThat(storedBytes.length).isLessThan(400 * 1024);
+        assertThat(storedBytes.length).isLessThan(700 * 1024);
         assertThat(containsApp1ExifMarker(storedBytes)).isFalse();
     }
 
@@ -529,8 +536,8 @@ class ClubPostFeedIntegrationTest {
 
     // A large (~4MB), fine-grained-but-not-uniformly-random JPEG: real camera photos are large
     // because of sensor-level detail across a big canvas, which mostly averages away once
-    // Thumbnailator downscales to 1600x1600 -- unlike pure per-pixel noise, which doesn't
-    // compress any better after resampling and would fail the "under 400KB" expectation.
+    // downscaled to 1600x1600 -- unlike pure per-pixel noise, which doesn't compress any
+    // better after resampling and would fail the "well below the original size" expectation.
     // Embeds a minimal Exif APP1 segment so "carries no EXIF" is a meaningful assertion rather
     // than trivially true for any input.
     private static byte[] fourMegabyteJpegWithExif() throws Exception {
