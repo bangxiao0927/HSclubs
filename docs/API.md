@@ -101,6 +101,183 @@ Delete club. Requires: platform_owner. Status: 204
 
 ---
 
+## Club Media (Posts and Comments)
+
+A per-club photo feed: members publish a post (one photo plus a title), anyone can read the
+public feed and its comments, and members can comment. See
+`docs/FIRST_REPO_ROADMAP.md` item 23 for why this shipped and which moderation/storage/
+deletion/abuse concerns it addresses (rate limiting on publishing is still open -- see
+`docs/ISSUES.md`).
+
+All eight endpoints below live under `/api/clubs`, following the same primary-route
+convention as the rest of this section (see the "Future API Needs" preamble later in this
+file for how new routes should be proposed).
+
+**Photo URLs are unauthenticated, unguessable capability URLs, not authorization-checked
+resources.** A post's own `imageUrl`, under `/uploads/club-posts/<uuid>.jpg`, is served by
+the static `/uploads/**` resource handler (`WebConfig`), which sits under
+Spring Security's `anyRequest().permitAll()` -- it does not check `clubs.status`,
+`ClubVisibilityPolicy`, or authentication at all. The feed and comment endpoints below are
+gated (a non-active club's feed is hidden from non-members), but once a client has a photo
+URL -- from the feed, from a shared link, or by guessing -- nothing stops it from being
+fetched directly, by anyone, forever (until the post is deleted). Security rests entirely on
+the UUIDv4 filename being unguessable, the same model as an unlisted document link. This is a
+deliberate trade-off: serving images through an authorization-aware controller instead would
+also have to cover club cover images, and would give up static file serving and HTTP caching.
+
+`authorAvatarUrl` is not part of this boundary: it is `oauth_users.avatar_url`, populated
+from the OAuth provider's own profile picture claim (e.g. Google's `picture`) at login, and
+is an external URL on the provider's own domain, not a file under `/uploads/**`. It can be
+`null` when the provider did not supply one.
+
+A `PublicClubPost` (returned by publish and by the feed) looks like:
+```json
+{
+  "id": 12,
+  "clubId": 3,
+  "title": "Robotics build day",
+  "imageUrl": "/uploads/club-posts/3f9c1b2a-3e3d-4a2e-9a8b-2b6b7d5e1a11.jpg",
+  "pinnedAt": null,
+  "createdAt": "2026-08-03T18:42:11Z",
+  "authorDisplayName": "Maya Chen",
+  "authorAvatarUrl": "https://...",
+  "commentCount": 4,
+  "viewerCanDelete": false
+}
+```
+`viewerCanDelete` is computed server-side from the caller's own identity and the club's
+moderation state; it is never the author's or viewer's own user ID. Never present:
+`authorOauthUserId`, the author's email, or any other account field.
+
+A `PublicClubPostComment` (returned by comment creation and by the comment list) looks like:
+```json
+{
+  "id": 5,
+  "postId": 12,
+  "body": "Great turnout today!",
+  "createdAt": "2026-08-03T19:02:44Z",
+  "authorDisplayName": "Maya Chen",
+  "authorAvatarUrl": "https://...",
+  "viewerCanDelete": true
+}
+```
+
+### POST /api/clubs/{clubSlugOrId}/posts
+Publish a post: one photo plus a title. Requires: authenticated club member.
+
+Request: `multipart/form-data` with fields `title` (string, 1-140 characters after trimming)
+and `file` (the image). This is one atomic request; there is no separate "upload the photo,
+then create the post" step, so a post can never reference a photo that was never actually
+stored.
+
+The file is validated and re-encoded by `ImageStorageService` before anything is written to
+the database: JPEG/PNG/WebP are flattened, EXIF-stripped, and re-encoded to JPEG (capped at
+1600px on the long edge); GIF passes through unchanged to preserve animation. Size limits:
+5MB for JPEG/PNG/WebP, 2MB for GIF. Both the format and these limits are enforced from the
+file's sniffed magic bytes, never the client-declared `Content-Type`.
+
+These are application-level limits, checked by `ImageStorageService` only after the request
+has already cleared a stricter, earlier ceiling: Spring's own
+`spring.servlet.multipart.max-file-size` (6MB per part) and `max-request-size` (8MB total).
+A file larger than that multipart ceiling never reaches `ImageStorageService` at all -- Spring
+rejects it first with a 413, before the title is even read, so it cannot also produce one of
+the 400s below. The two limits are deliberately layered (6MB above the application's own 5MB
+JPEG/PNG/WebP limit): if they were equal, Spring would take the file before the readable
+400 could ever be produced, turning that validation into dead code.
+
+Response: 201 with a `PublicClubPost` body (shape above).
+
+Status: 201 | 400 (missing/empty title or file, title over 140 characters, unsupported or
+corrupt image, or image over its *application-level* format size or resolution limit -- see
+above) | 403 (authenticated but not a member of this club) | 404 (club not found) | 413 (the
+file or overall request exceeded Spring's multipart ceiling before any application code ran --
+see "Error Responses" below) | 500 (rare: the post could not be read back immediately after
+being written, or the file could not be stored)
+
+### GET /api/clubs/{clubSlugOrId}/posts
+Read a club's public post feed, newest and pinned-first. Public; no authentication required,
+but an authenticated viewer's own capabilities (see `viewerCanDelete` above) are reflected in
+the response.
+
+Visibility follows `ClubVisibilityPolicy`, the same policy the comment list below uses: an
+`active` club's feed is visible to anyone; a non-`active` club's feed is visible only to a
+member of that club, its president, or a platform owner. A club that exists but is not
+visible to the caller returns 404, the same as a club that does not exist at all, so its
+existence is not leaked.
+
+Query params: `page` (default `0`) and `size` (default `12`).
+
+Response envelope:
+```json
+{
+  "items": [ /* PublicClubPost */ ],
+  "page": 0,
+  "size": 12,
+  "total": 37
+}
+```
+`page` and `size` in the response are clamped, not the raw request values: `size` is clamped
+to between 1 and 100, a negative `page` is clamped to `0`, and both echoed values are what was
+actually served. A client computing `ceil(total / size)` from the response must use these
+clamped values, not whatever it originally requested, or it can be misled about how many
+pages exist.
+
+Status: 200 | 404 (club not found, or not visible to this caller)
+
+### PUT /api/clubs/{clubSlugOrId}/posts/{postId}/pin
+Pin a post to the front of the feed. Requires: the club's own president, or a platform owner
+(pinning is an editorial power, not a publishing one -- the post's own author is not enough
+on its own). At most 3 posts can be pinned per club at a time.
+
+Status: 204 | 403 (not the club's president or a platform owner) | 404 (club or post not
+found) | 409 (3 posts already pinned, or a concurrent pin attempt on the same club timed out
+the lock -- both mean "try again", not a server error)
+
+### DELETE /api/clubs/{clubSlugOrId}/posts/{postId}/pin
+Unpin a post. Same authorization as pin above.
+
+Status: 204 | 403 | 404 (club or post not found)
+
+### DELETE /api/clubs/{clubSlugOrId}/posts/{postId}
+Delete a post: removes the row, its photo file on disk, and its comments (cascade). Requires:
+the post's own author, the club's president, or a platform owner (the same moderation matrix
+`ClubContentModerationPolicy` applies to comment deletion below).
+
+Status: 204 | 403 (authenticated but not the author/president/owner) | 404 (club or post not
+found) | 500 (rare: the row was already gone by the time the delete ran)
+
+### GET /api/clubs/{clubSlugOrId}/posts/{postId}/comments
+Read a post's comments, oldest first. Public; same `ClubVisibilityPolicy` gating as the feed
+above, so a comment thread is never visible where the post itself would not be.
+
+Response: a plain JSON array of `PublicClubPostComment` (shape above); not paginated or
+wrapped in an envelope.
+
+Status: 200 | 404 (club not found or not visible, or post not found in this club)
+
+### POST /api/clubs/{clubSlugOrId}/posts/{postId}/comments
+Post a comment. Requires: authenticated club member.
+
+Request body:
+```json
+{ "body": "Great turnout today!" }
+```
+`body` must be 1-300 characters after trimming.
+
+Response: 201 with a `PublicClubPostComment` body (shape above).
+
+Status: 201 | 400 (missing/empty body, or over 300 characters) | 403 (not a member) | 404
+(club or post not found) | 409 (post already has 50 comments -- the per-post cap -- or a
+concurrent comment on the same post timed out the lock; both mean "try again")
+
+### DELETE /api/clubs/{clubSlugOrId}/posts/{postId}/comments/{commentId}
+Delete a comment. Requires: the comment's own author, the club's president, or a platform
+owner.
+
+Status: 204 | 403 | 404 (club not found, post not found in this club, or comment not found)
+
+---
+
 ## Membership
 
 ### GET /api/clubs/{id}/members
@@ -175,4 +352,5 @@ Before any of these are implemented, the proposer should:
 | 403 | Permission denied |
 | 404 | Resource not found |
 | 409 | Conflict (duplicate request) |
+| 413 | Any multipart upload (e.g. `POST /api/clubs/{clubSlugOrId}/posts` above) exceeded `spring.servlet.multipart.max-file-size` (6MB per part) or `max-request-size` (8MB total). A request whose raw body exceeds `server.tomcat.max-swallow-size` (10MB) may instead have its connection aborted before this response body can be delivered. |
 | 500 | Internal server error |
