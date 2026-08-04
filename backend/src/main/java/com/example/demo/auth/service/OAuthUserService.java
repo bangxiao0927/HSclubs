@@ -2,6 +2,8 @@ package com.example.demo.auth.service;
 
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,6 +12,8 @@ import com.example.demo.auth.model.OAuthUserRecord;
 
 @Service
 public class OAuthUserService {
+
+    private static final Logger log = LoggerFactory.getLogger(OAuthUserService.class);
 
     private final OAuthUserMapper oAuthUserMapper;
 
@@ -38,6 +42,30 @@ public class OAuthUserService {
         record.setRole(role == null || role.isBlank() ? "student" : role);
 
         oAuthUserMapper.upsert(record);
+    }
+
+    /**
+     * Re-creates the oauth_users row for a session that outlived it.
+     *
+     * <p>Sessions last 7 days, so a database restore, a migration, or a manual cleanup can
+     * leave a signed-in student with no stored row. That state used to wall them out of
+     * registration permanently: /api/auth/me reported acceptedTerms=false forever (nothing to
+     * read), POST /api/auth/accept-terms updated no rows, and the graduation-year save
+     * answered 404 -- so the terms page's Continue button could never lead anywhere. The
+     * session principal still carries everything the login upsert needs, so replay it instead
+     * of leaving the account unusable until the cookie expires.
+     */
+    @Transactional
+    public void ensureStoredUser(String provider, Map<String, Object> attributes) {
+        if (attributes == null) {
+            return;
+        }
+        String email = firstNonBlank(attributes, "email");
+        if (email == null || findIdByEmail(email) != null) {
+            return;
+        }
+        log.warn("Authenticated session has no oauth_users row; re-creating it from the session principal");
+        recordLogin(provider, attributes);
     }
 
     private String firstNonBlank(Map<String, Object> attributes, String... keys) {

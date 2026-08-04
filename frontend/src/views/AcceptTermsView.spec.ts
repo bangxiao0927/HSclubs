@@ -17,6 +17,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { fetchAuthenticatedUser } from '../services/authService'
 import type { AuthUser } from '../types/auth'
+import { useAuthStore } from '../stores/auth'
 import AcceptTermsView from './AcceptTermsView.vue'
 
 const useRouteMock = vi.mocked(useRoute)
@@ -152,6 +153,50 @@ describe('AcceptTermsView', () => {
 
     expect(wrapper.text()).toContain('Failed to record acceptance')
     expect(replaceMock).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an error instead of silently re-routing to itself when the server still reports the terms as unaccepted', async () => {
+    // The dead end this guards against: the POST reports success but records
+    // nothing, so resolvePostAuthRoute hands back /accept-terms again and
+    // replacing the route we are already on does nothing at all -- the student
+    // sees the button stop spinning and no way forward.
+    fetchMock.mockResolvedValue({ ok: true, status: 204 })
+    fetchAuthenticatedUserMock.mockResolvedValue(buildUser({ acceptedTerms: false }))
+    setRouteQuery({ redirect: '/profile' })
+    const wrapper = mountView()
+
+    await agreeAndSubmit(wrapper)
+
+    expect(wrapper.text()).toContain('We could not confirm your acceptance')
+    expect(replaceMock).not.toHaveBeenCalled()
+  })
+
+  it('sends the student back through sign-in, target intact, when the session expired mid-accept', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 401 })
+    fetchAuthenticatedUserMock.mockResolvedValue(null)
+    setRouteQuery({ redirect: '/clubs/5' })
+    const wrapper = mountView()
+
+    await agreeAndSubmit(wrapper)
+
+    // The dead session must be dropped from the store on the way out, or the
+    // router guard treats the visitor as authenticated on /auth and forwards
+    // them straight back to /accept-terms.
+    expect(fetchAuthenticatedUserMock).toHaveBeenCalledTimes(1)
+    expect(useAuthStore().currentUser).toBeNull()
+    expect(replaceMock).toHaveBeenCalledWith({
+      path: '/auth',
+      query: { intent: 'login', redirect: '/clubs/5' },
+    })
+  })
+
+  it('includes the server status in the failure message so a stuck registration can be reported', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 404 })
+    const wrapper = mountView()
+
+    await agreeAndSubmit(wrapper)
+
+    expect(wrapper.text()).toContain('server responded 404')
   })
 
   it('surfaces an error and does not navigate when the accept-terms request itself rejects', async () => {

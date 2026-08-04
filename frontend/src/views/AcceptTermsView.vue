@@ -18,6 +18,8 @@ const agreed = ref(false)
 const loading = ref(false)
 const error = ref('')
 
+const redirectTarget = () => sanitizeAuthRedirectTarget(route.query.redirect)
+
 const handleAccept = async () => {
   if (!agreed.value) return
   loading.value = true
@@ -27,10 +29,38 @@ const handleAccept = async () => {
       method: 'POST',
       credentials: 'include',
     })
+    // A session that expired while this page sat open cannot be recovered by
+    // retrying the POST, so send the student back through sign-in (carrying
+    // the still-pending target) instead of showing an error they can only
+    // fail at again.
+    if (response.status === 401) {
+      // Refresh first so the store stops believing in the dead session. The
+      // router guard forwards an "authenticated" visitor away from /auth via
+      // resolvePostAuthRoute, which for a user still carrying
+      // acceptedTerms: false resolves right back to /accept-terms -- the route
+      // we are already on, and therefore another silent no-op.
+      await authStore.refreshUser()
+      router.replace({
+        path: '/auth',
+        query: { intent: 'login', redirect: redirectTarget() },
+      })
+      return
+    }
     if (!response.ok) {
-      throw new Error('Failed to record acceptance')
+      // The status is part of the message on purpose: it is the only clue a
+      // student can pass on when reporting that registration is stuck.
+      throw new Error(`Failed to record acceptance (server responded ${response.status})`)
     }
     await authStore.refreshUser()
+    // Guard against the server reporting success while still considering the
+    // terms unaccepted. Without this, resolvePostAuthRoute below hands back
+    // /accept-terms itself, and router.replace() onto the route we are already
+    // on is a silent no-op: the button just stops spinning and nothing happens.
+    if (authStore.currentUser && authStore.currentUser.acceptedTerms === false) {
+      error.value =
+        'We could not confirm your acceptance. Please try again, or sign out and sign in again if this keeps happening.'
+      return
+    }
     // A first-time student goes through the interest quiz BEFORE the
     // graduation-year step, so the very first thing they see after signing up
     // is clubs they might like rather than a form. This deliberately bypasses
@@ -42,7 +72,7 @@ const handleAccept = async () => {
         path: '/recommendations',
         query: {
           onboarding: 'true',
-          redirect: sanitizeAuthRedirectTarget(route.query.redirect),
+          redirect: redirectTarget(),
         },
       })
       return
