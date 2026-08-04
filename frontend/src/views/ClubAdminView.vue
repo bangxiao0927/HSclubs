@@ -15,6 +15,7 @@ import type { UserSearchResult } from '../services/userService'
 import { useAuthStore } from '../stores/auth'
 import { clubCategoryOptions } from '../utils/clubCategories'
 import { buildApiUrl } from '../services/httpClient'
+import { resolveErrorMessage } from '../services/httpErrorMessage'
 import { clubImage } from '../utils/clubImages'
 import { userAvatar } from '../utils/avatarImages'
 import BackButton from '../components/BackButton.vue'
@@ -267,8 +268,8 @@ const handleImageUpload = async (event: Event) => {
       credentials: 'include',
       body: formData})
     if (!response.ok) {
-      const msg = await response.text()
-      throw new Error(msg || 'Upload failed')
+      const msg = await resolveErrorMessage(response, 'Upload failed')
+      throw new Error(msg)
     }
     const data = await response.json()
     form.imageUrl = data.imageUrl

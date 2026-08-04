@@ -84,7 +84,7 @@ class ClubPostMapperTest {
     }
 
     @Test
-    void insertPersistsAPostThatFindFeedByClubIdCanReadBack() {
+    void insertPersistsAPostThatFindPublicFeedByClubIdCanReadBack() {
         ClubPost post = new ClubPost();
         post.setClubId(1L);
         post.setAuthorOauthUserId(1L);
@@ -93,7 +93,7 @@ class ClubPostMapperTest {
 
         clubPostMapper.insert(post);
 
-        List<ClubPost> feed = clubPostMapper.findFeedByClubId(1L, 0, 10);
+        List<PublicClubPost> feed = clubPostMapper.findPublicFeedByClubId(1L, 0, 10, 1L, false);
         assertThat(feed).singleElement().satisfies(found -> {
             assertThat(found.getId()).isEqualTo(post.getId());
             assertThat(found.getTitle()).isEqualTo("First meeting");
@@ -104,15 +104,15 @@ class ClubPostMapperTest {
     // Feed order: pinned posts first, then created_at DESC, with id DESC as the tiebreaker for
     // two posts sharing the same created_at second.
     @Test
-    void findFeedByClubIdSortsPinnedFirstThenNewestFirstWithIdAsTheTiebreaker() {
+    void findPublicFeedByClubIdSortsPinnedFirstThenNewestFirstWithIdAsTheTiebreaker() {
         insertPost(1L, 1L, "2024-01-01 10:00:00", null);
         insertPost(2L, 1L, "2024-01-01 10:00:00", null);
         insertPost(3L, 1L, "2024-01-02 10:00:00", null);
         insertPost(4L, 1L, "2023-01-01 10:00:00", "2024-06-01 00:00:00");
 
-        List<ClubPost> feed = clubPostMapper.findFeedByClubId(1L, 0, 10);
+        List<PublicClubPost> feed = clubPostMapper.findPublicFeedByClubId(1L, 0, 10, 1L, false);
 
-        assertThat(feed).extracting(ClubPost::getId)
+        assertThat(feed).extracting(PublicClubPost::getId)
             .containsExactly(4L, 3L, 2L, 1L);
     }
 
@@ -120,27 +120,27 @@ class ClubPostMapperTest {
     // later (2024-07) despite being created earlier (2024-02), and must still sort before
     // post 1, which was created later (2024-08) but pinned earlier (2024-01).
     @Test
-    void findFeedByClubIdSortsPinnedPostsByPinnedAtDescNotCreatedAt() {
+    void findPublicFeedByClubIdSortsPinnedPostsByPinnedAtDescNotCreatedAt() {
         insertPost(1L, 1L, "2024-08-01 10:00:00", "2024-01-01 00:00:00");
         insertPost(2L, 1L, "2024-02-01 10:00:00", "2024-07-01 00:00:00");
 
-        List<ClubPost> feed = clubPostMapper.findFeedByClubId(1L, 0, 10);
+        List<PublicClubPost> feed = clubPostMapper.findPublicFeedByClubId(1L, 0, 10, 1L, false);
 
-        assertThat(feed).extracting(ClubPost::getId)
+        assertThat(feed).extracting(PublicClubPost::getId)
             .containsExactly(2L, 1L);
     }
 
     // Pagination must not duplicate or skip rows across a page boundary. Five posts, page size
     // two: page 0 -> [5, 4], page 1 -> [3, 2], page 2 -> [1].
     @Test
-    void findFeedByClubIdIsStableAcrossAPageBoundary() {
+    void findPublicFeedByClubIdIsStableAcrossAPageBoundary() {
         for (long id = 1; id <= 5; id++) {
             insertPost(id, 1L, "2024-01-0" + id + " 10:00:00", null);
         }
 
-        List<Long> firstPage = idsOf(clubPostMapper.findFeedByClubId(1L, 0, 2));
-        List<Long> secondPage = idsOf(clubPostMapper.findFeedByClubId(1L, 2, 2));
-        List<Long> thirdPage = idsOf(clubPostMapper.findFeedByClubId(1L, 4, 2));
+        List<Long> firstPage = publicIdsOf(clubPostMapper.findPublicFeedByClubId(1L, 0, 2, 1L, false));
+        List<Long> secondPage = publicIdsOf(clubPostMapper.findPublicFeedByClubId(1L, 2, 2, 1L, false));
+        List<Long> thirdPage = publicIdsOf(clubPostMapper.findPublicFeedByClubId(1L, 4, 2, 1L, false));
 
         assertThat(firstPage).containsExactly(5L, 4L);
         assertThat(secondPage).containsExactly(3L, 2L);
@@ -148,17 +148,18 @@ class ClubPostMapperTest {
     }
 
     @Test
-    void deleteRemovesThePostFromTheFeed() {
+    void deleteRemovesThePostFromThePublicFeed() {
         insertPost(1L, 1L, "2024-01-01 10:00:00", null);
         insertPost(2L, 1L, "2024-01-02 10:00:00", null);
 
         clubPostMapper.delete(1L);
 
-        assertThat(idsOf(clubPostMapper.findFeedByClubId(1L, 0, 10))).containsExactly(2L);
+        assertThat(publicIdsOf(clubPostMapper.findPublicFeedByClubId(1L, 0, 10, 1L, false)))
+            .containsExactly(2L);
     }
 
     @Test
-    void insertCommentPersistsACommentThatFindCommentsByPostIdCanReadBack() {
+    void insertCommentPersistsACommentThatFindPublicCommentsByPostIdCanReadBack() {
         insertPost(1L, 1L, "2024-01-01 10:00:00", null);
 
         ClubPostComment comment = new ClubPostComment();
@@ -168,7 +169,7 @@ class ClubPostMapperTest {
 
         clubPostMapper.insertComment(comment);
 
-        List<ClubPostComment> comments = clubPostMapper.findCommentsByPostId(1L);
+        List<PublicClubPostComment> comments = clubPostMapper.findPublicCommentsByPostId(1L, 1L, false);
         assertThat(comments).singleElement().satisfies(found -> {
             assertThat(found.getId()).isEqualTo(comment.getId());
             assertThat(found.getBody()).isEqualTo("Great photo!");
@@ -186,7 +187,7 @@ class ClubPostMapperTest {
 
         clubPostMapper.delete(1L);
 
-        assertThat(clubPostMapper.findCommentsByPostId(1L)).isEmpty();
+        assertThat(clubPostMapper.findPublicCommentsByPostId(1L, 1L, false)).isEmpty();
     }
 
     @Test
@@ -201,8 +202,8 @@ class ClubPostMapperTest {
 
         jdbcTemplate.update("DELETE FROM clubs WHERE id = 1");
 
-        assertThat(clubPostMapper.findFeedByClubId(1L, 0, 10)).isEmpty();
-        assertThat(clubPostMapper.findCommentsByPostId(1L)).isEmpty();
+        assertThat(clubPostMapper.findPublicFeedByClubId(1L, 0, 10, 1L, false)).isEmpty();
+        assertThat(clubPostMapper.findPublicCommentsByPostId(1L, 1L, false)).isEmpty();
     }
 
     @Test
@@ -221,7 +222,8 @@ class ClubPostMapperTest {
 
         clubPostMapper.pin(1L, 1L);
 
-        assertThat(idsOf(clubPostMapper.findFeedByClubId(1L, 0, 10))).containsExactly(1L, 2L);
+        assertThat(publicIdsOf(clubPostMapper.findPublicFeedByClubId(1L, 0, 10, 1L, false)))
+            .containsExactly(1L, 2L);
         assertThat(clubPostMapper.countPinnedByClubId(1L)).isEqualTo(1);
     }
 
@@ -233,7 +235,8 @@ class ClubPostMapperTest {
 
         clubPostMapper.unpin(1L);
 
-        assertThat(idsOf(clubPostMapper.findFeedByClubId(1L, 0, 10))).containsExactly(2L, 1L);
+        assertThat(publicIdsOf(clubPostMapper.findPublicFeedByClubId(1L, 0, 10, 1L, false)))
+            .containsExactly(2L, 1L);
         assertThat(clubPostMapper.countPinnedByClubId(1L)).isZero();
     }
 
@@ -254,7 +257,7 @@ class ClubPostMapperTest {
         clubPostMapper.deleteComment(first.getId());
 
         assertThat(clubPostMapper.countCommentsByPostId(1L)).isEqualTo(1);
-        assertThat(clubPostMapper.findCommentsByPostId(1L)).singleElement()
+        assertThat(clubPostMapper.findPublicCommentsByPostId(1L, 1L, false)).singleElement()
             .satisfies(remaining -> assertThat(remaining.getBody()).isEqualTo("Second"));
     }
 
@@ -488,9 +491,11 @@ class ClubPostMapperTest {
         clubPostMapper.insertComment(comment);
     }
 
-    // Same ordering contract as findFeedByClubId: pinned posts first (by pinned_at DESC), then
-    // created_at DESC, with id DESC as the same-created_at tiebreaker. Exercised here too
-    // because the public projection is a separate SQL statement, not a reuse of the internal one.
+    // Same pinned-first, created_at-DESC, id-DESC-tiebreaker ordering as
+    // findPublicFeedByClubIdSortsPinnedFirstThenNewestFirstWithIdAsTheTiebreaker and
+    // findPublicFeedByClubIdSortsPinnedPostsByPinnedAtDescNotCreatedAt, but with a mix of
+    // pinned and unpinned posts read back in one call, additionally asserting the join against
+    // oauth_users does not duplicate a post row.
     @Test
     void findPublicFeedByClubIdSortsPinnedPostsFirstAndExactlyOnce() {
         insertPost(1L, 1L, "2024-01-01 10:00:00", null);
@@ -623,7 +628,7 @@ class ClubPostMapperTest {
             id, postId, body, createdAt);
     }
 
-    private static List<Long> idsOf(List<ClubPost> posts) {
-        return posts.stream().map(ClubPost::getId).toList();
+    private static List<Long> publicIdsOf(List<PublicClubPost> posts) {
+        return posts.stream().map(PublicClubPost::getId).toList();
     }
 }

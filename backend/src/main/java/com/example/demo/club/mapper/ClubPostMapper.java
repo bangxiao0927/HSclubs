@@ -12,10 +12,6 @@ import java.util.List;
 @Mapper
 public interface ClubPostMapper {
 
-    List<ClubPost> findFeedByClubId(@Param("clubId") Long clubId,
-                                     @Param("offset") int offset,
-                                     @Param("limit") int limit);
-
     int countFeedByClubId(@Param("clubId") Long clubId);
 
     // Public projection for the anonymous club feed: post columns plus the author's display
@@ -64,8 +60,6 @@ public interface ClubPostMapper {
     // locked row's id, or null if no row matched -- a FOR UPDATE matching zero rows takes no
     // lock, so a null here means "missing post", not "lock acquired on nothing".
     Long lockPostIdForUpdate(@Param("id") Long id, @Param("clubId") Long clubId);
-
-    List<ClubPostComment> findCommentsByPostId(@Param("postId") Long postId);
 
     // Raw (non-public) read-back scoped to its post, for the delete endpoint's own author/
     // president/platform-owner authorization: exposes author_oauth_user_id, so it must never be

@@ -19,28 +19,11 @@
         id, club_id, author_oauth_user_id, title, image_url, pinned_at, pinned_by_oauth_user_id, created_at
     </sql>
 
-    <!-- Shared by findFeedByClubId, findPublicFeedByClubId, and countFeedByClubId so the count
-         can never disagree with either items query about which rows are "this club's feed". -->
+    <!-- Shared by findPublicFeedByClubId and countFeedByClubId so the count can never disagree
+         with the items query about which rows are "this club's feed". -->
     <sql id="FeedClause">
         club_id = #{clubId}
     </sql>
-
-    <!-- The CASE WHEN form is required over "(pinned_at IS NOT NULL) DESC": that expression is
-         1/0 in MySQL but BOOLEAN in H2 MODE=MySQL, an engine-dependent difference this repo has
-         already been bitten by (see schema.sql's achievements CLOB-vs-JSON comment). The
-         trailing "id DESC" is a deliberate pagination-stability tiebreaker: created_at only has
-         second granularity, so without it two posts created in the same second could swap
-         places between page requests, duplicating or skipping items across a page boundary. -->
-    <select id="findFeedByClubId" resultMap="ClubPostResultMap">
-        SELECT <include refid="PostColumnList" />
-        FROM club_post
-        WHERE <include refid="FeedClause" />
-        ORDER BY CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC,
-                 pinned_at  DESC,
-                 created_at DESC,
-                 id         DESC
-        LIMIT #{limit} OFFSET #{offset}
-    </select>
 
     <select id="countFeedByClubId" resultType="int">
         SELECT COUNT(*) FROM club_post WHERE <include refid="FeedClause" />
@@ -90,7 +73,15 @@
          ClubMembershipRequest's result maps (both select ou.email and both sit behind
          requireManageAccess): this is the first anonymous, unauthenticated endpoint to join
          oauth_users, so only its display_name/avatar_url columns are selected, aliased so the
-         result map above cannot accidentally widen into any other oauth_users column. -->
+         result map above cannot accidentally widen into any other oauth_users column.
+
+         The CASE WHEN form in ORDER BY is required over "(cp.pinned_at IS NOT NULL) DESC": that
+         expression is 1/0 in MySQL but BOOLEAN in H2 MODE=MySQL, an engine-dependent difference
+         this repo has already been bitten by (see schema.sql's achievements CLOB-vs-JSON
+         comment). The trailing "cp.id DESC" is a deliberate pagination-stability tiebreaker:
+         created_at only has second granularity, so without it two posts created in the same
+         second could swap places between page requests, duplicating or skipping items across a
+         page boundary. -->
     <select id="findPublicFeedByClubId" resultMap="PublicClubPostResultMap">
         SELECT <include refid="PublicPostColumnList" />
         FROM club_post cp
@@ -160,13 +151,6 @@
         <result column="created_at" property="createdAt" />
     </resultMap>
 
-    <select id="findCommentsByPostId" resultMap="ClubPostCommentResultMap">
-        SELECT id, post_id, author_oauth_user_id, body, created_at
-        FROM club_post_comment
-        WHERE post_id = #{postId}
-        ORDER BY created_at ASC, id ASC
-    </select>
-
     <select id="findCommentByIdAndPostId" resultMap="ClubPostCommentResultMap">
         SELECT id, post_id, author_oauth_user_id, body, created_at
         FROM club_post_comment
@@ -206,7 +190,7 @@
     </sql>
 
     <!-- Oldest first, flat, uncapped by pagination (the 50-comment cap makes it unnecessary,
-         see #79). "id ASC" is the same same-second tiebreaker findFeedByClubId relies on. -->
+         see #79). "id ASC" is the same same-second tiebreaker findPublicFeedByClubId relies on. -->
     <select id="findPublicCommentsByPostId" resultMap="PublicClubPostCommentResultMap">
         SELECT <include refid="PublicCommentColumnList" />
         FROM club_post_comment cpc

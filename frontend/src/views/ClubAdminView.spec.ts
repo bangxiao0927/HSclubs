@@ -162,4 +162,59 @@ describe('ClubAdminView member count', () => {
     expect(invalidateClubCacheMock).toHaveBeenCalledTimes(1)
     expect(wrapper.find('.club-avatar img').attributes('src')).toBe('https://cdn.example.com/new.png')
   })
+
+  it('shows an ordinary error body verbatim when the image upload fails', async () => {
+    const club = buildClub({ imageUrl: 'https://cdn.example.com/old.png' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => 'Unsupported image type. Supported formats are JPEG, PNG, WebP, and GIF; HEIC is not supported.',
+    }))
+    const wrapper = await mountView(club)
+    const input = wrapper.find<HTMLInputElement>('input[type="file"]')
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [new File(['image'], 'club.heic', { type: 'image/heic' })],
+    })
+
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(wrapper.find('.upload-error').text()).toBe(
+      'Unsupported image type. Supported formats are JPEG, PNG, WebP, and GIF; HEIC is not supported.',
+    )
+    expect(invalidateClubCacheMock).not.toHaveBeenCalled()
+  })
+
+  // Spring's own multipart-size rejection (see ApiExceptionHandler and
+  // docs/API.md's 413 row): an application/problem+json body, not plain text.
+  it('shows the ProblemDetail detail message when the image upload is rejected as too large', async () => {
+    const club = buildClub({ imageUrl: 'https://cdn.example.com/old.png' })
+    const problemBody = JSON.stringify({
+      title: 'Content Too Large',
+      status: 413,
+      detail: 'The uploaded file is too large. Please choose a smaller file and try again.',
+      instance: '/api/clubs/1/image',
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 413,
+      headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/problem+json' : null) },
+      text: async () => problemBody,
+    }))
+    const wrapper = await mountView(club)
+    const input = wrapper.find<HTMLInputElement>('input[type="file"]')
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [new File(['image'], 'huge.png', { type: 'image/png' })],
+    })
+
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(wrapper.find('.upload-error').text()).toBe(
+      'The uploaded file is too large. Please choose a smaller file and try again.',
+    )
+    expect(invalidateClubCacheMock).not.toHaveBeenCalled()
+  })
 })
