@@ -25,7 +25,7 @@ import com.example.demo.club.service.ClubService;
 import com.example.demo.club.service.ClubVisibilityPolicy;
 import com.example.demo.security.AuthenticatedUserResolver;
 import java.io.IOException;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -139,7 +139,7 @@ class ClubPostControllerTest {
         created.setClubId(1L);
         created.setTitle("Meeting recap");
         created.setImageUrl("/uploads/club-posts/uuid.jpg");
-        created.setCreatedAt(LocalDateTime.of(2024, 1, 1, 10, 0));
+        created.setCreatedAt(Instant.parse("2024-01-01T10:00:00Z"));
         created.setAuthorDisplayName("Ada Lovelace");
         created.setAuthorAvatarUrl("/uploads/avatar-cache/ada.jpg");
         when(clubPostService.publish(eq(1L), eq(42L), eq("Meeting recap"), any())).thenReturn(created);
@@ -152,7 +152,7 @@ class ClubPostControllerTest {
             .andExpect(jsonPath("$.id").value(9))
             .andExpect(jsonPath("$.title").value("Meeting recap"))
             .andExpect(jsonPath("$.imageUrl").value("/uploads/club-posts/uuid.jpg"))
-            .andExpect(jsonPath("$.createdAt").exists())
+            .andExpect(jsonPath("$.createdAt").value("2024-01-01T10:00:00Z"))
             .andExpect(jsonPath("$.authorDisplayName").value("Ada Lovelace"))
             .andExpect(jsonPath("$.authorAvatarUrl").value("/uploads/avatar-cache/ada.jpg"))
             .andReturn().getResponse().getContentAsString();
@@ -255,6 +255,23 @@ class ClubPostControllerTest {
             .andExpect(jsonPath("$.page").value(0))
             .andExpect(jsonPath("$.size").value(12))
             .andExpect(jsonPath("$.total").value(0));
+    }
+
+    @Test
+    void feedItemsCarryTheirCommentCount() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setStatus("active");
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        PublicClubPost post = new PublicClubPost();
+        post.setId(9L);
+        post.setCommentCount(3);
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
+            .thenReturn(new ClubPostService.PostFeedPage(List.of(post), 0, 12, 1));
+
+        mockMvc.perform(get("/api/clubs/1/posts"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].commentCount").value(3));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.example.demo.club.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -23,6 +24,8 @@ import java.nio.file.Path;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -279,6 +282,50 @@ class ClubPostFeedIntegrationTest {
             .andExpect(jsonPath("$.items[0].authorAvatarUrl").value("/uploads/avatar-cache/ada.jpg"));
     }
 
+    // Real DB, real join: proves the correlated subquery in ClubPostMapper.xml's
+    // PublicPostColumnList counts only that post's own comments, not every comment on the club.
+    @Test
+    void feedItemCommentCountReflectsOnlyThatPostsOwnComments() throws Exception {
+        long clubId = createActiveClubWithAMember();
+        long firstPostId = insertPost(clubId, "Post with comments", null);
+        insertPost(clubId, "Post with no comments", null);
+        insertComment(firstPostId, "First comment");
+        insertComment(firstPostId, "Second comment");
+
+        String responseBody = mockMvc.perform(get("/api/clubs/" + clubId + "/posts"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(responseBody).contains("\"commentCount\":2");
+        assertThat(responseBody).contains("\"commentCount\":0");
+    }
+
+    // Full-stack regression for the same bug ClubPostMapperTest guards at the mapper layer: a
+    // post created "just now" (DB default CURRENT_TIMESTAMP, no literal override) must serialize
+    // as an instant close to the real Instant.now(), never shifted hours away -- proving the
+    // whole mapper-to-JSON pipeline, not just the mapper in isolation.
+    //
+    // This asserts a property that holds regardless of timezone by construction: UNIX_TIMESTAMP
+    // and CURRENT_TIMESTAMP are session-consistent inverses of each other no matter which zone
+    // is actually in effect, so there is nothing to force here (see ClubPostMapperTest's literal
+    // round-trip tests for why TimeZone.setDefault() would not reliably change H2's already-
+    // established session zone anyway). Running this suite under both this repo's normal
+    // non-UTC local/dev environment and an explicit `TZ=UTC` (CI-like) process both exercise
+    // this test meaningfully, without needing an in-test override.
+    @Test
+    void justCreatedPostsCreatedAtIsCloseToNow() throws Exception {
+        long clubId = createActiveClubWithAMember();
+        insertPost(clubId, "Fresh post", null);
+
+        String responseBody = mockMvc.perform(get("/api/clubs/" + clubId + "/posts"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        String createdAt = extractJsonStringField(responseBody, "createdAt");
+        assertThat(createdAt).endsWith("Z");
+        assertThat(Instant.parse(createdAt)).isCloseTo(Instant.now(), within(5, ChronoUnit.SECONDS));
+    }
+
     @Test
     void pinnedPostsSortToTheFrontExactlyOnce() throws Exception {
         long clubId = createActiveClubWithAMember();
@@ -383,6 +430,14 @@ class ClubPostFeedIntegrationTest {
             return statement;
         }, keyHolder);
         return extractId(keyHolder);
+    }
+
+    private void insertComment(long postId, String body) {
+        long authorUid = jdbcTemplate.queryForObject(
+            "SELECT author_oauth_user_id FROM club_post WHERE id = ?", Long.class, postId);
+        jdbcTemplate.update(
+            "INSERT INTO club_post_comment (post_id, author_oauth_user_id, body) VALUES (?, ?, ?)",
+            postId, authorUid, body);
     }
 
     // H2 reports every column with a default (id, created_at, updated_at) as "generated" here,

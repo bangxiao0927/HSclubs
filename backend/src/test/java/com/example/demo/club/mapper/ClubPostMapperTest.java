@@ -6,6 +6,9 @@ import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.ClubPostComment;
 import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.club.model.PublicClubPostComment;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -341,6 +344,24 @@ class ClubPostMapperTest {
         assertThat(clubPostMapper.findPublicCommentByIdAndPostId(1L, 2L)).isNull();
     }
 
+    // Mirrors findPublicPostByIdAndClubIdConvertsALiteralCreatedAtUsingTheEffectiveSystemZone:
+    // PublicClubPostComment#createdAt is on the same UNIX_TIMESTAMP/EpochSecondsInstantTypeHandler
+    // contract as PublicClubPost#createdAt, so it must round-trip to the correct instant too --
+    // see that test's comment for why this derives the expected value from
+    // ZoneId.systemDefault() rather than attempting to force one with TimeZone.setDefault().
+    @Test
+    void findPublicCommentByIdAndPostIdConvertsALiteralCreatedAtUsingTheEffectiveSystemZone() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertCommentAt(1L, 1L, "Great photo!", "2024-01-01 11:30:00");
+
+        PublicClubPostComment comment = clubPostMapper.findPublicCommentByIdAndPostId(1L, 1L);
+
+        Instant expected = LocalDateTime.of(2024, 1, 1, 11, 30)
+            .atZone(ZoneId.systemDefault())
+            .toInstant();
+        assertThat(comment.getCreatedAt()).isEqualTo(expected);
+    }
+
     @Test
     void findAllImageUrlsReturnsEveryPostsImageUrlAcrossClubs() {
         jdbcTemplate.update("INSERT INTO clubs (id, name) VALUES (2, 'Robotics')");
@@ -364,6 +385,43 @@ class ClubPostMapperTest {
             assertThat(post.getAuthorDisplayName()).isEqualTo("Ada Lovelace");
             assertThat(post.getAuthorAvatarUrl()).isEqualTo("/uploads/avatar-cache/ada.jpg");
         });
+    }
+
+    // The public feed card shows a comment count without the caller ever fetching the
+    // (separate, public) comments endpoint, so the count has to travel with the feed item
+    // itself: a correlated count against club_post_comment, never a join that could multiply
+    // the post row per comment.
+    @Test
+    void findPublicFeedByClubIdIncludesCommentCountCorrelatedToEachPost() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertPost(2L, 1L, "2024-01-02 10:00:00", null);
+        insertComment(1L, "First");
+        insertComment(1L, "Second");
+
+        List<PublicClubPost> feed = clubPostMapper.findPublicFeedByClubId(1L, 0, 10);
+
+        assertThat(feed).extracting(PublicClubPost::getId, PublicClubPost::getCommentCount)
+            .containsExactlyInAnyOrder(
+                org.assertj.core.groups.Tuple.tuple(1L, 2),
+                org.assertj.core.groups.Tuple.tuple(2L, 0));
+    }
+
+    @Test
+    void findPublicPostByIdAndClubIdIncludesCommentCount() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+        insertComment(1L, "Nice!");
+
+        PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 1L);
+
+        assertThat(post.getCommentCount()).isEqualTo(1);
+    }
+
+    private void insertComment(long postId, String body) {
+        ClubPostComment comment = new ClubPostComment();
+        comment.setPostId(postId);
+        comment.setAuthorOauthUserId(1L);
+        comment.setBody(body);
+        clubPostMapper.insertComment(comment);
     }
 
     // Same ordering contract as findFeedByClubId: pinned posts first (by pinned_at DESC), then
@@ -427,6 +485,32 @@ class ClubPostMapperTest {
         PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 2L);
 
         assertThat(post).isNull();
+    }
+
+    // The regression this guards: PublicClubPost#createdAt used to be a bare LocalDateTime, a
+    // timezone-naive wall-clock reading a browser could misparse as its own local time, making a
+    // just-created post appear hours in the future.
+    //
+    // This does NOT force a specific zone with TimeZone.setDefault(): H2 resolves its own
+    // date/time functions against the JVM's default zone at (or before) connection setup, so a
+    // TimeZone.setDefault() call from inside a @Test method that runs after the connection
+    // pool/DataSource already exists has no effect on H2's CURRENT_TIMESTAMP/UNIX_TIMESTAMP --
+    // provably so: with that override in place, running this suite under an actual `TZ=UTC`
+    // process still produced UTC-derived instants, not America/Los_Angeles-derived ones. Instead
+    // this derives the expected instant from ZoneId.systemDefault(), the zone that is actually
+    // in effect, so the assertion is correct under whatever real zone the process runs with --
+    // exercised as both a genuinely non-UTC zone (this suite's normal local/dev environment) and
+    // UTC (this suite run with `TZ=UTC`, matching CI).
+    @Test
+    void findPublicPostByIdAndClubIdConvertsALiteralCreatedAtUsingTheEffectiveSystemZone() {
+        insertPost(1L, 1L, "2024-01-01 10:00:00", null);
+
+        PublicClubPost post = clubPostMapper.findPublicPostByIdAndClubId(1L, 1L);
+
+        Instant expected = LocalDateTime.of(2024, 1, 1, 10, 0)
+            .atZone(ZoneId.systemDefault())
+            .toInstant();
+        assertThat(post.getCreatedAt()).isEqualTo(expected);
     }
 
     @Test

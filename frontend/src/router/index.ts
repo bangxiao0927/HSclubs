@@ -32,6 +32,11 @@ const router = createRouter({
       component: () => import('../views/ClubDetailView.vue'),
     },
     {
+      path: '/clubs/:id/media',
+      name: 'club-media',
+      component: () => import('../views/ClubMediaView.vue'),
+    },
+    {
       path: '/clubs/:id/admin',
       name: 'club-admin',
       component: () => import('../views/ClubAdminView.vue'),
