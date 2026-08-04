@@ -63,15 +63,27 @@ const commentsByPost = ref<Record<number, CommentsEntry>>({})
 // of two in-flight requests happens to resolve (or reject) last.
 const commentsRequestGeneration = ref<Record<number, number>>({})
 let loadedClubId: string | null = null
-// A monotonically increasing counter shared by every request that writes to posts/page/size/
-// total/club/error (load() and backfillCurrentPageAfterPostDeletion): the single source of
-// truth for "which of those requests is the newest one". A fresh load() (a route/page/club
-// change) and a delete's backfill both bump this before starting their request and compare
-// their own captured number against the live one once the response settles, so whichever
-// request is actually the newest is the only one ever allowed to write -- regardless of which
-// kind of request it is, or which one happens to resolve (or reject) last. Same pattern as
-// commentsRequestGeneration above, at the whole-feed level instead of per-post.
-let feedRequestGeneration = 0
+// A monotonically increasing counter *per feed context* (club id + page + size), bumped by
+// every request that writes to posts/page/size/total/club/error -- load() (a route/page/club
+// change) and a delete's backfill both use this, keyed the same way. Keying by context
+// (rather than one flat counter) matters: a flat counter lets a request for an *unrelated*
+// context (e.g. a delete's backfill for the page the viewer just left) invalidate a still-
+// relevant request just by bumping the counter after it started, even though that unrelated
+// request's own route-context check would separately reject it -- see isNewestForItsContext
+// below, which checks both this counter (to order two requests for the *same* context, such
+// as two deletes' backfills on the same page) and the live route (to reject a response whose
+// whole context the viewer has since navigated away from, independent of counter timing).
+// Same pattern as commentsRequestGeneration above, at the whole-feed level instead of per-post.
+let feedRequestGenerationByContext: Record<string, number> = {}
+
+const feedContextKey = (clubIdOrSlug: string, requestedPage: number, requestedSize: number) =>
+  `${clubIdOrSlug}::${requestedPage}::${requestedSize}`
+
+const bumpFeedGeneration = (key: string) => {
+  const next = (feedRequestGenerationByContext[key] ?? 0) + 1
+  feedRequestGenerationByContext = { ...feedRequestGenerationByContext, [key]: next }
+  return next
+}
 
 const routeClubId = computed(() => {
   const raw = route.params.id
@@ -98,13 +110,32 @@ const parseQueryInt = (raw: unknown, fallback: number) => {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
 }
 
+const currentFeedContextKey = () =>
+  feedContextKey(
+    routeClubId.value,
+    Math.max(0, parseQueryInt(route.query.page, 0)),
+    Math.max(1, parseQueryInt(route.query.size, DEFAULT_PAGE_SIZE)),
+  )
+
+// True only if `key` is still the context the viewer is actually looking at right now (the
+// route has not moved on to a different page/club since this request started) *and* no newer
+// request for that same context has already resolved. Both matter: the first rejects a
+// response whose whole context is already irrelevant regardless of counter timing; the second
+// orders two still-relevant requests for the *same* context against each other.
+const isNewestForItsContext = (key: string, generation: number) =>
+  key === currentFeedContextKey() && feedRequestGenerationByContext[key] === generation
+
 const load = async () => {
   const clubIdOrSlug = routeClubId.value
   if (!clubIdOrSlug) {
     return
   }
 
-  const generation = ++feedRequestGeneration
+  const requestedPage = Math.max(0, parseQueryInt(route.query.page, 0))
+  const requestedSize = Math.max(1, parseQueryInt(route.query.size, DEFAULT_PAGE_SIZE))
+  const key = feedContextKey(clubIdOrSlug, requestedPage, requestedSize)
+  const generation = bumpFeedGeneration(key)
+
   loading.value = true
   error.value = ''
   expandedPostIds.value = new Set()
@@ -119,8 +150,6 @@ const load = async () => {
   pinningPostIds.value = new Set()
   deletingCommentIds.value = new Set()
 
-  const requestedPage = Math.max(0, parseQueryInt(route.query.page, 0))
-  const requestedSize = Math.max(1, parseQueryInt(route.query.size, DEFAULT_PAGE_SIZE))
   // Pagination re-runs this on every page/size query change but must not re-fetch a club
   // detail record that hasn't changed -- only the feed page itself is new.
   const needsClub = loadedClubId !== clubIdOrSlug
@@ -130,7 +159,7 @@ const load = async () => {
       needsClub ? fetchClubById(clubIdOrSlug) : Promise.resolve(club.value),
       fetchClubMediaFeed(clubIdOrSlug, requestedPage, requestedSize),
     ])
-    if (generation !== feedRequestGeneration) {
+    if (!isNewestForItsContext(key, generation)) {
       // A newer load() (or a delete's backfill) has since superseded this request; applying
       // this stale response now would silently undo whatever that newer request already wrote.
       return
@@ -144,7 +173,7 @@ const load = async () => {
     size.value = feed.size
     total.value = feed.total
   } catch (err) {
-    if (generation !== feedRequestGeneration) {
+    if (!isNewestForItsContext(key, generation)) {
       return
     }
     error.value = err instanceof Error ? err.message : 'Failed to load club media'
@@ -152,7 +181,7 @@ const load = async () => {
     posts.value = []
     loadedClubId = null
   } finally {
-    if (generation === feedRequestGeneration) {
+    if (isNewestForItsContext(key, generation)) {
       loading.value = false
     }
   }
@@ -409,20 +438,23 @@ const handleDeletePost = async (postId: number) => {
 // on a page with nothing to show, so this navigates back to the previous (now-valid) page
 // instead, which itself reloads through the normal query-driven `load()` path.
 //
-// Guarded by the same feedRequestGeneration counter load() uses (see its declaration above),
-// not just a route-context comparison: two backfills from two deletes in quick succession share
-// the same route/page/size throughout, so a route check alone cannot tell them apart -- only a
-// monotonic counter can guarantee the older of the two never wins just because its response
-// happened to resolve last.
+// Guarded by isNewestForItsContext, the same per-context generation+route check load() uses
+// (see feedRequestGenerationByContext's declaration above): two backfills from two deletes in
+// quick succession share the same route/page/size throughout, so the generation counter for
+// that context is what orders the older one out; a Next click or club change in between is
+// what the live-route half of that check catches instead, independent of the counter, since
+// this and a newer load() bump *different* contexts' counters and so never interfere with
+// each other. Never touches `loading` -- that stays load()'s alone to manage.
 const backfillCurrentPageAfterPostDeletion = async () => {
   const requestedClubId = routeClubId.value
   const requestedPage = page.value
   const requestedSize = size.value
-  const generation = ++feedRequestGeneration
+  const key = feedContextKey(requestedClubId, requestedPage, requestedSize)
+  const generation = bumpFeedGeneration(key)
 
   try {
     const feed = await fetchClubMediaFeed(requestedClubId, requestedPage, requestedSize)
-    if (generation !== feedRequestGeneration) {
+    if (!isNewestForItsContext(key, generation)) {
       return
     }
     if (feed.items.length === 0 && requestedPage > 0) {
@@ -434,7 +466,7 @@ const backfillCurrentPageAfterPostDeletion = async () => {
     size.value = feed.size
     total.value = feed.total
   } catch {
-    if (generation !== feedRequestGeneration) {
+    if (!isNewestForItsContext(key, generation)) {
       return
     }
     // The delete itself already succeeded; a failed backfill just leaves the optimistic,
