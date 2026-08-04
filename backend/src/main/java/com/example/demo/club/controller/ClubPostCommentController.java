@@ -81,8 +81,7 @@ public class ClubPostCommentController {
         requirePostInClub(postId, club.getId());
 
         Long viewerOauthUserId = viewerEmail != null ? oAuthUserMapper.findIdByEmail(viewerEmail) : null;
-        boolean viewerCanModerateAnyPost = Boolean.TRUE.equals(club.getCanManage())
-            || authenticatedUserResolver.isPlatformOwner(authentication);
+        boolean viewerCanModerateAnyPost = clubContentModerationPolicy.canModerateAnyContent(club, authentication);
         return clubPostCommentService.findPublicComments(postId, viewerOauthUserId, viewerCanModerateAnyPost);
     }
 

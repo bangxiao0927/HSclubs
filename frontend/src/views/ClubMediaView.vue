@@ -327,11 +327,30 @@ const handleDeletePost = async (postId: number) => {
 // nonzero page and the re-fetch shows it is now empty, the viewer would otherwise be stranded
 // on a page with nothing to show, so this navigates back to the previous (now-valid) page
 // instead, which itself reloads through the normal query-driven `load()` path.
+//
+// The request's own club id, page, and size are captured up front, before the `await`, and
+// re-checked against the live route once the response arrives: a fast Next/Previous click (or a
+// club navigation) issued while this backfill is still in flight must not let this now-stale
+// response overwrite whatever that newer navigation's own `load()` call already wrote -- last
+// network response to resolve is not necessarily the last request the viewer actually intended.
 const backfillCurrentPageAfterPostDeletion = async () => {
+  const requestedClubId = routeClubId.value
+  const requestedPage = page.value
+  const requestedSize = size.value
+  const requestedQueryPage = route.query.page
+  const requestedQuerySize = route.query.size
+  const isStillTheSameFeedContext = () =>
+    routeClubId.value === requestedClubId &&
+    route.query.page === requestedQueryPage &&
+    route.query.size === requestedQuerySize
+
   try {
-    const feed = await fetchClubMediaFeed(routeClubId.value, page.value, size.value)
-    if (feed.items.length === 0 && page.value > 0) {
-      goToPage(page.value - 1)
+    const feed = await fetchClubMediaFeed(requestedClubId, requestedPage, requestedSize)
+    if (!isStillTheSameFeedContext()) {
+      return
+    }
+    if (feed.items.length === 0 && requestedPage > 0) {
+      goToPage(requestedPage - 1)
       return
     }
     posts.value = feed.items

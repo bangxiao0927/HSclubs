@@ -107,6 +107,22 @@ const buildAuthUser = (overrides: Partial<AuthUser> = {}): AuthUser => ({
   ...overrides,
 })
 
+// Lets a test control exactly when a mocked fetchClubMediaFeed call resolves, so an ordering
+// scenario (an older request's response arriving after a newer one) can be reproduced
+// deterministically instead of hoping a real race happens to line up the same way.
+interface Deferred<T> {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+const createDeferred = <T,>(): Deferred<T> => {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
 let router: Router
 
 const mountAtMediaRoute = async (path = '/clubs/1/media') => {
@@ -905,6 +921,63 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
     expect(router.currentRoute.value.query.page).toBeUndefined()
     expect(wrapper.text()).toContain('No posts yet.')
+  })
+
+  // The exact race the second review round called out: a delete's own backfill fetch for the
+  // page the viewer is leaving must not clobber an immediate Next click's own, newer load --
+  // deterministic via a manually-resolved (deferred) promise rather than hoping a real race
+  // lines up the same way on every test run.
+  it('ignores a stale post-delete backfill response for the old page when Next was clicked before it resolved', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true }),
+          buildPost({ id: 2, title: 'Post 2' }),
+        ],
+        page: 0,
+        size: 2,
+        total: 4,
+      }),
+    )
+    const backfillDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillDeferred.promise)
+    const nextPageDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(nextPageDeferred.promise)
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=2')
+    await flushPromises()
+
+    // Deleting post 1 leaves post 2 on the page (never an empty list), so the Next button stays
+    // mounted and enabled while its own backfill fetch for page 0 is still in flight below.
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Post 2')
+
+    // The viewer navigates to the next page before that backfill fetch has resolved.
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+
+    // The Next navigation's own, newer fetch resolves first.
+    nextPageDeferred.resolve(buildFeed({ items: [buildPost({ id: 4, title: 'Post 4' })], page: 1, size: 2, total: 3 }))
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.page).toBe('1')
+    expect(wrapper.text()).toContain('Post 4')
+    expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 2 of 2')
+
+    // The stale backfill for the abandoned page 0 finally resolves and must be ignored entirely:
+    // no write to posts/page/size/total, and no navigation.
+    backfillDeferred.resolve(
+      buildFeed({ items: [buildPost({ id: 99, title: 'Stale Backfill Post' })], page: 0, size: 2, total: 1 }),
+    )
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.page).toBe('1')
+    expect(wrapper.text()).toContain('Post 4')
+    expect(wrapper.text()).not.toContain('Stale Backfill Post')
+    expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 2 of 2')
   })
 })
 
