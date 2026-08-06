@@ -619,8 +619,10 @@ public class ImageStorageService {
         return offset >= 0 && offset <= arrayLength - length;
     }
 
-    // JPEG has no transparency; Thumbnailator's own JPEG writer flattens onto black (see its
-    // OutputStreamImageSink), not white, so transparency is flattened here instead.
+    // JPEG has no transparency, and ImageIO's JPEG writer does not flatten for us: handed an
+    // image with an alpha band it either writes wrong colours or refuses outright. Flattening
+    // explicitly here also pins *which* colour transparency collapses to -- white, matching the
+    // page background, rather than the black that the previously-used Thumbnailator picked.
     private static BufferedImage flattenToWhiteBackground(BufferedImage source) {
         BufferedImage flattened = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = flattened.createGraphics();
