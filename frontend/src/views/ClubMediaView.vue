@@ -106,6 +106,13 @@ const backTarget = computed(() => (routeClubId.value ? `/clubs/${routeClubId.val
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / Math.max(size.value, 1))))
 const hasNextPage = computed(() => (page.value + 1) * size.value < total.value)
 const hasPreviousPage = computed(() => page.value > 0)
+// The backend's clampPage only clamps to max(0, page) -- it cannot know the total at request
+// time -- so ?page=999 from a stale bookmark comes back as an empty page while total > 0. The
+// pagination nav stays reachable for exactly that case, but stepping back one page at a time
+// would mean hundreds of clicks through empty pages, so from beyond the end Previous goes
+// straight to the last page the server-reported total can actually fill. On a page that is
+// genuinely in range this is just page - 1, unchanged.
+const previousPageTarget = computed(() => Math.min(page.value - 1, totalPages.value - 1))
 
 const parseQueryInt = (raw: unknown, fallback: number) => {
   const value = Array.isArray(raw) ? raw[0] : raw
@@ -468,7 +475,12 @@ const backfillCurrentPageAfterPostDeletion = async (session: ViewSession) => {
     const feed = await fetchClubMediaFeed(requestedClubId, requestedPage, requestedSize)
     attempt.apply(() => {
       if (feed.items.length === 0 && requestedPage > 0) {
-        goToPage(requestedPage - 1)
+        // One page back is only the right target if that page still exists: other viewers may
+        // have deleted whole pages' worth while this delete was in flight. This response's own
+        // total/size say how much is left, so land on the last page that can still hold
+        // something rather than on another empty page.
+        const lastPageWithContent = Math.max(0, Math.ceil(feed.total / Math.max(feed.size, 1)) - 1)
+        goToPage(Math.min(requestedPage - 1, lastPageWithContent))
         return
       }
       posts.value = feed.items
@@ -815,7 +827,7 @@ watch(
       </ul>
 
       <nav v-if="posts.length || page > 0" class="mv-pagination">
-        <button type="button" :disabled="!hasPreviousPage" @click="goToPage(page - 1)">Previous</button>
+        <button type="button" :disabled="!hasPreviousPage" @click="goToPage(previousPageTarget)">Previous</button>
         <span class="mv-pagination-status">Page {{ page + 1 }} of {{ totalPages }}</span>
         <button type="button" :disabled="!hasNextPage" @click="goToPage(page + 1)">Next</button>
       </nav>

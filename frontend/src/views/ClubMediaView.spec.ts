@@ -245,7 +245,10 @@ describe('ClubMediaView out-of-range pagination', () => {
     fetchClubByIdMock.mockResolvedValue(buildClub())
     fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed({ items: [], page: 5, size: 12, total: 36 }))
     fetchClubMediaFeedMock.mockResolvedValueOnce(
-      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1' })], page: 4, size: 12, total: 36 }),
+      // total 36 at size 12 makes page 2 the last page that can hold anything, so a
+      // self-consistent fixture cannot serve items for page 4: one Previous click has to land
+      // on page 2 for this to be a single-click recovery at all.
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1' })], page: 2, size: 12, total: 36 }),
     )
 
     const wrapper = await mountAtMediaRoute('/clubs/1/media?page=5')
@@ -254,7 +257,49 @@ describe('ClubMediaView out-of-range pagination', () => {
     await wrapper.find('.mv-pagination button:first-of-type').trigger('click')
     await flushPromises()
 
+    expect(fetchClubMediaFeedMock).toHaveBeenLastCalledWith('1', 2, 12)
+    expect(router.currentRoute.value.query.page).toBe('2')
     expect(wrapper.text()).toContain('Post 1')
+  })
+
+  // A stale bookmark can be arbitrarily far past the end (?page=999). Stepping back one page at
+  // a time would mean hundreds of clicks through empty pages, so Previous jumps straight to the
+  // last page the reported total can fill.
+  it('jumps straight to the last populated page from a far out-of-range page instead of stepping back one at a time', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed({ items: [], page: 999, size: 12, total: 36 }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1' })], page: 2, size: 12, total: 36 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=999')
+    await flushPromises()
+
+    await wrapper.find('.mv-pagination button:first-of-type').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenLastCalledWith('1', 2, 12)
+    expect(wrapper.text()).toContain('Post 1')
+  })
+
+  // The clamp must not change what Previous means on a page that is genuinely in range.
+  it('still steps back exactly one page from a valid page', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 9, title: 'Post 9' })], page: 2, size: 12, total: 36 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Post 5' })], page: 1, size: 12, total: 36 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-pagination button:first-of-type').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenLastCalledWith('1', 1, 12)
+    expect(wrapper.text()).toContain('Post 5')
   })
 })
 
@@ -1184,6 +1229,39 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     expect(router.currentRoute.value.query.page).toBe('0')
     expect(wrapper.text()).toContain('Post 1')
     expect(wrapper.text()).toContain('Page 1 of 1')
+  })
+
+  // Stepping back exactly one page is only right when that page still exists. If other viewers
+  // deleted whole pages' worth in the meantime, the backfill's own response says how much is
+  // left, so the step back should land on the last page that total can fill rather than on
+  // another empty page the viewer would have to click back out of again.
+  it('lands on the last page the backfill still reports content for, not blindly one page back', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 8, title: 'Post 8', viewerCanDelete: true })], page: 3, size: 2, total: 8 }),
+    )
+    // Only two posts are left club-wide by the time the backfill runs, so page 0 is the last
+    // page with anything on it -- page 2 would be just as empty as page 3.
+    fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed({ items: [], page: 3, size: 2, total: 2 }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [buildPost({ id: 1, title: 'Post 1' }), buildPost({ id: 2, title: 'Post 2' })],
+        page: 0,
+        size: 2,
+        total: 2,
+      }),
+    )
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=3&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(3, '1', 0, 2)
+    expect(router.currentRoute.value.query.page).toBe('0')
+    expect(wrapper.text()).toContain('Post 1')
   })
 
   it('does not navigate away when deleting the last item leaves page zero empty', async () => {
