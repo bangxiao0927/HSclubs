@@ -1732,3 +1732,194 @@ describe('ClubMediaView relative time under a non-UTC browser timezone', () => {
     expect(relativeTimeText).not.toMatch(/^in /)
   })
 })
+
+// Every one of these covers the same structural rule rather than a single incident: an async
+// user action captures the view session that was current when the gesture started, and any
+// write it makes afterwards is dropped if a navigation has since begun a new session. Before
+// that rule existed, only the post-delete *backfill* was guarded, so the delete's own
+// optimistic write -- and publish, pin/unpin, comment delete, and a stale comments GET --
+// could all still land on a feed the viewer had already navigated away from.
+describe('ClubMediaView view-state ownership across navigations', () => {
+  it('drops a post delete that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Club One Post One', viewerCanDelete: true }),
+          buildPost({ id: 2, title: 'Club One Post Two' }),
+        ],
+        page: 0,
+        size: 2,
+        total: 4,
+      }),
+    )
+    const deleteDeferred = createDeferred<void>()
+    deleteClubPostMock.mockReturnValueOnce(deleteDeferred.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Club Two Post One' }),
+          buildPost({ id: 9, title: 'Club Two Post Nine' }),
+        ],
+        page: 0,
+        size: 2,
+        total: 5,
+      }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    await router.push('/clubs/2/media?page=0&size=2')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Club Two Post One')
+    expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 1 of 3')
+
+    // The delete for the abandoned club finally succeeds server-side. Its optimistic local
+    // removal and its total decrement belong to a feed that is no longer on screen: post id 1
+    // here is a *different* club's post that happens to share the id, and the total is club
+    // two's, not club one's.
+    deleteDeferred.resolve()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Club Two Post One')
+    expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 1 of 3')
+    // No backfill either: a backfill for the abandoned session would be a wasted request whose
+    // response could only ever be discarded.
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('drops a publish that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Club One Post One' })], page: 0, size: 2, total: 4 }),
+    )
+    const publishDeferred = createDeferred<ClubPost>()
+    publishClubPostMock.mockReturnValueOnce(publishDeferred.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 9, title: 'Club Two Post Nine' })], page: 0, size: 2, total: 5 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-publish-title-input').setValue('Meeting recap')
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [new File(['a'], 'photo.jpg', { type: 'image/jpeg' })],
+    })
+    await fileInput.trigger('change')
+    await wrapper.find('.mv-publish-form').trigger('submit')
+    await flushPromises()
+
+    await router.push('/clubs/2/media?page=0&size=2')
+    await flushPromises()
+
+    publishDeferred.resolve(buildPost({ id: 42, title: 'Freshly Published' }))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Freshly Published')
+    expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 1 of 3')
+  })
+
+  it('drops a pin that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: true }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 7, title: 'Club One Post Seven', pinnedAt: null })], total: 1 }),
+    )
+    const pinDeferred = createDeferred<void>()
+    pinClubPostMock.mockReturnValueOnce(pinDeferred.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 7, title: 'Club Two Post Seven', pinnedAt: null })], total: 1 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    await wrapper.find('.mv-pin-toggle').trigger('click')
+    await flushPromises()
+
+    await router.push('/clubs/2/media')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Club Two Post Seven')
+
+    pinDeferred.resolve()
+    await flushPromises()
+
+    // Post ids are global, but "post 7 is pinned" was decided for the club the viewer left.
+    expect(wrapper.find('.mv-badge-pinned').exists()).toBe(false)
+    expect(wrapper.find('.mv-pin-toggle').text()).toBe('Pin')
+  })
+
+  it('drops a comment delete that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Club One Post Five', commentCount: 1 })], total: 1 }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 11, postId: 5, body: 'Club one comment', viewerCanDelete: true }),
+    ])
+    const deleteCommentDeferred = createDeferred<void>()
+    deleteClubPostCommentMock.mockReturnValueOnce(deleteCommentDeferred.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Club Two Post Five', commentCount: 3 })], total: 1 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.find('.mv-comment-delete').trigger('click')
+    await flushPromises()
+
+    await router.push('/clubs/2/media')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Club Two Post Five')
+
+    deleteCommentDeferred.resolve()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-comments-toggle').text()).toContain('3')
+  })
+
+  it('drops a comments response that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Club One Post Five', commentCount: 1 })], total: 1 }),
+    )
+    const staleComments = createDeferred<ClubPostComment[]>()
+    fetchClubPostCommentsMock.mockReturnValueOnce(staleComments.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Club Two Post Five', commentCount: 1 })], total: 1 }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 22, postId: 5, body: 'Club two comment' }),
+    ])
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    await router.push('/clubs/2/media')
+    await flushPromises()
+
+    staleComments.resolve([buildComment({ id: 11, postId: 5, body: 'Club one comment' })])
+    await flushPromises()
+
+    // Expanding the same post id under the new club must issue a fresh fetch rather than reuse
+    // whatever the abandoned club's in-flight request happened to deliver.
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubPostCommentsMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Club two comment')
+    expect(wrapper.text()).not.toContain('Club one comment')
+  })
+})
