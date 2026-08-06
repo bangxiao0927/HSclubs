@@ -3,16 +3,17 @@
  *
  * The rule this exists to make structural, rather than something each call site has to
  * re-derive correctly: a view's state belongs to exactly one *session* at a time, a session
- * ends only when a new one begins, and every write that happens after an `await` must go
- * through the session that was current when that work started. A write from a superseded
- * session is silently dropped instead of clobbering whatever the current session has already
- * put on screen.
+ * ends only when a new one begins or the owner ends it outright (`end()`, for a teardown),
+ * and every write that happens after an `await` must go through the session that was current
+ * when that work started. A write from a superseded session is silently dropped instead of
+ * clobbering whatever the current session has already put on screen.
  *
  * Two ordering problems fall out of that single rule:
  *
- * - *Across* sessions (a navigation): only the code that owns the view -- the loader -- calls
- *   `begin()`. Nothing else can invalidate the loader, so nothing else can strand a spinner
- *   the loader is responsible for clearing.
+ * - *Across* sessions (a navigation): only the code that owns the view -- the loader, plus the
+ *   teardown hook that ends the last session -- starts or ends a session. No action can
+ *   invalidate the loader, so no action can strand a spinner the loader is responsible for
+ *   clearing.
  * - *Within* a session (two of the same kind of request in flight at once): `claim(channel)`
  *   takes the newest slot on a named channel; an older claim on that same channel stops being
  *   current the moment a newer one is taken.
@@ -37,6 +38,11 @@ export interface ViewSessionOwner {
   begin(): ViewSession
   /** A token for the session in effect right now, without starting a new one. */
   current(): ViewSession
+  /**
+   * Ends the current session without starting another, leaving no session in effect -- for a
+   * teardown, where no successor exists to invalidate the work still in flight.
+   */
+  end(): void
 }
 
 interface ClaimConstraint {
@@ -51,12 +57,16 @@ const deadSession: ViewSession = {
 }
 
 export const createViewSessionOwner = (): ViewSessionOwner => {
-  let sessionId = 0
+  // Session ids are issued monotonically and never reused, so a token from a session that was
+  // ended cannot be revived by a later begin(). Id 0 is reserved for "no session in effect".
+  let issuedSessions = 0
+  let currentSessionId = 0
   let claims = new Map<string, number>()
 
   const token = (id: number, constraints: readonly ClaimConstraint[]): ViewSession => {
     const isCurrent = () =>
-      id === sessionId
+      id !== 0
+      && id === currentSessionId
       && constraints.every((constraint) => claims.get(constraint.channel) === constraint.id)
 
     return {
@@ -83,14 +93,19 @@ export const createViewSessionOwner = (): ViewSessionOwner => {
 
   return {
     begin() {
-      sessionId += 1
+      issuedSessions += 1
+      currentSessionId = issuedSessions
       // Claims are per-session: a new session starts every channel from scratch, so no
       // bookkeeping from an abandoned session can make one of its stragglers look current.
       claims = new Map()
-      return token(sessionId, [])
+      return token(currentSessionId, [])
     },
     current() {
-      return token(sessionId, [])
+      return token(currentSessionId, [])
+    },
+    end() {
+      currentSessionId = 0
+      claims = new Map()
     },
   }
 }

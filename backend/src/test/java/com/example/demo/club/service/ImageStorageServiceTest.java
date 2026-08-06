@@ -367,6 +367,26 @@ class ImageStorageServiceTest {
         assertThat(isJpeg(readStoredFile(imageUrl))).isTrue();
     }
 
+    // JPEG allows any number of 0xFF fill bytes ahead of a marker (ITU-T T.81 B.1.1.2). A
+    // marker walk that assumes exactly one 0xFF reads the second one as the marker itself,
+    // mistakes the bytes after it for a segment length, and desynchronizes -- so the Exif APP1
+    // is never found and a sideways phone photo is stored sideways. Same fixture and
+    // expectations as the Orientation=6 case above, with fill bytes spliced in.
+    @Test
+    void appliesExifOrientationEvenWhenFillBytesPrecedeTheApp1Marker() throws IOException {
+        ImageStorageService service = service(uploadDir);
+        byte[] paddedJpeg = jpegWithFillBytesBeforeOrientationApp1(6);
+        MockMultipartFile file = new MockMultipartFile("file", "phone-photo.jpg", "image/jpeg", paddedJpeg);
+
+        String imageUrl = service.store(file);
+        BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(readStoredFile(imageUrl)));
+
+        assertColorCloseTo(colorAt(decoded, 8, 8), Color.BLUE);
+        assertColorCloseTo(colorAt(decoded, 24, 8), Color.RED);
+        assertColorCloseTo(colorAt(decoded, 8, 24), Color.YELLOW);
+        assertColorCloseTo(colorAt(decoded, 24, 24), Color.GREEN);
+    }
+
     @Test
     void deletesAFileStoredUnderTheNestedClubPostsDirectory() throws IOException {
         ImageStorageService service = service(uploadDir);
@@ -575,6 +595,21 @@ class ImageStorageServiceTest {
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(quadrants, 0, 2); // SOI
+        out.write(app1);
+        out.write(quadrants, 2, quadrants.length - 2);
+        return out.toByteArray();
+    }
+
+    // The same spliced-in Exif APP1 segment as jpegWithOrientationAndGps, preceded by two
+    // 0xFF fill bytes -- legal JPEG padding that a decoder must skip over.
+    private static byte[] jpegWithFillBytesBeforeOrientationApp1(int orientation) throws IOException {
+        byte[] quadrants = quadrantJpeg();
+        byte[] app1 = buildApp1Segment(orientation);
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(quadrants, 0, 2); // SOI
+        out.write(0xFF);
+        out.write(0xFF);
         out.write(app1);
         out.write(quadrants, 2, quadrants.length - 2);
         return out.toByteArray();

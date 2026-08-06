@@ -131,7 +131,11 @@ let router: Router
 const mountAtMediaRoute = async (path = '/clubs/1/media') => {
   router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/clubs/:id/media', name: 'club-media', component: ClubMediaView }],
+    routes: [
+      { path: '/clubs/:id/media', name: 'club-media', component: ClubMediaView },
+      // Somewhere to navigate *off* the media route to, for the unmount cases.
+      { path: '/clubs/:id', name: 'club-detail', component: { template: '<div />' } },
+    ],
   })
   await router.push(path)
   await router.isReady()
@@ -1921,5 +1925,40 @@ describe('ClubMediaView view-state ownership across navigations', () => {
     expect(fetchClubPostCommentsMock).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain('Club two comment')
     expect(wrapper.text()).not.toContain('Club one comment')
+  })
+
+  // Leaving the media route entirely is a navigation too, even though it starts no new load()
+  // here: the component is torn down instead. A backfill still in flight at that point would
+  // otherwise find its session current, and the "this page is now empty, step back one page"
+  // branch would push a page/size query onto whatever route the viewer has moved on to.
+  it('does not navigate after the view is unmounted when a post-delete backfill finds the page empty', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [buildPost({ id: 1, title: 'Last Post On Page Two', viewerCanDelete: true })],
+        page: 1,
+        size: 2,
+        total: 3,
+      }),
+    )
+    deleteClubPostMock.mockResolvedValue(undefined)
+    const backfillDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillDeferred.promise)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=1&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    wrapper.unmount()
+    await router.push('/clubs/1')
+    await flushPromises()
+
+    backfillDeferred.resolve(buildFeed({ items: [], page: 1, size: 2, total: 2 }))
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe('/clubs/1')
+    expect(router.currentRoute.value.query.page).toBeUndefined()
   })
 })

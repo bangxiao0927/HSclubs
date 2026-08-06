@@ -104,4 +104,29 @@ describe('createViewSessionOwner', () => {
     expect(second.isCurrent).toBe(true)
     expect(first.isCurrent).toBe(false)
   })
+
+  // Teardown is a handover to nobody: no new session follows it, so the only way in-flight work
+  // stops owning the view is an explicit end().
+  it('ends the current session without starting a new one', () => {
+    const owner = createViewSessionOwner()
+    const session = owner.begin()
+    const claim = session.claim('feed')
+    const write = vi.fn()
+
+    owner.end()
+
+    expect(session.isCurrent).toBe(false)
+    expect(claim.isCurrent).toBe(false)
+    expect(claim.apply(write)).toBe(false)
+    expect(owner.current().isCurrent).toBe(false)
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('can start a new session again after end()', () => {
+    const owner = createViewSessionOwner()
+    owner.begin()
+    owner.end()
+
+    expect(owner.begin().isCurrent).toBe(true)
+  })
 })

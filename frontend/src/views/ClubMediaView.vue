@@ -66,8 +66,9 @@ let loadedClubId: string | null = null
 // "no interleaving of load / backfill / navigation can display stale data or strand the
 // loading state" hold by construction rather than by case analysis:
 //
-//   1. `load()` is the only caller of `begin()`. A navigation therefore ends the previous
-//      session, and nothing else in this file is able to end a session -- so no action can
+//   1. `load()` is the only caller of `begin()`, and the only other place a session ends is
+//      `onBeforeUnmount`, where the whole view (spinner included) goes away. A navigation
+//      therefore ends the previous session and no *action* can end one -- so no action can
 //      invalidate the load that owns the spinner.
 //   2. `loading` is set true synchronously by the same call that begins the session, and is
 //      only ever cleared through that session's own `apply()`. The newest load always reaches
@@ -605,6 +606,11 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  // Leaving this view is a navigation like any other, but no load() follows it to take over
+  // ownership, so the session has to be ended explicitly. Without this, a backfill still in
+  // flight would still look current and its "this page is empty now, step back a page" branch
+  // would push a page/size query onto whatever route the viewer has moved on to.
+  feedSessions.end()
   revokePublishPreview()
   const existing = document.head.querySelector('meta[name="robots"]')
   if (!existing) {

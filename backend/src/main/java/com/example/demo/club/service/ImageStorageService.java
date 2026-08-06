@@ -138,6 +138,13 @@ public class ImageStorageService {
         this.decodeAcquireTimeoutMillis = decodeAcquireTimeoutMillis;
     }
 
+    // Visible for testing: lets the decode-capacity test wait until a permit is observably held
+    // before asserting the fail-fast path, instead of racing a fixed sleep against a background
+    // upload thread.
+    int availableDecodePermits() {
+        return decodeSemaphore.availablePermits();
+    }
+
     /**
      * Validates, re-encodes (except GIF, which passes through verbatim to preserve animation),
      * and stores the uploaded file. Returns its public URL, e.g. {@code /uploads/club-posts/<uuid>.jpg}.
@@ -519,8 +526,20 @@ public class ImageStorageService {
             if ((bytes[position] & 0xFF) != 0xFF) {
                 break;
             }
-            int marker = bytes[position + 1] & 0xFF;
-            position += 2;
+            // A marker may be preceded by any number of 0xFF fill bytes (ITU-T T.81 B.1.1.2),
+            // so the marker is the first byte after this run of 0xFF -- not unconditionally
+            // bytes[position + 1], which for a padded file would be another 0xFF and would
+            // desynchronize the whole walk (a legal photo would then silently lose its
+            // orientation).
+            int markerPosition = position;
+            while (markerPosition + 1 < bytes.length && (bytes[markerPosition + 1] & 0xFF) == 0xFF) {
+                markerPosition++;
+            }
+            if (markerPosition + 1 >= bytes.length) {
+                break;
+            }
+            int marker = bytes[markerPosition + 1] & 0xFF;
+            position = markerPosition + 2;
             if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
                 continue;
             }

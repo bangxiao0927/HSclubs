@@ -9,7 +9,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.concurrent.CountDownLatch;
+import java.time.Duration;
 
 import javax.imageio.ImageIO;
 
@@ -41,9 +41,7 @@ class ImageStorageServiceDecodeCapacityTest {
         byte[] slowJpeg = solidColorJpeg(5000, 5000, Color.RED);
         byte[] quickJpeg = solidColorJpeg(10, 10, Color.BLUE);
 
-        CountDownLatch backgroundStarted = new CountDownLatch(1);
         Thread background = new Thread(() -> {
-            backgroundStarted.countDown();
             try {
                 service.store(new MockMultipartFile("file", "slow.jpg", "image/jpeg", slowJpeg));
             } catch (IOException ignored) {
@@ -52,10 +50,11 @@ class ImageStorageServiceDecodeCapacityTest {
             }
         });
         background.start();
-        backgroundStarted.await();
-        // Gives the background thread time to get past the (fast) sniff/size/dimension checks
-        // and actually acquire the single permit before this thread tries to acquire it too.
-        Thread.sleep(30);
+        // Waits for the permit to be *observably* taken rather than sleeping a fixed amount and
+        // hoping the background thread won the race: a fixed sleep fails on a cold or loaded
+        // runner (first-call ImageIO SPI scanning alone can exceed it), where this thread would
+        // then find the permit free and store successfully.
+        awaitSingleDecodePermitHeld(service, background);
 
         MockMultipartFile file = new MockMultipartFile("file", "quick.jpg", "image/jpeg", quickJpeg);
         assertThatThrownBy(() -> service.store(file))
@@ -65,6 +64,22 @@ class ImageStorageServiceDecodeCapacityTest {
 
         background.join(10_000);
         assertThat(background.isAlive()).isFalse();
+    }
+
+    // The 5000x5000 decode/resize/re-encode below takes on the order of a second, so once the
+    // permit is seen held there is a wide window for the assertion; the deadline only exists so
+    // a genuine regression fails as a clear timeout instead of hanging the suite.
+    private static void awaitSingleDecodePermitHeld(ImageStorageService service, Thread background)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        while (System.nanoTime() < deadline) {
+            if (service.availableDecodePermits() == 0) {
+                return;
+            }
+            Thread.sleep(1);
+        }
+        background.interrupt();
+        throw new AssertionError("background upload never took the single decode permit");
     }
 
     private static byte[] solidColorJpeg(int width, int height, Color color) throws IOException {
