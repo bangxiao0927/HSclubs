@@ -21,7 +21,7 @@ public final class ImageStorageServiceOomHarnessMain {
         Path imageFile = Paths.get(args[1]);
         byte[] bytes = Files.readAllBytes(imageFile);
 
-        ImageStorageService service = new ImageStorageService(uploadDir.toString());
+        ImageStorageService service = new ImageStorageService(uploadDir.toString(), 0, 5000);
         MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", bytes);
         try {
             String imageUrl = service.store(file);

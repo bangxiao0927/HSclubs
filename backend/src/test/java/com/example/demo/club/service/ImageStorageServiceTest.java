@@ -40,7 +40,7 @@ class ImageStorageServiceTest {
     Path uploadDir;
 
     private ImageStorageService service(Path dir) {
-        return new ImageStorageService(dir.toString());
+        return new ImageStorageService(dir.toString(), 0, 5000);
     }
 
     @Test
@@ -182,9 +182,11 @@ class ImageStorageServiceTest {
     }
 
     // WebP's own megapixel cap is much stricter than the general one: TwelveMonkeys'
-    // WebPImageReader does not honour ImageReadParam.setSourceSubsampling (confirmed
-    // empirically -- it always fully decodes the VP8 frame regardless of the requested
-    // subsampling factor), so this is WebP's *only* memory guard, not just defense in depth.
+    // WebPImageReader's *output* does honour ImageReadParam.setSourceSubsampling (confirmed
+    // empirically), but its peak decode memory does not -- VP8Frame allocates its per-
+    // macroblock decode state from the source image's own pixel dimensions regardless of the
+    // requested subsampling factor, so a large source still OOMs even when heavily
+    // subsampled. This is WebP's *only* memory guard, not just defense in depth.
     @Test
     void storesAWebpJustUnderItsOwnStricterMegapixelLimit() throws IOException {
         ImageStorageService service = service(uploadDir);
@@ -197,6 +199,12 @@ class ImageStorageServiceTest {
         assertThat(isJpeg(readStoredFile(imageUrl))).isTrue();
     }
 
+    // The reviewer's own finding: WebP's cap is much stricter than JPEG/PNG's (3MP vs 30MP,
+    // since it has no subsampling-based defense -- see the class-level comment on
+    // MAX_WEBP_PIXELS), so it silently rejects things a viewer would reasonably expect to work
+    // (e.g. a 2560x1440 screenshot, 3.7MP). The generic "maximum allowed resolution" message
+    // must therefore name this specific, lower limit and point to a workaround, not just repeat
+    // the same wording the general 30MP case uses.
     @Test
     void rejectsAWebpOverItsOwnStricterMegapixelLimitEvenThoughItIsUnderTheGeneralLimit() throws IOException {
         ImageStorageService service = service(uploadDir);
@@ -205,7 +213,10 @@ class ImageStorageServiceTest {
 
         assertThatThrownBy(() -> service.store(file))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("maximum allowed resolution");
+            .hasMessageContaining("WebP")
+            .hasMessageContaining("3 megapixels")
+            .hasMessageContaining("JPEG")
+            .hasMessageContaining("PNG");
     }
 
     @Test

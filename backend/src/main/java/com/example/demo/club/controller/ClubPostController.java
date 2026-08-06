@@ -5,6 +5,7 @@ import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.club.service.ClubContentModerationPolicy;
+import com.example.demo.club.service.ImageProcessingUnavailableException;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
 import com.example.demo.club.service.ClubVisibilityPolicy;
@@ -77,6 +78,8 @@ public class ClubPostController {
             return clubPostService.publish(club.getId(), authorOauthUserId, title, file);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (ImageProcessingUnavailableException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store file");
         } catch (IllegalStateException e) {

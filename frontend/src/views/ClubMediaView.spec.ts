@@ -661,6 +661,9 @@ describe('ClubMediaView publish form', () => {
     expect(publishSection.text()).toContain('GIF')
     expect(publishSection.text()).toContain('HEIC')
     expect(publishSection.text()).toContain('not supported')
+    // WebP's much stricter resolution cap (see docs/API.md) means it should not be advertised
+    // as an unconditionally-supported format alongside JPEG/PNG/GIF.
+    expect(publishSection.text()).toContain('3 megapixels')
   })
 
   it('counts down the title character limit as the member types', async () => {
@@ -1110,6 +1113,47 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     expect(titles).toEqual(['Post 2', 'Post 3'])
   })
 
+  // The round-3 review's finding: backfill re-requests the *server-confirmed* page/size
+  // (page.value/size.value), which can legitimately differ from the raw, unclamped values in
+  // the URL (?size=999 clamped by the server to size=100, echoed back and stored in
+  // size.value). A staleness check that reconstructs a "current" key from route.query instead
+  // of comparing against what the request itself is for would never match in this case, so
+  // the backfill's response would always look stale and get dropped -- silently breaking the
+  // exact rescue this mechanism exists to provide.
+  it('backfills the current page after a delete even when the requested size was clamped by the server', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true }),
+          buildPost({ id: 2, title: 'Post 2' }),
+        ],
+        page: 0,
+        size: 100,
+        total: 101,
+      }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [buildPost({ id: 2, title: 'Post 2' }), buildPost({ id: 3, title: 'Post 3' })],
+        page: 0,
+        size: 100,
+        total: 100,
+      }),
+    )
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=999')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(2, '1', 0, 100)
+    const titles = wrapper.findAll('.mv-post-title').map((node) => node.text())
+    expect(titles).toEqual(['Post 2', 'Post 3'])
+  })
+
   // The stranding scenario the issue calls out: deleting the only post on a nonzero page must
   // not leave the viewer looking at an empty page when earlier pages still have content.
   it('navigates back to the previous page when deleting the last item strands the viewer on an emptied nonzero page', async () => {
@@ -1425,6 +1469,63 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     expect(wrapper.text()).toContain('Robotics post')
     expect(wrapper.text()).toContain('Robotics Club')
     expect(wrapper.text()).not.toContain('Chess Club')
+  })
+
+  // Round-3 review's finding: unlike the page-based stuck-spinner test above, a delete's
+  // backfill can *collide* with the new club's own load() key rather than merely be for a
+  // different one. If the delete resolves after the club navigation has already landed,
+  // backfillCurrentPageAfterPostDeletion reads the *already-updated* routeClubId -- and if
+  // both clubs use the default page/size (no query params), the backfill's key and the new
+  // club's load() key are the exact same string. A context-keyed generation counter then
+  // treats the backfill as "the newest request for that key", so it can bump straight past
+  // the new club's own load() -- which never touches `loading` -- and strand the spinner.
+  it('clears the loading state after navigating to a different club even when the delete backfill key would collide with the new club load', async () => {
+    fetchClubByIdMock.mockImplementation(async (idOrSlug: unknown) =>
+      buildClub({ name: idOrSlug === '1' ? 'Chess Club' : 'Robotics Club' }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true })], page: 0, size: 12, total: 1 }),
+    )
+    const deleteDeferred = createDeferred<void>()
+    deleteClubPostMock.mockReturnValueOnce(deleteDeferred.promise)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    // Delete is clicked but its own request has not resolved yet.
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    // The viewer navigates to a different club (default page/size, same as club 1's) while the
+    // delete is still in flight: load() for club 2 starts first.
+    const club2LoadDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(club2LoadDeferred.promise)
+    await router.push('/clubs/2/media')
+    await flushPromises()
+
+    // Only now does the delete resolve, so backfillCurrentPageAfterPostDeletion starts --
+    // reading the *already-updated* routeClubId ('2') and the still-unchanged page/size (0/12,
+    // the same defaults club 2's own load() also uses).
+    const backfillDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillDeferred.promise)
+    deleteDeferred.resolve()
+    await flushPromises()
+
+    club2LoadDeferred.resolve(
+      buildFeed({ items: [buildPost({ id: 9, title: 'Robotics post' })], page: 0, size: 12, total: 1 }),
+    )
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Loading club media')
+    expect(wrapper.text()).toContain('Robotics post')
+    expect(wrapper.text()).toContain('Robotics Club')
+
+    backfillDeferred.resolve(buildFeed({ items: [], page: 0, size: 12, total: 0 }))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Loading club media')
+    expect(wrapper.text()).toContain('Robotics post')
+    expect(wrapper.text()).toContain('Robotics Club')
   })
 })
 

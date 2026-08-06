@@ -176,6 +176,16 @@ the database: JPEG/PNG/WebP are flattened, EXIF-stripped, and re-encoded to JPEG
 5MB for JPEG/PNG/WebP, 2MB for GIF. Both the format and these limits are enforced from the
 file's sniffed magic bytes, never the client-declared `Content-Type`.
 
+There is also a resolution (pixel count) limit, checked from the file's header before any full
+decode: 30 megapixels for JPEG, PNG, and GIF. WebP has a much stricter 3-megapixel limit of its
+own -- e.g. a 2560x1440 screenshot (3.7MP) is over it -- because TwelveMonkeys' WebP reader's
+peak decode memory scales with the *source* image's pixel count regardless of any requested
+reduced-resolution decode (its per-macroblock VP8 decode state is allocated up front from the
+full source dimensions, even though its output is correctly reduced), so unlike JPEG/PNG it has
+no way to bound peak decode memory for a large image except rejecting it outright before
+decoding. A WebP over its own limit gets a 400 naming that limit and suggesting re-uploading as
+JPEG or PNG instead of the generic resolution message the other formats get.
+
 These are application-level limits, checked by `ImageStorageService` only after the request
 has already cleared a stricter, earlier ceiling: Spring's own
 `spring.servlet.multipart.max-file-size` (6MB per part) and `max-request-size` (8MB total).
@@ -216,7 +226,9 @@ corrupt image, or image over its *application-level* format size or resolution l
 above) | 403 (authenticated but not a member of this club) | 404 (club not found) | 413 (the
 file or overall request exceeded Spring's multipart ceiling before any application code ran --
 see "Error Responses" below) | 500 (rare: the post could not be read back immediately after
-being written, or the file could not be stored)
+being written, or the file could not be stored) | 503 (too many images are already being
+decoded concurrently and a bounded wait for a free decode permit timed out -- a transient
+server capacity limit, not a problem with this file; safe to retry shortly)
 
 ### GET /api/clubs/{clubSlugOrId}/posts
 Read a club's public post feed, newest and pinned-first. Public; no authentication required,

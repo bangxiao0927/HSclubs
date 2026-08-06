@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.UUID;
 
@@ -56,12 +57,15 @@ public class ImageStorageService {
     // is defense in depth, not the primary memory guard for JPEG/PNG -- see decodeFullImage
     // below for that (reader-level subsampling, which both formats honour).
     private static final long MAX_PIXELS = 30_000_000L;
-    // WebP has no equivalent primary guard: TwelveMonkeys' WebPImageReader does not honour
-    // ImageReadParam.setSourceSubsampling at all (confirmed empirically -- it fully decodes
-    // the VP8 frame regardless of the requested subsampling factor, needing roughly 1GB of
-    // heap for a 30-megapixel image even when subsampling is requested). This is therefore
-    // WebP's *only* memory guard, and must be low enough on its own: a 3-megapixel WebP was
-    // confirmed safe to fully decode at a 96MB heap.
+    // WebP has no equivalent primary guard: TwelveMonkeys' WebPImageReader does honour
+    // ImageReadParam.setSourceSubsampling for the *output* it returns (confirmed empirically --
+    // a 2000x2000 WebP read with a subsampling factor of 4 does return a 500x500 image), but
+    // peak decode memory is dominated by VP8Frame's per-macroblock decode state, which it
+    // allocates from the *source* image's own pixel dimensions regardless of the requested
+    // subsampling factor -- so a 6000x5000 (30-megapixel) WebP still OOMs a 512MB heap even
+    // when asked to subsample all the way down to 750x625. This is therefore WebP's *only*
+    // memory guard, and must be low enough on its own: a 3-megapixel WebP was confirmed safe
+    // to fully decode at a 96MB heap.
     private static final long MAX_WEBP_PIXELS = 3_000_000L;
     private static final int MAX_DIMENSION = 1600;
     private static final float JPEG_QUALITY = 0.82f;
@@ -74,10 +78,10 @@ public class ImageStorageService {
     // count: CPU count does not track how much memory a small/constrained container actually
     // has, which is exactly the axis this bound needs to track.
     private static final long ASSUMED_PEAK_DECODE_BYTES = 250L * 1024 * 1024;
-    private static final int MAX_CONCURRENT_DECODES = computeMaxConcurrentDecodes();
-    private final Semaphore decodeSemaphore = new Semaphore(MAX_CONCURRENT_DECODES);
+    private final Semaphore decodeSemaphore;
+    private final long decodeAcquireTimeoutMillis;
 
-    private static int computeMaxConcurrentDecodes() {
+    private static int computeMaxConcurrentDecodesFromHeap() {
         long maxMemory = Runtime.getRuntime().maxMemory();
         long byMemory = maxMemory / ASSUMED_PEAK_DECODE_BYTES;
         return (int) Math.max(1, Math.min(byMemory, 16));
@@ -113,7 +117,13 @@ public class ImageStorageService {
     private final Path uploadDir;
     private final Path imageDirectory;
 
-    public ImageStorageService(@Value("${app.upload.dir:uploads}") String uploadDirPath) {
+    public ImageStorageService(
+            @Value("${app.upload.dir:uploads}") String uploadDirPath,
+            // 0 means "compute from the configured heap" (see computeMaxConcurrentDecodesFromHeap);
+            // overridable so a deployment (or a test exercising the exhaustion path
+            // deterministically) can pin an exact permit count instead.
+            @Value("${app.image.max-concurrent-decodes:0}") int configuredMaxConcurrentDecodes,
+            @Value("${app.image.decode-acquire-timeout-ms:5000}") long decodeAcquireTimeoutMillis) {
         this.uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
         this.imageDirectory = this.uploadDir.resolve(IMAGE_SUBDIRECTORY);
         try {
@@ -121,6 +131,11 @@ public class ImageStorageService {
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot create upload directory: " + this.imageDirectory, e);
         }
+        int maxConcurrentDecodes = configuredMaxConcurrentDecodes > 0
+            ? configuredMaxConcurrentDecodes
+            : computeMaxConcurrentDecodesFromHeap();
+        this.decodeSemaphore = new Semaphore(maxConcurrentDecodes);
+        this.decodeAcquireTimeoutMillis = decodeAcquireTimeoutMillis;
     }
 
     /**
@@ -130,6 +145,8 @@ public class ImageStorageService {
      * @throws IllegalArgumentException if the file is empty, is not a recognized image format,
      *                                   exceeds the size limit for its format, or exceeds the
      *                                   maximum allowed pixel count
+     * @throws ImageProcessingUnavailableException if too many decodes are already running and
+     *                                              a bounded wait for a free permit timed out
      * @throws IOException              if reading the upload or writing the stored file fails
      */
     public String store(MultipartFile file) throws IOException {
@@ -143,9 +160,17 @@ public class ImageStorageService {
 
         Dimensions dimensions = readDimensions(bytes);
         long pixelCount = (long) dimensions.width() * dimensions.height();
-        long maxPixelsForFormat = format == ImageFormat.WEBP ? MAX_WEBP_PIXELS : MAX_PIXELS;
-        if (pixelCount > maxPixelsForFormat) {
-            throw new IllegalArgumentException("Image exceeds the maximum allowed resolution");
+        if (format == ImageFormat.WEBP && pixelCount > MAX_WEBP_PIXELS) {
+            // WebP's cap is much stricter than JPEG/PNG's (3MP vs 30MP -- see MAX_WEBP_PIXELS'
+            // own comment for why) and low enough to plausibly reject something a viewer would
+            // expect to just work, e.g. a 2560x1440 screenshot (3.7MP), so the generic message
+            // is not good enough here: name the actual limit and point to the workaround.
+            throw new IllegalArgumentException(
+                "WebP images are limited to 3 megapixels. Please re-upload this image as a JPEG or PNG, "
+                    + "or use a smaller image.");
+        }
+        if (pixelCount > MAX_PIXELS) {
+            throw new IllegalArgumentException("Image exceeds the maximum allowed resolution of 30 megapixels.");
         }
 
         byte[] outputBytes;
@@ -254,8 +279,27 @@ public class ImageStorageService {
         }
     }
 
+    // A bounded wait, not acquireUninterruptibly(): that had no timeout and no queue bound, so
+    // an upload burst on a small heap (where computeMaxConcurrentDecodesFromHeap() yields as
+    // few as 1-2 permits) could pin every waiting request's Tomcat worker thread indefinitely,
+    // stalling unrelated endpoints too -- including for clients that have already disconnected.
+    // InstagramAvatarCacheService already has the right shape for this (tryAcquire, fail fast);
+    // this waits briefly first, since a short queueing delay is preferable to an immediate
+    // rejection for what is normally a sub-second decode, but still fails fast (a 503, not an
+    // indefinite hang) once that wait is exhausted.
     private byte[] reencodeToJpeg(byte[] bytes, Dimensions original, ImageFormat format) throws IOException {
-        decodeSemaphore.acquireUninterruptibly();
+        boolean acquired;
+        try {
+            acquired = decodeSemaphore.tryAcquire(decodeAcquireTimeoutMillis, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ImageProcessingUnavailableException(
+                "Image processing was interrupted. Please try again.");
+        }
+        if (!acquired) {
+            throw new ImageProcessingUnavailableException(
+                "Too many images are being processed right now. Please try again in a moment.");
+        }
         try {
             BufferedImage decoded = decodeFullImage(bytes, original, format);
             BufferedImage flattened = flattenToWhiteBackground(decoded);
@@ -273,10 +317,12 @@ public class ImageStorageService {
     // both always decode at a reader-subsampled resolution once the source exceeds
     // MAX_DIMENSION, via ImageReadParam.setSourceSubsampling, which both readers honour.
     //
-    // WebP is the exception: TwelveMonkeys' WebPImageReader does not honour
-    // setSourceSubsampling at all (confirmed empirically -- see MAX_WEBP_PIXELS above), so
-    // subsampling cannot bound its memory; MAX_WEBP_PIXELS alone does that instead, and a
-    // WebP that reaches this method is already small enough to decode at full resolution.
+    // WebP is the exception: subsampling cannot bound its peak decode memory (see
+    // MAX_WEBP_PIXELS above for why -- it is not that TwelveMonkeys ignores the subsampling
+    // request, its *output* is correctly subsampled, but the per-macroblock decode state it
+    // allocates along the way scales with the source image regardless); MAX_WEBP_PIXELS alone
+    // bounds it instead, and a WebP that reaches this method is already small enough to decode
+    // at full resolution.
     //
     // The header/dimensions read earlier in the pipeline only parses enough of the file to find
     // width and height; it does not guarantee the pixel data or embedded metadata (e.g. an ICC
