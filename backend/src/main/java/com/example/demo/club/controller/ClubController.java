@@ -5,6 +5,7 @@ import com.example.demo.club.model.ClubMemberView;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.service.ClubService;
 import com.example.demo.security.AuthenticatedUserResolver;
+import tools.jackson.databind.JsonNode;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -82,11 +83,14 @@ public class ClubController {
 
     @PutMapping("/{clubSlugOrId}")
     public Club update(@PathVariable String clubSlugOrId,
-                       @RequestBody Club club,
+                       @RequestBody JsonNode patch,
                        Authentication authentication) {
         Club existing = requireManageAccess(clubSlugOrId, authentication);
         try {
-            return clubService.update(existing.getId(), club);
+            // The body is taken as raw JSON, not bound into a Club, so the service can tell
+            // "field omitted" from "field explicitly set to null": binding into a POJO collapses
+            // both into null, which is what made a partial edit wipe every other column.
+            return clubService.update(existing.getId(), patch);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
         }

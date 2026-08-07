@@ -96,6 +96,22 @@ Get club detail. Accepts numeric ID or slug string. Viewer permissions (viewerIs
 ### PUT /api/clubs/{clubSlugOrId}
 Update club. Requires: platform_owner, or club president.
 
+The body is applied as a partial edit: only the fields it actually contains are written, so a
+form that submits one field leaves the rest of the club as it was, while a field sent
+explicitly as `null` is cleared. (Before this was true, the update statement wrote every
+column from the request body, so a partial edit blanked out everything it omitted.)
+
+Editable fields: `name`, `aliasName`, `description`, `category`, `meetingSchedule`,
+`scheduleNote`, `location`, `contactEmail`, `advisor`, `achievements`. Anything else in the
+body is ignored, including `slug` (the club's public URL), `status`, `visibility`,
+`approvedAt`, `approvedByOauthUserId`, and `imageUrl` -- the first five decide whether a club
+is listed and published at all and are not a club president's to change, and `imageUrl` only
+ever changes through the authenticated upload flow. There is currently no endpoint that
+changes a club's status or visibility; add a platform-owner-only one when that workflow is
+needed rather than reopening this body.
+
+`category` must be one of the six allowed categories, otherwise 400.
+
 ### DELETE /api/clubs/{clubSlugOrId}
 Delete club. Requires: platform_owner. Status: 204
 
