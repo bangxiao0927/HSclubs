@@ -4,6 +4,7 @@ import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubMemberView;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.club.service.ClubVisibilityPolicy;
 import com.example.demo.security.AuthenticatedUserResolver;
 import tools.jackson.databind.JsonNode;
 import org.springframework.http.HttpStatus;
@@ -32,10 +33,14 @@ public class ClubController {
 
     private final ClubService clubService;
     private final AuthenticatedUserResolver authenticatedUserResolver;
+    private final ClubVisibilityPolicy clubVisibilityPolicy;
 
-    public ClubController(ClubService clubService, AuthenticatedUserResolver authenticatedUserResolver) {
+    public ClubController(ClubService clubService,
+                          AuthenticatedUserResolver authenticatedUserResolver,
+                          ClubVisibilityPolicy clubVisibilityPolicy) {
         this.clubService = clubService;
         this.authenticatedUserResolver = authenticatedUserResolver;
+        this.clubVisibilityPolicy = clubVisibilityPolicy;
     }
 
     // ---- Club listing & detail ----
@@ -63,6 +68,13 @@ public class ClubController {
     public Club get(@PathVariable String clubSlugOrId, Authentication authentication) {
         Club club = resolveClub(clubSlugOrId, resolveViewerEmail(authentication));
         if (club == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
+        // findById/findBySlug carry no status filter, unlike every listing query, so this is the
+        // one read path that can surface a club the directory deliberately hides. Same policy
+        // and same 404 (never 403) as the post feed and comment list: a hidden club must be
+        // indistinguishable from one that does not exist, or the 403 itself confirms it exists.
+        if (!clubVisibilityPolicy.isVisibleTo(club, authentication)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
         return club;

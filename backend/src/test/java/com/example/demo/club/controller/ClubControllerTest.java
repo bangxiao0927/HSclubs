@@ -5,12 +5,15 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.club.service.ClubVisibilityPolicy;
 import com.example.demo.security.AuthenticatedUserResolver;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +55,13 @@ class ClubControllerTest {
         @Bean
         AuthenticatedUserResolver authenticatedUserResolver(SecurityProperties securityProperties) {
             return new AuthenticatedUserResolver(securityProperties);
+        }
+
+        // The real policy, not a mock: this test's whole point for the detail endpoint is which
+        // viewers that policy lets through, so stubbing it would assert nothing.
+        @Bean
+        ClubVisibilityPolicy clubVisibilityPolicy(AuthenticatedUserResolver authenticatedUserResolver) {
+            return new ClubVisibilityPolicy(authenticatedUserResolver);
         }
     }
 
@@ -105,6 +115,67 @@ class ClubControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"category\":\"STEM & Innovation\"}"))
             .andExpect(status().isOk());
+    }
+
+    // ---- Detail visibility ----
+    //
+    // findById/findBySlug carry no status filter (unlike every listing query), so without the
+    // policy check an anonymous caller who guesses an id can read a pending or archived club's
+    // full record -- description, advisor, contact email, approval fields -- while the club is
+    // hidden from every listing.
+
+    @Test
+    void anonymousCallerCannotReadANonActiveClub() throws Exception {
+        when(clubService.resolveBySlugOrId(eq("7"), any())).thenReturn(nonActiveClub());
+
+        mockMvc.perform(get("/api/clubs/7"))
+            .andExpect(status().isNotFound());
+    }
+
+    // 404 rather than 403 on purpose: a 403 would confirm the club exists.
+    @Test
+    void aSignedInNonMemberCannotReadANonActiveClub() throws Exception {
+        when(clubService.resolveBySlugOrId(eq("7"), any())).thenReturn(nonActiveClub());
+
+        mockMvc.perform(get("/api/clubs/7").principal(oauthToken(STUDENT_EMAIL)))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void aMemberCanStillReadTheirOwnNonActiveClub() throws Exception {
+        Club club = nonActiveClub();
+        club.setViewerIsMember(true);
+        when(clubService.resolveBySlugOrId(eq("7"), any())).thenReturn(club);
+
+        mockMvc.perform(get("/api/clubs/7").principal(oauthToken(STUDENT_EMAIL)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(7));
+    }
+
+    @Test
+    void aPlatformOwnerCanStillReadANonActiveClub() throws Exception {
+        when(clubService.resolveBySlugOrId(eq("7"), any())).thenReturn(nonActiveClub());
+
+        mockMvc.perform(get("/api/clubs/7").principal(oauthToken(OWNER_EMAIL)))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void anActiveClubIsStillReadableByAnyone() throws Exception {
+        Club club = nonActiveClub();
+        club.setStatus("active");
+        when(clubService.resolveBySlugOrId(eq("7"), any())).thenReturn(club);
+
+        mockMvc.perform(get("/api/clubs/7"))
+            .andExpect(status().isOk());
+    }
+
+    private static Club nonActiveClub() {
+        Club club = new Club();
+        club.setId(7L);
+        club.setName("Pending Club");
+        club.setStatus("pending");
+        return club;
     }
 
     private OAuth2AuthenticationToken oauthToken(String email) {
