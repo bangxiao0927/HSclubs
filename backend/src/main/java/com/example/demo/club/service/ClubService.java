@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -36,6 +37,10 @@ public class ClubService {
     // One wording for both ways the same conflict is detected: the check below, and the unique
     // constraint that catches whatever slips past it.
     private static final String DUPLICATE_REQUEST_MESSAGE = "You already have a pending request for this club";
+
+    // A search box, not a query language: ten words is far past anything a student types, and
+    // bounds how many OR groups one statement can grow.
+    private static final int MAX_SEARCH_TOKENS = 10;
 
     // Exactly the fields a club manager may edit through PUT /api/clubs/{id}. Everything else
     // the update statement writes -- slug (the club's public URL), status, visibility,
@@ -87,10 +92,25 @@ public class ClubService {
             cleanSearchTerm(category),
             cleanSearchTerm(alias),
             cleanSearchTerm(advisor),
-            cleanSearchTerm(query),
+            searchTokens(query),
             offset,
             limit
         );
+    }
+
+    // Splits the free-text query into words so each can match a different field, mirroring the
+    // frontend's own filter (frontend/src/utils/clubSearch.ts) so an in-memory result set and a
+    // server-side one cannot disagree about what a student's query means. The cap keeps a
+    // pathological query from generating an unbounded number of OR groups in one statement.
+    private static List<String> searchTokens(String query) {
+        if (!StringUtils.hasText(query)) {
+            return List.of();
+        }
+        return Arrays.stream(query.trim().split("\\s+"))
+            .filter(StringUtils::hasText)
+            .distinct()
+            .limit(MAX_SEARCH_TOKENS)
+            .toList();
     }
 
     public int countAll() {

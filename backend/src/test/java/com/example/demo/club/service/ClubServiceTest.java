@@ -18,6 +18,7 @@ import com.example.demo.club.model.ViewerMembershipStatus;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,7 +75,26 @@ class ClubServiceTest {
     void searchUsesTheSameClampedLimitToComputeOffsetAsFindAllPaginated() {
         clubService.search(null, null, null, null, null, 2, -100);
 
-        verify(clubMapper).search(eq(null), eq(null), eq(null), eq(null), eq(null), eq(2), eq(1));
+        verify(clubMapper).search(eq(null), eq(null), eq(null), eq(null), eq(List.of()), eq(2), eq(1));
+    }
+
+    // Each word has to be able to match a different field, which is what the frontend filter
+    // does too; a single-substring query missed "Chess Club" for "club chess".
+    @Test
+    void searchSplitsTheFreeTextQueryIntoWords() {
+        clubService.search(null, null, null, null, "  club   chess  ", 0, 10);
+
+        verify(clubMapper).search(any(), any(), any(), any(), eq(List.of("club", "chess")), anyInt(), anyInt());
+    }
+
+    @Test
+    void searchCapsTheNumberOfWordsItWillTurnIntoSqlConditions() {
+        String longQuery = String.join(" ", Collections.nCopies(50, "a").toArray(new String[0]));
+        clubService.search(null, null, null, null, longQuery + " b c d e f g h i j k l", 0, 10);
+
+        ArgumentCaptor<List<String>> captor = ArgumentCaptor.captor();
+        verify(clubMapper).search(any(), any(), any(), any(), captor.capture(), anyInt(), anyInt());
+        assertThat(captor.getValue()).hasSizeLessThanOrEqualTo(10);
     }
 
     // Only this dedicated method (backed by ClubMapper#updateImageUrl, a column-scoped SQL

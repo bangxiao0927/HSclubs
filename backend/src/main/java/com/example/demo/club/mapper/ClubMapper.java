@@ -29,7 +29,9 @@ public interface ClubMapper {
                       @Param("category") String category,
                       @Param("alias") String alias,
                       @Param("advisor") String advisor,
-                      @Param("query") String query,
+                      // The free-text query already split into words by ClubService: every word
+                      // must match some field, but each may match a different one.
+                      @Param("queryTokens") List<String> queryTokens,
                       @Param("offset") int offset,
                       @Param("limit") int limit);
 
