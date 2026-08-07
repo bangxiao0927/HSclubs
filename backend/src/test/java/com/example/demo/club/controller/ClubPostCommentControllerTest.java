@@ -39,6 +39,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
@@ -310,6 +311,24 @@ class ClubPostCommentControllerTest {
         when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
         when(clubPostCommentService.create(any(), any(), any(), any()))
             .thenThrow(new CannotAcquireLockException("Timeout trying to lock table"));
+
+        mockMvc.perform(post("/api/clubs/1/posts/9/comments")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"body\":\"Nice!\"}")
+                .principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isConflict());
+    }
+
+    // A deadlock loser is the same class of transient, retryable contention as a lock timeout,
+    // but Spring reports it as a different PessimisticLockingFailureException subclass. The pin
+    // path has always answered 409 for the whole family; the comment path used to catch only
+    // CannotAcquireLockException and answered 500 here (#96).
+    @Test
+    void createReturnsConflictWhenTheServiceLosesADeadlock() throws Exception {
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(activeClub());
+        when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
+        when(clubPostCommentService.create(any(), any(), any(), any()))
+            .thenThrow(new DeadlockLoserDataAccessException("Deadlock found when trying to get lock", null));
 
         mockMvc.perform(post("/api/clubs/1/posts/9/comments")
                 .contentType(MediaType.APPLICATION_JSON)

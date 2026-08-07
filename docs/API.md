@@ -125,6 +125,13 @@ the UUIDv4 filename being unguessable, the same model as an unlisted document li
 deliberate trade-off: serving images through an authorization-aware controller instead would
 also have to cover club cover images, and would give up static file serving and HTTP caching.
 
+Because those URLs are public, every `/uploads/**` response carries `X-Content-Type-Options:
+nosniff` and `X-Robots-Tag: noindex` (`WebConfig`). The `noindex` header, not the SPA's
+`robots.txt`, is what keeps uploaded photos out of search indexes: `robots.txt` is served from
+the SPA origin and has no authority over the API origin these files come from, and the
+`noindex` robots meta tag the media page sets covers only that HTML page, not a direct hit on
+the image URL.
+
 `authorAvatarUrl` is not part of this boundary: it is `oauth_users.avatar_url`, populated
 from the OAuth provider's own profile picture claim (e.g. Google's `picture`) at login, and
 is an external URL on the provider's own domain, not a file under `/uploads/**`. It can be
@@ -175,6 +182,13 @@ the database: JPEG/PNG/WebP are flattened, EXIF-stripped, and re-encoded to JPEG
 1600px on the long edge); GIF passes through unchanged to preserve animation. Size limits:
 5MB for JPEG/PNG/WebP, 2MB for GIF. Both the format and these limits are enforced from the
 file's sniffed magic bytes, never the client-declared `Content-Type`.
+
+Note the privacy consequence of that GIF passthrough: because a GIF is stored byte-for-byte,
+any metadata embedded in it (comment/application extension blocks, and whatever a phone or
+editor wrote there) is retained and served to every viewer of the club's public page. Only the
+re-encoded formats -- JPEG, PNG, WebP -- are guaranteed metadata-free. GIF is not a common
+carrier of GPS EXIF the way a phone JPEG is, which is why the passthrough is still the default,
+but a GIF upload is the one path where an uploader's metadata can reach the public page.
 
 These are application-level limits, checked by `ImageStorageService` only after the request
 has already cleared a stricter, earlier ceiling: Spring's own

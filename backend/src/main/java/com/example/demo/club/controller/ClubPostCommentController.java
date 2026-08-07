@@ -13,7 +13,7 @@ import com.example.demo.club.service.ClubService;
 import com.example.demo.club.service.ClubVisibilityPolicy;
 import com.example.demo.club.service.CommentLimitExceededException;
 import com.example.demo.security.AuthenticatedUserResolver;
-import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -107,10 +107,13 @@ public class ClubPostCommentController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         } catch (CommentLimitExceededException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
-        } catch (CannotAcquireLockException e) {
+        } catch (PessimisticLockingFailureException e) {
             // The comment cap's FOR UPDATE lock timed out (H2 error 50200 / MySQL 1205, both
-            // translated by Spring into this exception): another request is very likely
+            // translated by Spring into CannotAcquireLockException) or this request lost a
+            // deadlock (DeadlockLoserDataAccessException): another request is very likely
             // mid-insert on the same post, so this is a transient conflict, not a server error.
+            // Catching the shared supertype -- as the pin path already does -- keeps every
+            // sibling of that same retryable-contention family a 409 rather than a 500.
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Too many comments are being posted on this post right now; please try again");
         }
