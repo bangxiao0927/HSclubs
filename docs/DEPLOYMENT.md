@@ -93,6 +93,13 @@ Note this is also the boundary `APP_OWNER_EMAILS` sits behind: platform-owner st
 by comparing the signed-in email address, so restricting the domain restricts who can even
 attempt to hold that address.
 
+The restriction is applied when an account signs in, not on every request, so it does not by
+itself evict someone who is already signed in — sessions last 7 days. In practice enabling it
+means restarting the backend, and sessions are held in the application's own memory (there is no
+external session store), so every existing session is dropped by that restart anyway. If you
+ever change this setting without a restart, expect existing sessions from a now-disallowed
+domain to survive until they expire.
+
 ### Production session cookie
 
 Set this on any HTTPS deployment:

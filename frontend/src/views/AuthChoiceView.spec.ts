@@ -171,6 +171,18 @@ describe('AuthChoiceView', () => {
     expect(wrapper.text()).toContain('We could not complete your sign in. Please try again.')
   })
 
+  // The code comes straight from the URL, so a lookup that walks the prototype chain would
+  // render a function body here instead of the fallback message.
+  it('falls back to the generic message for a code that names an Object prototype member', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider])
+    setRouteQuery({ error: 'toString' })
+    const wrapper = mount(AuthChoiceView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('We could not complete your sign in. Please try again.')
+    expect(wrapper.text()).not.toContain('function')
+  })
+
   it('shows a providers-error banner when loading the provider list fails', async () => {
     fetchAuthProvidersMock.mockRejectedValue(new Error('Providers unavailable'))
     const wrapper = mount(AuthChoiceView)

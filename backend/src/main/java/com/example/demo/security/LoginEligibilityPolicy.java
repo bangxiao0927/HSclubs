@@ -22,6 +22,11 @@ import com.example.demo.auth.config.SecurityProperties;
  * <p>The email address matters beyond identity here: it is the key
  * {@link AuthenticatedUserResolver#isPlatformOwner} compares against {@code
  * app.security.owner-emails}, and the key {@code oauth_users} rows are looked up by.
+ *
+ * <p>This runs when an account signs in, not on every request, so turning a restriction on does
+ * not by itself evict an existing session (they last 7 days). Sessions live in this
+ * application's own memory, so the restart that applies the new configuration also drops them;
+ * see docs/DEPLOYMENT.md.
  */
 @Component
 public class LoginEligibilityPolicy {
