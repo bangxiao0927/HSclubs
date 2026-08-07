@@ -22,6 +22,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DuplicateKeyException;
 
 class ClubServiceTest {
 
@@ -216,6 +217,21 @@ class ClubServiceTest {
         clubService.applyForMembership(3L, "student@example.com");
 
         verify(clubMapper).insertMembershipRequest(3L, 21L);
+    }
+
+    // The duplicate check is check-then-insert, so a double-clicked Apply can race past it and
+    // hit uq_club_membership_request instead. That is the same conflict, so it has to leave the
+    // service as the same exception (which the controller maps to 409), not as a 500.
+    @Test
+    void applyForMembershipTurnsAConcurrentDuplicateIntoTheSameConflict() {
+        when(oAuthUserMapper.findIdByEmail("student@example.com")).thenReturn(21L);
+        when(clubMapper.findMembershipStatusByUserId(3L, 21L)).thenReturn(null);
+        when(clubMapper.insertMembershipRequest(3L, 21L))
+            .thenThrow(new DuplicateKeyException("uq_club_membership_request"));
+
+        assertThatThrownBy(() -> clubService.applyForMembership(3L, "student@example.com"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("already have a pending request");
     }
 
     // insertMember overwrites role_name (that is how a president is assigned), so approving a

@@ -110,16 +110,15 @@ class ClubControllerTest {
             .andExpect(status().isOk());
     }
 
-    // The service's duplicate-request check is check-then-insert, so a double-clicked "Apply"
-    // button can get past it and hit the unique constraint instead. That is the same conflict
-    // the check reports, and must read as one (409), not as a server error.
+    // Both "already applied" cases -- the check, and the unique constraint that catches whatever
+    // races past it -- leave the service as IllegalStateException, and must read as a conflict.
     @Test
-    void applyingTwiceConcurrentlyIsAConflictNotAServerError() throws Exception {
+    void applyingWhenTheServiceReportsAConflictReturns409() throws Exception {
         Club club = new Club();
         club.setId(1L);
         club.setStatus("active");
         when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
-        Mockito.doThrow(new DuplicateKeyException("uq_club_membership_request"))
+        Mockito.doThrow(new IllegalStateException("You already have a pending request for this club"))
             .when(clubService).applyForMembership(anyLong(), any());
 
         mockMvc.perform(post("/api/clubs/1/members/apply").principal(oauthToken(STUDENT_EMAIL)))

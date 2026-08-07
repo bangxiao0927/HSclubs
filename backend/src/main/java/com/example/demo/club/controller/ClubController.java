@@ -6,7 +6,6 @@ import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.service.ClubService;
 import com.example.demo.security.AuthenticatedUserResolver;
 import tools.jackson.databind.JsonNode;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -154,13 +153,6 @@ public class ClubController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
         } catch (IllegalStateException ex) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage());
-        } catch (DuplicateKeyException ex) {
-            // The duplicate-request check above is check-then-insert, so two concurrent
-            // requests (or one double-clicked button) both pass it and the second violates
-            // uq_club_membership_request. That is the same "you already applied" conflict the
-            // check reports, not a server failure.
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "You already have a pending request for this club");
         }
     }
 
