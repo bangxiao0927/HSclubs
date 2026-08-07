@@ -126,14 +126,33 @@ Editable fields: `name`, `aliasName`, `description`, `category`, `meetingSchedul
 body is ignored, including `slug` (the club's public URL), `status`, `visibility`,
 `approvedAt`, `approvedByOauthUserId`, and `imageUrl` -- the first five decide whether a club
 is listed and published at all and are not a club president's to change, and `imageUrl` only
-ever changes through the authenticated upload flow. There is currently no endpoint that
-changes a club's status or visibility; add a platform-owner-only one when that workflow is
-needed rather than reopening this body.
+ever changes through the authenticated upload flow. `status` changes only through the
+platform-owner archive endpoints below; `visibility` has no endpoint at all, since that column
+has no semantics yet.
 
 `category` must be one of the six allowed categories, otherwise 400.
 
 ### DELETE /api/clubs/{clubSlugOrId}
 Delete club. Requires: platform_owner. Status: 204
+
+### POST /api/clubs/{clubSlugOrId}/archive
+Archive a club. Requires: platform_owner. Returns the updated club.
+
+The reversible alternative to `DELETE`: the club keeps its row, its posts, and its roster, but
+drops out of every listing, search result, and calendar entry, and its detail endpoint answers
+404 for anyone but a member, its president, or a platform owner (`ClubVisibilityPolicy`).
+
+This is the only way to change a club's status: `PUT` deliberately ignores the field, because a
+club president can reach that endpoint and publishing or hiding a club is not theirs to do.
+There is no equivalent endpoint for `visibility` -- that column has no semantics yet.
+
+Status: 200 | 403 (not a platform owner) | 404 (club not found)
+
+### DELETE /api/clubs/{clubSlugOrId}/archive
+Put an archived club back into the directory (sets its status back to `active`). Requires:
+platform_owner. Returns the updated club.
+
+Status: 200 | 403 | 404
 
 ---
 

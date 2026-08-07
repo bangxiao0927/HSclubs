@@ -179,6 +179,34 @@ class ClubMapperTest {
         assertThat(clubMapper.search(null, null, null, null, List.of(), 0, 10)).hasSize(1);
     }
 
+    // Archiving must be a status-only write and must take the club out of every listing, while
+    // leaving the row (and its posts and roster) intact so the decision stays reversible.
+    @Test
+    void updateStatusChangesOnlyTheStatusColumnAndHidesTheClubFromListings() {
+        insertSearchableClub();
+
+        clubMapper.updateStatus(4L, "archived");
+
+        assertThat(clubMapper.findAllPaginated(0, 10)).isEmpty();
+        assertThat(clubMapper.search(null, null, null, null, List.of("chess"), 0, 10)).isEmpty();
+        Club stored = clubMapper.findById(4L);
+        assertThat(stored).isNotNull();
+        assertThat(stored.getStatus()).isEqualTo("archived");
+        assertThat(stored.getName()).isEqualTo("Chess Club");
+        assertThat(stored.getDescription()).isEqualTo("Casual and competitive play");
+        assertThat(stored.getAdvisor()).isEqualTo("Ms. Lee");
+    }
+
+    @Test
+    void updateStatusCanPutAnArchivedClubBackIntoTheDirectory() {
+        insertSearchableClub();
+        clubMapper.updateStatus(4L, "archived");
+
+        clubMapper.updateStatus(4L, "active");
+
+        assertThat(clubMapper.findAllPaginated(0, 10)).hasSize(1);
+    }
+
     private void insertSearchableClub() {
         jdbcTemplate.update("""
             INSERT INTO clubs (id, name, category, description, location, advisor,

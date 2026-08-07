@@ -215,6 +215,36 @@ class ClubServiceTest {
 
     // ---- Membership ----
 
+    // status is deliberately not writable through update(), which a club president can reach,
+    // so archiving has to go through the column-scoped statement instead.
+    @Test
+    void archiveWritesOnlyTheStatusColumnAndNeverTheGeneralUpdate() {
+        when(clubMapper.findById(7L)).thenReturn(storedClub());
+
+        clubService.archive(7L);
+
+        verify(clubMapper).updateStatus(7L, "archived");
+        verify(clubMapper, never()).update(any());
+    }
+
+    @Test
+    void restorePutsTheClubBackIntoTheDirectory() {
+        when(clubMapper.findById(7L)).thenReturn(storedClub());
+
+        clubService.restore(7L);
+
+        verify(clubMapper).updateStatus(7L, "active");
+    }
+
+    @Test
+    void archivingAMissingClubIsRejectedBeforeAnyWrite() {
+        assertThatThrownBy(() -> clubService.archive(404L))
+            .isInstanceOf(IllegalArgumentException.class);
+
+        verify(clubMapper, never()).updateStatus(any(), any());
+    }
+
+
     // Applying while already in the club is what let an approval overwrite the applicant's
     // stored role, so the request must never be created in the first place.
     @Test

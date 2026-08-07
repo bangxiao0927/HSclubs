@@ -3,6 +3,7 @@ package com.example.demo.club.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -186,6 +187,60 @@ class ClubControllerTest {
 
         mockMvc.perform(get("/api/clubs/7"))
             .andExpect(status().isOk());
+    }
+
+    // ---- Archive / restore ----
+
+    @Test
+    void archivingAClubRequiresPlatformOwner() throws Exception {
+        mockMvc.perform(post("/api/clubs/1/archive").principal(oauthToken(STUDENT_EMAIL)))
+            .andExpect(status().isForbidden());
+    }
+
+    // A club president manages their own club, but publishing or hiding it is not theirs to do.
+    @Test
+    void archivingAClubIsNotAvailableToTheClubPresident() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+
+        mockMvc.perform(post("/api/clubs/1/archive").principal(oauthToken(PRESIDENT_EMAIL)))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void archivingAClubSucceedsForPlatformOwner() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(clubService.archive(1L)).thenReturn(club);
+
+        mockMvc.perform(post("/api/clubs/1/archive").principal(oauthToken(OWNER_EMAIL)))
+            .andExpect(status().isOk());
+
+        verify(clubService).archive(1L);
+    }
+
+    @Test
+    void restoringAnArchivedClubSucceedsForPlatformOwner() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(clubService.restore(1L)).thenReturn(club);
+
+        mockMvc.perform(delete("/api/clubs/1/archive").principal(oauthToken(OWNER_EMAIL)))
+            .andExpect(status().isOk());
+
+        verify(clubService).restore(1L);
+    }
+
+    @Test
+    void archivingAMissingClubIsANotFound() throws Exception {
+        when(clubService.resolveBySlugOrId(eq("999"), any())).thenReturn(null);
+
+        mockMvc.perform(post("/api/clubs/999/archive").principal(oauthToken(OWNER_EMAIL)))
+            .andExpect(status().isNotFound());
     }
 
     private static Club nonActiveClub() {
