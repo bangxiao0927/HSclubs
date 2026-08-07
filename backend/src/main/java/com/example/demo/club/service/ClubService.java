@@ -163,6 +163,10 @@ public class ClubService {
      * Fields outside {@link #MANAGER_EDITABLE_FIELDS} are ignored, whatever the caller sends.
      */
     public Club update(Long id, JsonNode patch) {
+        // Re-read the row here rather than trusting a club the caller already loaded: what this
+        // method writes back is the whole row, so it must be merged onto the stored values as
+        // this service sees them, not onto an instance a controller may have mutated (the
+        // controller's copy carries viewer/permission fields) or held across another write.
         Club existing = clubMapper.findById(id);
         if (existing == null) {
             throw new IllegalArgumentException("Club not found");

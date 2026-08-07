@@ -1,6 +1,7 @@
 package com.example.demo.club.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -169,12 +170,21 @@ class ClubServiceTest {
     void updateRejectsAnUnknownCategoryEvenWhenEveryOtherFieldIsOmitted() {
         when(clubMapper.findById(7L)).thenReturn(storedClub());
 
-        try {
-            clubService.update(7L, json("{\"category\":\"Not A Category\"}"));
-            assertThat(false).as("expected an IllegalArgumentException").isTrue();
-        } catch (IllegalArgumentException expected) {
-            assertThat(expected).hasMessage("Invalid category");
-        }
+        assertThatThrownBy(() -> clubService.update(7L, json("{\"category\":\"Not A Category\"}")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Invalid category");
+
+        verify(clubMapper, never()).update(any());
+    }
+
+    // The endpoint takes raw JSON, so a body that is valid JSON but not an object reaches the
+    // service instead of failing during binding. It must be a 400 (IllegalArgumentException,
+    // which the controller maps) rather than an unhandled 500.
+    @Test
+    void updateRejectsABodyThatIsNotAJsonObject() {
+        assertThatThrownBy(() -> clubService.update(7L, json("[1, 2, 3]")))
+            .isInstanceOf(IllegalArgumentException.class);
+
         verify(clubMapper, never()).update(any());
     }
 
