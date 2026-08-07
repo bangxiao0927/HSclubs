@@ -7,7 +7,7 @@ import {
   fetchAuthenticatedUser,
   logout as apiLogout,
 } from '../services/authService'
-import { buildApiUrl } from '../services/httpClient'
+import { buildApiUrl, setUnauthorizedHandler } from '../services/httpClient'
 import { localAvatar, userAvatar } from '../utils/avatarImages'
 import { normalizeAuthRedirect, savePendingAuthRedirect } from '../utils/authRedirect'
 
@@ -65,9 +65,13 @@ export const useAuthStore = defineStore('auth', () => {
       currentUser.value = normalizeUser(fetched)
       userError.value = null
     } catch (error) {
+      // fetchAuthenticatedUser already separates the two cases: it returns null for a real 401
+      // and only throws for a network error or a 5xx. Treating a throw as "signed out" meant one
+      // failed request on cold load (offline blip, backend restart, proxy 502) logged the
+      // student out of a still-valid session and bounced them off the page they were on, so the
+      // previous user is deliberately kept here.
       userError.value =
         error instanceof Error ? error.message : 'Unable to verify session'
-      currentUser.value = null
     } finally {
       userLoading.value = false
       hasCheckedSession.value = true
@@ -129,9 +133,30 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const logout = async () => {
-    await apiLogout()
-    currentUser.value = null
+    try {
+      await apiLogout()
+      userError.value = null
+    } catch (error) {
+      // Neither caller catches (App.vue's header button, ProfileView's), so rethrowing here
+      // only produced an unhandled rejection. The local session is cleared either way below;
+      // record why the server call failed instead of crashing the handler.
+      userError.value =
+        error instanceof Error ? error.message : 'Sign-out request failed'
+    } finally {
+      // Signing out must always work client-side. Clearing only on success meant a 401 on an
+      // already-dead session, or any network blip, left the app showing the user as signed in
+      // as well.
+      currentUser.value = null
+    }
   }
+
+  // A 401 from any other endpoint means this session is gone; drop the user so the router
+  // guards and the header stop treating it as live. Registered once, when the store is first
+  // used, since the services have no access to the store themselves.
+  setUnauthorizedHandler(() => {
+    currentUser.value = null
+    hasCheckedSession.value = true
+  })
 
   return {
     currentUser,

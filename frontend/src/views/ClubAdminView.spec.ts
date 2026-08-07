@@ -61,7 +61,10 @@ const buildClub = (overrides: Partial<Club> = {}): Club => ({
   imageUrl: null,
   memberCount: 42,
   achievements: [],
-  canManage: false,
+  // The default fixture is what a *manager* of this club sees, because that is the only viewer
+  // the editor renders for now (see the canManageClub gate in the view); a visitor without
+  // manage rights gets the read-only notice instead, covered by its own test below.
+  canManage: true,
   ...overrides,
 })
 
@@ -110,6 +113,36 @@ describe('ClubAdminView member count', () => {
     expect(updateClubMock).toHaveBeenCalledTimes(1)
     const [, payload] = updateClubMock.mock.calls[0]!
     expect(payload).not.toHaveProperty('memberCount')
+  })
+
+  // /clubs/:id/admin is only guarded by requiresAuth and fetchClubById is a public endpoint, so
+  // the editor used to render for any signed-in visitor and only fail once they pressed Save.
+  // The backend was always enforced; this is about not inviting the edit in the first place.
+  it('renders a read-only notice instead of the editor for someone who does not manage the club', async () => {
+    const club = buildClub({ canManage: false })
+
+    const wrapper = await mountView(club)
+
+    expect(wrapper.find('form.admin-form').exists()).toBe(false)
+    expect(wrapper.find('input[type="file"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('You do not manage Chess Club')
+  })
+
+  it('still renders the editor for a platform owner who is not a club member', async () => {
+    const club = buildClub({ canManage: false })
+    const authStore = useAuthStore()
+    authStore.currentUser = {
+      id: '1',
+      email: 'owner@example.com',
+      displayName: 'Owner',
+      avatarUrl: '',
+      provider: 'google',
+      isOwner: true,
+    }
+
+    const wrapper = await mountView(club)
+
+    expect(wrapper.find('form.admin-form').exists()).toBe(true)
   })
 
   it('refreshes the club snapshot and invalidates list caches after assigning a president', async () => {

@@ -1,11 +1,12 @@
 import type { Club, ClubMembershipRequest } from '../types/club'
-import { buildApiUrl } from './httpClient'
+import { buildApiUrl, notifyIfUnauthorized } from './httpClient'
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = buildApiUrl(path)
   const headers = new Headers(init?.headers as HeadersInit | undefined)
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   const response = await fetch(url, { ...init, credentials: 'include', headers })
   if (!response.ok) {
+    notifyIfUnauthorized(response)
     const message = await response.text()
     throw new Error(message || `Request failed with status ${response.status}`)
   }
@@ -36,6 +37,7 @@ export const updateGraduationYear = async (graduationYear: number): Promise<void
   )
 
   if (!response.ok) {
+    notifyIfUnauthorized(response)
     throw new Error(await readErrorMessage(response))
   }
 }

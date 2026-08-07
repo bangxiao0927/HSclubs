@@ -198,7 +198,7 @@ const handleGraduationYearSave = async () => {
             <RouterLink to="/" class="btn primary">Browse clubs</RouterLink>
             <RouterLink
               v-if="currentUser?.isOwner"
-              to="/platform/admin"
+              to="/admin"
               class="btn ghost"
             >Platform admin</RouterLink>
             <button type="button" class="btn ghost" @click="handleLogout">Sign out</button>

@@ -1,5 +1,5 @@
 import type { Club, ClubMember, ClubMembershipRequest } from '../types/club'
-import { buildApiUrl } from './httpClient'
+import { buildApiUrl, notifyIfUnauthorized } from './httpClient'
 
 type FetchClubsOptions = {
   force?: boolean
@@ -30,6 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: init?.credentials ?? 'include',
     headers})
   if (!response.ok) {
+    notifyIfUnauthorized(response)
     const message = await response.text()
     throw new Error(message || `Request failed with status ${response.status}`)
   }

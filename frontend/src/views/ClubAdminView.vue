@@ -154,6 +154,11 @@ const hydrateForm = (data: Club) => {
 const authStore = useAuthStore()
 const { currentUser } = storeToRefs(authStore)
 const canManageMembers = computed(() => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner))
+// Same rule the backend enforces on every write here (ClubController#requireManageAccess and
+// ClubImageController). The route itself is only guarded by requiresAuth and fetchClubById is a
+// public endpoint, so without this the whole editor -- form, image upload, Save -- rendered for
+// any signed-in visitor and only failed once they pressed Save.
+const canManageClub = canManageMembers
 const presidents = computed(() => members.value.filter((m) => m.roleName?.toLowerCase() === 'president'))
 
 const loadClub = async (id: string) => {
@@ -348,7 +353,7 @@ watch(
   <section class="club-admin page-shell">
     <div class="admin-toolbar">
       <BackButton>← Back to clubs</BackButton>
-      <div class="toolbar-actions" v-if="!loading">
+      <div class="toolbar-actions" v-if="!loading && canManageClub">
         <RouterLink
           v-if="club"
           :to="`/clubs/${club.id}`"
@@ -367,6 +372,10 @@ watch(
     <div v-else-if="loadError" class="status-card error">
       <p>{{ loadError }}</p>
       <button type="button" class="ghost-btn" @click="retryLoad" :disabled="loading">Try again</button>
+    </div>
+    <div v-else-if="club && !canManageClub" class="status-card muted">
+      <p>You do not manage {{ club.name }}, so its settings are not editable from your account.</p>
+      <RouterLink :to="`/clubs/${club.id}`" class="ghost-btn">View the club page</RouterLink>
     </div>
     <template v-else-if="club">
       <header class="admin-hero">
