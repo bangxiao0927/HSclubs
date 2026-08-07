@@ -14,9 +14,13 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.ImageTypeSpecifier;
 import javax.imageio.ImageWriteParam;
@@ -640,7 +644,7 @@ class ImageStorageServiceTest {
         }
 
         @Override
-        public String getDescription(java.util.Locale locale) {
+        public String getDescription(Locale locale) {
             return "Reader with no MIME types (test)";
         }
     }
@@ -667,8 +671,8 @@ class ImageStorageServiceTest {
         }
 
         @Override
-        public java.util.Iterator<ImageTypeSpecifier> getImageTypes(int imageIndex) {
-            return java.util.List.of(ImageTypeSpecifier.createFromBufferedImageType(BufferedImage.TYPE_INT_RGB))
+        public Iterator<ImageTypeSpecifier> getImageTypes(int imageIndex) {
+            return List.of(ImageTypeSpecifier.createFromBufferedImageType(BufferedImage.TYPE_INT_RGB))
                 .iterator();
         }
 
@@ -683,7 +687,7 @@ class ImageStorageServiceTest {
         }
 
         @Override
-        public BufferedImage read(int imageIndex, javax.imageio.ImageReadParam param) {
+        public BufferedImage read(int imageIndex, ImageReadParam param) {
             return new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
         }
     }
