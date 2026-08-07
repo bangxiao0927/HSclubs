@@ -141,6 +141,36 @@ describe('AuthChoiceView', () => {
     expect(wrapper.text()).toContain('We could not complete your sign in. Please try again.')
   })
 
+  // A student turned away by the school's sign-in restriction is told why: "try again" is
+  // wrong advice for an account that can never be accepted.
+  it('explains a rejected email domain instead of inviting a retry', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider])
+    setRouteQuery({ error: 'email_domain_not_allowed' })
+    const wrapper = mount(AuthChoiceView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Please use your school account')
+    expect(wrapper.text()).not.toContain('Please try again')
+  })
+
+  it('explains an unverified email address', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider])
+    setRouteQuery({ error: 'email_not_verified' })
+    const wrapper = mount(AuthChoiceView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('not verified')
+  })
+
+  it('falls back to the generic message for an unknown error code', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider])
+    setRouteQuery({ error: 'something_new' })
+    const wrapper = mount(AuthChoiceView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('We could not complete your sign in. Please try again.')
+  })
+
   it('shows a providers-error banner when loading the provider list fails', async () => {
     fetchAuthProvidersMock.mockRejectedValue(new Error('Providers unavailable'))
     const wrapper = mount(AuthChoiceView)

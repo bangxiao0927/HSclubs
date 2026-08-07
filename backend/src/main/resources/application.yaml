@@ -48,6 +48,13 @@ app:
       # before that frontend change ships would 403 every write request. Flip to true
       # once the frontend is updated.
       enabled: ${APP_CSRF_ENABLED:false}
+    login:
+      # Who may sign in at all. Both restrictions are off by default: other schools copy this
+      # repo, so a fresh deployment has to work with any Google account, and a school that
+      # wants its site limited to its own Workspace turns them on here without touching code.
+      # Comma-separated, e.g. APP_ALLOWED_EMAIL_DOMAINS=students.example.edu,example.edu
+      allowed-email-domains: ${APP_ALLOWED_EMAIL_DOMAINS:}
+      require-verified-email: ${APP_REQUIRE_VERIFIED_EMAIL:false}
   upload:
     dir: ${APP_UPLOAD_DIR:uploads}
   avatar:

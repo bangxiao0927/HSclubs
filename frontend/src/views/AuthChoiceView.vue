@@ -20,10 +20,22 @@ const intentLabel = computed(() =>
   route.query.intent === 'register' ? 'Create account' : 'Sign in',
 )
 
+// The backend's OAuth2 failure handler passes its own codes for the school's sign-in
+// restrictions, so a student turned away by them is told why instead of being invited to retry
+// something that can never succeed. Anything else stays the generic retry message.
+const authErrorMessages: Record<string, string> = {
+  email_domain_not_allowed:
+    'That account is not allowed to sign in here. Please use your school account.',
+  email_not_verified:
+    'That account\u2019s email address is not verified with its provider, so it cannot be used to sign in.',
+}
+
 const routeError = computed(() => {
-  return typeof route.query.error === 'string'
-    ? 'We could not complete your sign in. Please try again.'
-    : ''
+  const code = route.query.error
+  if (typeof code !== 'string') {
+    return ''
+  }
+  return authErrorMessages[code] ?? 'We could not complete your sign in. Please try again.'
 })
 
 const redirectTarget = computed(() => {
