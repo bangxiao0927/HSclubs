@@ -10,6 +10,7 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
+import javax.imageio.spi.ImageReaderSpi;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 import java.awt.Color;
@@ -184,7 +185,8 @@ public class ImageStorageService {
             }
             ImageReader reader = readers.next();
             try {
-                return ImageFormat.fromMimeTypes(reader.getOriginatingProvider().getMIMETypes());
+                ImageReaderSpi provider = reader.getOriginatingProvider();
+                return ImageFormat.fromMimeTypes(provider == null ? null : provider.getMIMETypes());
             } finally {
                 reader.dispose();
             }
@@ -288,7 +290,17 @@ public class ImageStorageService {
         JPEG, PNG, WEBP, GIF;
 
         static ImageFormat fromMimeTypes(String[] mimeTypes) {
+            // A reader is allowed to report no MIME types at all (ImageReaderSpi.getMIMETypes()
+            // is documented as nullable, and getOriginatingProvider() is null for a reader
+            // constructed outside the registry). We cannot tell what such a reader decodes, so
+            // it is "unsupported format" -- a 400 -- not a NullPointerException escaping as a 500.
+            if (mimeTypes == null) {
+                throw new IllegalArgumentException(UNSUPPORTED_IMAGE_TYPE_MESSAGE);
+            }
             for (String mimeType : mimeTypes) {
+                if (mimeType == null) {
+                    continue;
+                }
                 String lower = mimeType.toLowerCase(Locale.ROOT);
                 if (lower.contains("jpeg")) {
                     return JPEG;

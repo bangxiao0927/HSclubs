@@ -22,6 +22,8 @@ import javax.imageio.ImageTypeSpecifier;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.spi.IIORegistry;
+import javax.imageio.spi.ImageReaderSpi;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 
@@ -362,6 +364,28 @@ class ImageStorageServiceTest {
         assertThat(Files.exists(suspiciousFile)).isTrue();
     }
 
+    // ImageReaderSpi.getMIMETypes() is documented as nullable, so a reader on the classpath can
+    // legitimately claim a stream while reporting no MIME type for it. Sniffing must then treat
+    // the upload as an unsupported format (IllegalArgumentException / 400), the same as every
+    // other undecodable input, rather than throwing NullPointerException out as a 500 (#95).
+    @Test
+    void rejectsAnUploadWhoseOnlyReaderReportsNullMimeTypesAsAClientError() throws IOException {
+        IIORegistry registry = IIORegistry.getDefaultInstance();
+        NullMimeTypeReaderSpi spi = new NullMimeTypeReaderSpi();
+        registry.registerServiceProvider(spi, ImageReaderSpi.class);
+        try {
+            ImageStorageService service = service(uploadDir);
+            MockMultipartFile file = new MockMultipartFile(
+                "file", "weird.img", "image/png", NullMimeTypeReaderSpi.MAGIC.clone());
+
+            assertThatThrownBy(() -> service.store(file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not supported");
+        } finally {
+            registry.deregisterServiceProvider(spi, ImageReaderSpi.class);
+        }
+    }
+
     private Path pathFor(String imageUrl) {
         return uploadDir.resolve(imageUrl.substring("/uploads/".length()));
     }
@@ -572,5 +596,95 @@ class ImageStorageServiceTest {
         buffer.putInt(60).putInt(10); // 6.0 sec
 
         return buffer.array();
+    }
+
+    // A minimal reader that claims a private magic prefix and, like any reader is allowed to,
+    // reports no MIME types at all. Registered only for the duration of the test above.
+    public static final class NullMimeTypeReaderSpi extends ImageReaderSpi {
+
+        static final byte[] MAGIC = {'N', 'U', 'L', 'L', 'M', 'I', 'M', 'E'};
+
+        public NullMimeTypeReaderSpi() {
+            super(
+                "test", "1.0",
+                new String[] {"nullmime"},
+                new String[] {"nullmime"},
+                null, // MIME types: the whole point of this reader
+                NullMimeTypeReader.class.getName(),
+                new Class<?>[] {ImageInputStream.class},
+                null,
+                false, null, null, null, null,
+                false, null, null, null, null);
+        }
+
+        @Override
+        public boolean canDecodeInput(Object source) throws IOException {
+            if (!(source instanceof ImageInputStream stream)) {
+                return false;
+            }
+            byte[] header = new byte[MAGIC.length];
+            stream.mark();
+            try {
+                stream.readFully(header);
+            } catch (IOException e) {
+                return false;
+            } finally {
+                stream.reset();
+            }
+            return Arrays.equals(header, MAGIC);
+        }
+
+        @Override
+        public ImageReader createReaderInstance(Object extension) {
+            return new NullMimeTypeReader(this);
+        }
+
+        @Override
+        public String getDescription(java.util.Locale locale) {
+            return "Reader with no MIME types (test)";
+        }
+    }
+
+    public static final class NullMimeTypeReader extends ImageReader {
+
+        NullMimeTypeReader(ImageReaderSpi originatingProvider) {
+            super(originatingProvider);
+        }
+
+        @Override
+        public int getNumImages(boolean allowSearch) {
+            return 1;
+        }
+
+        @Override
+        public int getWidth(int imageIndex) {
+            return 1;
+        }
+
+        @Override
+        public int getHeight(int imageIndex) {
+            return 1;
+        }
+
+        @Override
+        public java.util.Iterator<ImageTypeSpecifier> getImageTypes(int imageIndex) {
+            return java.util.List.of(ImageTypeSpecifier.createFromBufferedImageType(BufferedImage.TYPE_INT_RGB))
+                .iterator();
+        }
+
+        @Override
+        public IIOMetadata getStreamMetadata() {
+            return null;
+        }
+
+        @Override
+        public IIOMetadata getImageMetadata(int imageIndex) {
+            return null;
+        }
+
+        @Override
+        public BufferedImage read(int imageIndex, javax.imageio.ImageReadParam param) {
+            return new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+        }
     }
 }
