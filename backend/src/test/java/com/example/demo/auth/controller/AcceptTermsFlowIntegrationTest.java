@@ -36,8 +36,12 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("h2")
-@TestPropertySource(properties =
-    "spring.datasource.url=jdbc:h2:mem:accept_terms_flow_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE")
+@TestPropertySource(properties = {
+    "spring.datasource.url=jdbc:h2:mem:accept_terms_flow_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
+    // The h2 profile turns on MyBatis stdout logging for local development; keep it out of the
+    // build log, which src/test/resources/application.yaml cannot do (a profile-specific file
+    // wins over it).
+    "mybatis.configuration.log-impl=org.apache.ibatis.logging.nologging.NoLoggingImpl"})
 class AcceptTermsFlowIntegrationTest {
 
     private static final String EMAIL = "new-student@example.com";
