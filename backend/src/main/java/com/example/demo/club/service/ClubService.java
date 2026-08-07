@@ -98,10 +98,12 @@ public class ClubService {
         );
     }
 
-    // Splits the free-text query into words so each can match a different field, mirroring the
-    // frontend's own filter (frontend/src/utils/clubSearch.ts) so an in-memory result set and a
-    // server-side one cannot disagree about what a student's query means. The cap keeps a
-    // pathological query from generating an unbounded number of OR groups in one statement.
+    // Splits the free-text query into words so each can match a different field, the same way
+    // the frontend's own filter does (frontend/src/utils/clubSearch.ts), so an in-memory result
+    // set and a server-side one read a student's query the same way. The one deliberate
+    // difference is that the frontend also searches a club's Instagram URL, which is not a
+    // column on clubs. The cap keeps a pathological query from generating an unbounded number
+    // of OR groups in one statement.
     private static List<String> searchTokens(String query) {
         if (!StringUtils.hasText(query)) {
             return List.of();

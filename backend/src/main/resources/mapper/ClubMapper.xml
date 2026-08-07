@@ -107,6 +107,8 @@
                  OR LOWER(category) LIKE CONCAT('%', LOWER(#{token}), '%')
                  OR LOWER(advisor) LIKE CONCAT('%', LOWER(#{token}), '%')
                  OR LOWER(description) LIKE CONCAT('%', LOWER(#{token}), '%')
+                 OR LOWER(meeting_schedule) LIKE CONCAT('%', LOWER(#{token}), '%')
+                 OR LOWER(contact_email) LIKE CONCAT('%', LOWER(#{token}), '%')
                  OR LOWER(location) LIKE CONCAT('%', LOWER(#{token}), '%'))
           </foreach>
         </if>

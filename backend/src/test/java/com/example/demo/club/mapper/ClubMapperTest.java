@@ -155,6 +155,15 @@ class ClubMapperTest {
             .hasSize(1);
     }
 
+    // The example in docs/API.md: the words live in the name and the meeting schedule.
+    @Test
+    void searchMatchesAWordThatOnlyAppearsInTheMeetingSchedule() {
+        insertSearchableClub();
+
+        assertThat(clubMapper.search(null, null, null, null, List.of("chess", "wednesday"), 0, 10))
+            .hasSize(1);
+    }
+
     @Test
     void searchStillRequiresEveryWordToMatchSomething() {
         insertSearchableClub();
@@ -172,9 +181,10 @@ class ClubMapperTest {
 
     private void insertSearchableClub() {
         jdbcTemplate.update("""
-            INSERT INTO clubs (id, name, category, description, location, advisor, status)
+            INSERT INTO clubs (id, name, category, description, location, advisor,
+                               meeting_schedule, contact_email, status)
             VALUES (4, 'Chess Club', 'Competition & Strategy', 'Casual and competitive play',
-                    'Room 214', 'Ms. Lee', 'active')
+                    'Room 214', 'Ms. Lee', 'Wednesday lunch', 'chess@example.com', 'active')
             """);
     }
 
