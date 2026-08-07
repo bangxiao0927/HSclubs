@@ -7,6 +7,10 @@ import com.example.demo.club.model.ClubMemberView;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.model.ViewerMembershipStatus;
 import com.example.demo.common.PaginationClamps;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,12 +32,33 @@ public class ClubService {
     );
     private static final Set<String> ALLOWED_MEMBER_ROLES = Set.of("member", "president");
 
+    // Exactly the fields a club manager may edit through PUT /api/clubs/{id}. Everything else
+    // the update statement writes -- slug (the club's public URL), status, visibility,
+    // approved_at, approved_by_oauth_user_id -- is carried over from the stored row instead:
+    // those decide whether a club is listed and published at all, and a club president must not
+    // be able to change them by adding a key to their edit request. image_url is absent for the
+    // same reason it is absent from the SQL: it only ever changes through the upload flow.
+    private static final Set<String> MANAGER_EDITABLE_FIELDS = Set.of(
+        "name",
+        "aliasName",
+        "description",
+        "category",
+        "meetingSchedule",
+        "scheduleNote",
+        "location",
+        "contactEmail",
+        "advisor",
+        "achievements"
+    );
+
     private final ClubMapper clubMapper;
     private final OAuthUserMapper oAuthUserMapper;
+    private final ObjectMapper objectMapper;
 
-    public ClubService(ClubMapper clubMapper, OAuthUserMapper oAuthUserMapper) {
+    public ClubService(ClubMapper clubMapper, OAuthUserMapper oAuthUserMapper, ObjectMapper objectMapper) {
         this.clubMapper = clubMapper;
         this.oAuthUserMapper = oAuthUserMapper;
+        this.objectMapper = objectMapper;
     }
 
     // ---- Listing ----
@@ -130,13 +155,43 @@ public class ClubService {
         return clubMapper.findById(club.getId());
     }
 
-    public Club update(Long id, Club club) {
-        normalizeClub(club);
-        club.setId(id);
-        clubMapper.update(club);
+    /**
+     * Applies a manager's edit to a club. The patch is raw request JSON so that an omitted field
+     * keeps its stored value while an explicitly null field clears it -- the update statement
+     * writes every column, so binding the body into a Club first (where both cases look like
+     * null) meant a partial edit silently wiped description, advisor, schedule, and the rest.
+     * Fields outside {@link #MANAGER_EDITABLE_FIELDS} are ignored, whatever the caller sends.
+     */
+    public Club update(Long id, JsonNode patch) {
+        Club existing = clubMapper.findById(id);
+        if (existing == null) {
+            throw new IllegalArgumentException("Club not found");
+        }
+        Club merged = applyEditableFields(existing, patch);
+        normalizeClub(merged);
+        merged.setId(id);
+        clubMapper.update(merged);
         // Same reasoning as create(): member_count is never written by this update, so
-        // re-fetch instead of returning the caller-supplied (and now stale) `club`.
+        // re-fetch instead of returning the now-stale in-memory club.
         return clubMapper.findById(id);
+    }
+
+    private Club applyEditableFields(Club existing, JsonNode patch) {
+        if (patch == null || !patch.isObject()) {
+            throw new IllegalArgumentException("Request body must be a JSON object");
+        }
+        ObjectNode editable = objectMapper.createObjectNode();
+        patch.properties().stream()
+            .filter(field -> MANAGER_EDITABLE_FIELDS.contains(field.getKey()))
+            .forEach(field -> editable.set(field.getKey(), field.getValue()));
+        try {
+            // readerForUpdating applies only the properties present in the tree, so an omitted
+            // key leaves the stored value untouched and an explicit null still clears it.
+            return objectMapper.readerForUpdating(existing).readValue(editable);
+        } catch (JacksonException e) {
+            // A wrong JSON type for a field (e.g. "achievements": 5) is a bad request, not a 500.
+            throw new IllegalArgumentException("Invalid club field value", e);
+        }
     }
 
     // The only path allowed to change a club's stored image URL: called from the dedicated,
