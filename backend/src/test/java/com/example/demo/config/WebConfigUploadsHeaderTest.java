@@ -18,8 +18,9 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * User-uploaded files are served straight from disk under our own origin, so this is standard
- * hardening against the browser trying to sniff a malicious upload's content type.
+ * User-uploaded files are served straight from disk under our own origin, so these are the
+ * standard hardening headers for them: no content-type sniffing, and no search indexing of the
+ * image URLs themselves (the SPA's robots.txt lives on a different origin and cannot cover them).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -46,5 +47,12 @@ class WebConfigUploadsHeaderTest {
         mockMvc.perform(get("/uploads/sample.jpg"))
             .andExpect(status().isOk())
             .andExpect(header().string("X-Content-Type-Options", "nosniff"));
+    }
+
+    @Test
+    void uploadedFileResponseCarriesNoindexRobotsHeader() throws Exception {
+        mockMvc.perform(get("/uploads/sample.jpg"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("X-Robots-Tag", "noindex"));
     }
 }

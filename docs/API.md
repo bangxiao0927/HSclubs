@@ -125,6 +125,13 @@ the UUIDv4 filename being unguessable, the same model as an unlisted document li
 deliberate trade-off: serving images through an authorization-aware controller instead would
 also have to cover club cover images, and would give up static file serving and HTTP caching.
 
+Because those URLs are public, every `/uploads/**` response carries `X-Content-Type-Options:
+nosniff` and `X-Robots-Tag: noindex` (`WebConfig`). The `noindex` header, not the SPA's
+`robots.txt`, is what keeps uploaded photos out of search indexes: `robots.txt` is served from
+the SPA origin and has no authority over the API origin these files come from, and the
+`noindex` robots meta tag the media page sets covers only that HTML page, not a direct hit on
+the image URL.
+
 `authorAvatarUrl` is not part of this boundary: it is `oauth_users.avatar_url`, populated
 from the OAuth provider's own profile picture claim (e.g. Google's `picture`) at login, and
 is an external URL on the provider's own domain, not a file under `/uploads/**`. It can be
@@ -194,6 +201,14 @@ rejects it first with a 413, before the title is even read, so it cannot also pr
 the 400s below. The two limits are deliberately layered (6MB above the application's own 5MB
 JPEG/PNG/WebP limit): if they were equal, Spring would take the file before the readable
 400 could ever be produced, turning that validation into dead code.
+
+Note the privacy consequence of the GIF passthrough described above: because a GIF is stored
+byte-for-byte, any metadata embedded in it (comment/application extension blocks, and whatever
+a phone or editor wrote there) is retained and served to every viewer of the club's public
+page. Only the re-encoded formats -- JPEG, PNG, WebP -- are guaranteed metadata-free. GIF is
+not a common carrier of GPS EXIF the way a phone JPEG is, which is why the passthrough is still
+the default, but a GIF upload is the one path where an uploader's metadata can reach the
+public page.
 
 That 413 body -- and every 400/403/404 status below -- is a real `application/problem+json`
 document (verified end to end by `ApiExceptionHandlerIntegrationTest`, not asserted from
