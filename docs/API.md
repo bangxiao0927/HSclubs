@@ -375,6 +375,11 @@ Apply to join a club. Requires: authenticated.
 
 Status: 204 | 400 | 401 | 409 (already applied/member)
 
+Both 409 cases are real checks, not just documentation: an existing member (including the
+club's own president) is rejected before a request row is created, and a duplicate request
+that slips past the check-then-insert -- a double-clicked button, or two tabs -- surfaces as
+the same 409 through the unique constraint rather than a 500.
+
 ### DELETE /api/clubs/{id}/members/apply
 Cancel own membership application. Requires: authenticated.
 
@@ -386,7 +391,9 @@ Cancel own membership application. Requires: authenticated.
 List pending membership requests. Requires: platform_owner, or club president.
 
 ### POST /api/clubs/{id}/membership-requests/{requestId}/approve
-Approve a membership request. Adds user as member. Status: 204
+Approve a membership request. Adds the user as a member, or leaves their existing role
+untouched if they are already in the club: approval must never downgrade a president who
+happened to have an open request. Status: 204
 
 ### DELETE /api/clubs/{id}/membership-requests/{requestId}
 Reject/delete a membership request. Status: 204

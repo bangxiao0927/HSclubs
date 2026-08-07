@@ -68,6 +68,16 @@ public interface ClubMapper {
                      @Param("oauthUserId") Long oauthUserId,
                      @Param("roleName") String roleName);
 
+    /**
+     * Adds a membership row only if the user is not already in the club, leaving an existing
+     * role untouched. {@link #insertMember} deliberately overwrites the role (that is how a
+     * president is assigned), which is wrong for approving a join request: approving a request
+     * from someone who is already the club's president would demote them to member.
+     */
+    int insertMemberIfAbsent(@Param("clubId") Long clubId,
+                             @Param("oauthUserId") Long oauthUserId,
+                             @Param("roleName") String roleName);
+
     List<ClubMembershipRequest> findPendingRequestsByClubId(@Param("clubId") Long clubId);
 
     ClubMembershipRequest findPendingRequestByClubAndUser(@Param("clubId") Long clubId,

@@ -103,6 +103,45 @@ class ClubMapperTest {
         assertThat(lockedId).isNull();
     }
 
+    // insertMember is the assign-a-role statement, so it deliberately overwrites role_name --
+    // that is how a president is assigned. Approving a join request must not use it: the
+    // applicant may already be in the club, and downgrading the club's own president to member
+    // is the worst case of that.
+    @Test
+    void insertMemberIfAbsentLeavesAnExistingPresidentRoleAlone() {
+        jdbcTemplate.update("INSERT INTO oauth_users (uid, provider, provider_user_id) VALUES (30, 'google', 'g-30')");
+        jdbcTemplate.update("INSERT INTO club_member (club_id, oauth_user_id, role_name) VALUES (3, 30, 'president')");
+
+        clubMapper.insertMemberIfAbsent(3L, 30L, "member");
+
+        assertThat(roleOf(3L, 30L)).isEqualTo("president");
+    }
+
+    @Test
+    void insertMemberIfAbsentStillAddsAMemberWhoIsNotInTheClubYet() {
+        jdbcTemplate.update("INSERT INTO oauth_users (uid, provider, provider_user_id) VALUES (31, 'google', 'g-31')");
+
+        clubMapper.insertMemberIfAbsent(3L, 31L, "member");
+
+        assertThat(roleOf(3L, 31L)).isEqualTo("member");
+    }
+
+    @Test
+    void insertMemberStillOverwritesTheRoleSoPresidentAssignmentKeepsWorking() {
+        jdbcTemplate.update("INSERT INTO oauth_users (uid, provider, provider_user_id) VALUES (32, 'google', 'g-32')");
+        jdbcTemplate.update("INSERT INTO club_member (club_id, oauth_user_id, role_name) VALUES (3, 32, 'member')");
+
+        clubMapper.insertMember(3L, 32L, "president");
+
+        assertThat(roleOf(3L, 32L)).isEqualTo("president");
+    }
+
+    private String roleOf(long clubId, long oauthUserId) {
+        return jdbcTemplate.queryForObject(
+            "SELECT role_name FROM club_member WHERE club_id = ? AND oauth_user_id = ?",
+            String.class, clubId, oauthUserId);
+    }
+
     @Test
     void findAllPaginatedReportsMemberCountFromClubMemberTableNotTheStaleColumn() {
         jdbcTemplate.update(

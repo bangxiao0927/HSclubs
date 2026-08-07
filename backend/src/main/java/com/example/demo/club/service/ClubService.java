@@ -11,6 +11,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,10 @@ public class ClubService {
         "Competition & Strategy"
     );
     private static final Set<String> ALLOWED_MEMBER_ROLES = Set.of("member", "president");
+
+    // One wording for both ways the same conflict is detected: the check below, and the unique
+    // constraint that catches whatever slips past it.
+    private static final String DUPLICATE_REQUEST_MESSAGE = "You already have a pending request for this club";
 
     // Exactly the fields a club manager may edit through PUT /api/clubs/{id}. Everything else
     // the update statement writes -- slug (the club's public URL), status, visibility,
@@ -223,11 +228,25 @@ public class ClubService {
         if (oauthUserId == null) {
             throw new IllegalStateException("Viewer is not registered as an OAuth user");
         }
+        // Applying while already in the club is what let an approval overwrite the applicant's
+        // role; reject it here so the request never exists in the first place.
+        ViewerMembershipStatus membership = clubMapper.findMembershipStatusByUserId(clubId, oauthUserId);
+        if (membership != null && Boolean.TRUE.equals(membership.getMember())) {
+            throw new IllegalStateException("You are already a member of this club");
+        }
         ClubMembershipRequest existing = clubMapper.findPendingRequestByClubAndUser(clubId, oauthUserId);
         if (existing != null) {
-            throw new IllegalStateException("You already have a pending request for this club");
+            throw new IllegalStateException(DUPLICATE_REQUEST_MESSAGE);
         }
-        clubMapper.insertMembershipRequest(clubId, oauthUserId);
+        try {
+            clubMapper.insertMembershipRequest(clubId, oauthUserId);
+        } catch (DuplicateKeyException e) {
+            // The check above is check-then-insert, so two concurrent requests (a double-clicked
+            // button, two tabs) both pass it and the second violates
+            // uq_club_membership_request. That is the same conflict the check reports, so it
+            // leaves this service as the same exception rather than as a 500.
+            throw new IllegalStateException(DUPLICATE_REQUEST_MESSAGE, e);
+        }
     }
 
     public List<ClubMembershipRequest> findPendingRequests(Long clubId) {
@@ -240,7 +259,9 @@ public class ClubService {
         if (request == null || !clubId.equals(request.getClubId())) {
             throw new IllegalArgumentException("Pending request not found for this club");
         }
-        clubMapper.insertMember(request.getClubId(), request.getOauthUserId(), "member");
+        // Never insertMember here: that statement overwrites role_name, so approving a request
+        // from someone already in the club (the president, most damagingly) demoted them.
+        clubMapper.insertMemberIfAbsent(request.getClubId(), request.getOauthUserId(), "member");
         clubMapper.deleteMembershipRequest(requestId);
     }
 

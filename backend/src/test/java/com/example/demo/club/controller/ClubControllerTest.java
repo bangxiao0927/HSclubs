@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -18,7 +19,9 @@ import com.example.demo.security.AuthenticatedUserResolver;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.boot.security.oauth2.client.autoconfigure.OAuth2ClientAutoConfiguration;
 import org.springframework.boot.security.oauth2.client.autoconfigure.servlet.OAuth2ClientWebSecurityAutoConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -115,6 +118,21 @@ class ClubControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"category\":\"STEM & Innovation\"}"))
             .andExpect(status().isOk());
+    }
+
+    // Both "already applied" cases -- the check, and the unique constraint that catches whatever
+    // races past it -- leave the service as IllegalStateException, and must read as a conflict.
+    @Test
+    void applyingWhenTheServiceReportsAConflictReturns409() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setStatus("active");
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        Mockito.doThrow(new IllegalStateException("You already have a pending request for this club"))
+            .when(clubService).applyForMembership(anyLong(), any());
+
+        mockMvc.perform(post("/api/clubs/1/members/apply").principal(oauthToken(STUDENT_EMAIL)))
+            .andExpect(status().isConflict());
     }
 
     // ---- Detail visibility ----

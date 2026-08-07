@@ -244,6 +244,16 @@
         ON DUPLICATE KEY UPDATE role_name = VALUES(role_name)
     </insert>
 
+    <!-- Same insert, but a no-op when the membership row already exists: "role_name =
+         role_name" writes the stored value back. insertMember above is the assign-a-role
+         statement (that is how a president is set), which must not be reused for approving a
+         join request, because doing so demoted an existing president to member. -->
+    <insert id="insertMemberIfAbsent">
+        INSERT INTO club_member (club_id, oauth_user_id, role_name)
+        VALUES (#{clubId}, #{oauthUserId}, #{roleName})
+        ON DUPLICATE KEY UPDATE role_name = role_name
+    </insert>
+
     <!-- Membership requests -->
     <resultMap id="MembershipRequestViewMap" type="com.example.demo.club.model.ClubMembershipRequest">
         <id column="id" property="id" />
