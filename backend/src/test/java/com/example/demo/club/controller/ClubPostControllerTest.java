@@ -21,6 +21,7 @@ import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.club.service.ClubContentModerationPolicy;
+import com.example.demo.club.service.ImageProcessingUnavailableException;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
 import com.example.demo.club.service.ClubVisibilityPolicy;
@@ -239,6 +240,26 @@ class ClubPostControllerTest {
                 .param("title", "Meeting recap")
                 .principal(oauthToken(MEMBER_EMAIL)))
             .andExpect(status().isInternalServerError());
+    }
+
+    // The decode-capacity fix (round 3): too many concurrent decodes is a transient server
+    // capacity limit, not a problem with this particular file, so it must be a 503 -- distinct
+    // from both the 400 (bad file) and 500 (storage failure) cases above.
+    @Test
+    void publishReturnsServiceUnavailableWhenDecodeCapacityIsExhausted() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setViewerIsMember(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
+        when(clubPostService.publish(any(), any(), any(), any()))
+            .thenThrow(new ImageProcessingUnavailableException("Too many images are being processed right now."));
+
+        mockMvc.perform(multipart("/api/clubs/1/posts")
+                .file(aPhoto())
+                .param("title", "Meeting recap")
+                .principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isServiceUnavailable());
     }
 
     @Test
