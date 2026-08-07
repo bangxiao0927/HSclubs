@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,7 +16,9 @@ import com.example.demo.security.AuthenticatedUserResolver;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.boot.security.oauth2.client.autoconfigure.OAuth2ClientAutoConfiguration;
 import org.springframework.boot.security.oauth2.client.autoconfigure.servlet.OAuth2ClientWebSecurityAutoConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -105,6 +108,22 @@ class ClubControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"category\":\"STEM & Innovation\"}"))
             .andExpect(status().isOk());
+    }
+
+    // The service's duplicate-request check is check-then-insert, so a double-clicked "Apply"
+    // button can get past it and hit the unique constraint instead. That is the same conflict
+    // the check reports, and must read as one (409), not as a server error.
+    @Test
+    void applyingTwiceConcurrentlyIsAConflictNotAServerError() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setStatus("active");
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        Mockito.doThrow(new DuplicateKeyException("uq_club_membership_request"))
+            .when(clubService).applyForMembership(anyLong(), any());
+
+        mockMvc.perform(post("/api/clubs/1/members/apply").principal(oauthToken(STUDENT_EMAIL)))
+            .andExpect(status().isConflict());
     }
 
     private OAuth2AuthenticationToken oauthToken(String email) {

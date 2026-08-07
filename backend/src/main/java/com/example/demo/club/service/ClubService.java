@@ -223,6 +223,12 @@ public class ClubService {
         if (oauthUserId == null) {
             throw new IllegalStateException("Viewer is not registered as an OAuth user");
         }
+        // Applying while already in the club is what let an approval overwrite the applicant's
+        // role; reject it here so the request never exists in the first place.
+        ViewerMembershipStatus membership = clubMapper.findMembershipStatusByUserId(clubId, oauthUserId);
+        if (membership != null && Boolean.TRUE.equals(membership.getMember())) {
+            throw new IllegalStateException("You are already a member of this club");
+        }
         ClubMembershipRequest existing = clubMapper.findPendingRequestByClubAndUser(clubId, oauthUserId);
         if (existing != null) {
             throw new IllegalStateException("You already have a pending request for this club");
@@ -240,7 +246,9 @@ public class ClubService {
         if (request == null || !clubId.equals(request.getClubId())) {
             throw new IllegalArgumentException("Pending request not found for this club");
         }
-        clubMapper.insertMember(request.getClubId(), request.getOauthUserId(), "member");
+        // Never insertMember here: that statement overwrites role_name, so approving a request
+        // from someone already in the club (the president, most damagingly) demoted them.
+        clubMapper.insertMemberIfAbsent(request.getClubId(), request.getOauthUserId(), "member");
         clubMapper.deleteMembershipRequest(requestId);
     }
 

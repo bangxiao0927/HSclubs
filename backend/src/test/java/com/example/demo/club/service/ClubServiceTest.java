@@ -13,6 +13,8 @@ import static org.mockito.Mockito.when;
 import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.club.mapper.ClubMapper;
 import com.example.demo.club.model.Club;
+import com.example.demo.club.model.ClubMembershipRequest;
+import com.example.demo.club.model.ViewerMembershipStatus;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -24,15 +26,17 @@ import org.mockito.ArgumentCaptor;
 class ClubServiceTest {
 
     private ClubMapper clubMapper;
+    private OAuthUserMapper oAuthUserMapper;
     private ClubService clubService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
         clubMapper = mock(ClubMapper.class);
+        oAuthUserMapper = mock(OAuthUserMapper.class);
         when(clubMapper.findAllPaginated(anyInt(), anyInt())).thenReturn(List.of());
         when(clubMapper.search(any(), any(), any(), any(), any(), anyInt(), anyInt())).thenReturn(List.of());
-        clubService = new ClubService(clubMapper, mock(OAuthUserMapper.class), objectMapper);
+        clubService = new ClubService(clubMapper, oAuthUserMapper, objectMapper);
     }
 
     @Test
@@ -186,6 +190,56 @@ class ClubServiceTest {
             .isInstanceOf(IllegalArgumentException.class);
 
         verify(clubMapper, never()).update(any());
+    }
+
+    // ---- Membership ----
+
+    // Applying while already in the club is what let an approval overwrite the applicant's
+    // stored role, so the request must never be created in the first place.
+    @Test
+    void applyForMembershipRejectsSomeoneWhoIsAlreadyAMember() {
+        when(oAuthUserMapper.findIdByEmail("member@example.com")).thenReturn(20L);
+        when(clubMapper.findMembershipStatusByUserId(3L, 20L)).thenReturn(membershipStatus());
+
+        assertThatThrownBy(() -> clubService.applyForMembership(3L, "member@example.com"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("already a member");
+
+        verify(clubMapper, never()).insertMembershipRequest(any(), any());
+    }
+
+    @Test
+    void applyForMembershipStillCreatesARequestForANonMember() {
+        when(oAuthUserMapper.findIdByEmail("student@example.com")).thenReturn(21L);
+        when(clubMapper.findMembershipStatusByUserId(3L, 21L)).thenReturn(null);
+
+        clubService.applyForMembership(3L, "student@example.com");
+
+        verify(clubMapper).insertMembershipRequest(3L, 21L);
+    }
+
+    // insertMember overwrites role_name (that is how a president is assigned), so approving a
+    // join request has to use the insert-if-absent statement instead.
+    @Test
+    void approveMembershipRequestNeverOverwritesAnExistingRole() {
+        ClubMembershipRequest request = new ClubMembershipRequest();
+        request.setId(5L);
+        request.setClubId(3L);
+        request.setOauthUserId(20L);
+        when(clubMapper.findMembershipRequestById(5L)).thenReturn(request);
+
+        clubService.approveMembershipRequest(3L, 5L);
+
+        verify(clubMapper).insertMemberIfAbsent(3L, 20L, "member");
+        verify(clubMapper, never()).insertMember(any(), any(), any());
+        verify(clubMapper).deleteMembershipRequest(5L);
+    }
+
+    private static ViewerMembershipStatus membershipStatus() {
+        ViewerMembershipStatus status = new ViewerMembershipStatus();
+        status.setMember(true);
+        status.setRoleName("president");
+        return status;
     }
 
     private Club captureUpdatedClub() {
