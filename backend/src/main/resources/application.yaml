@@ -1,6 +1,12 @@
 server:
   address: 127.0.0.1
   port: 8080
+  # nginx terminates TLS and proxies to plain HTTP (see docs/DEPLOYMENT.md), so without this
+  # the app sees every request as insecure: request.isSecure() stays false, Tomcat then omits
+  # the Secure attribute from JSESSIONID, and any absolute URL the app builds (notably the
+  # OAuth2 redirect) comes out as http://. "framework" makes Spring honour X-Forwarded-Proto,
+  # which the proxy already sends.
+  forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:framework}
   # At the 2MB default, Tomcat aborts the connection on an oversize upload rather than
   # delivering the error body, so the client sees a network error instead of the readable 400
   # ImageStorageService produces. This must exceed multipart.max-request-size below.
@@ -19,6 +25,11 @@ server:
         # cross-site subrequests (images, fetch, iframes), which is what CSRF actually
         # exploits, so this is not a meaningful weakening.
         same-site: ${SESSION_COOKIE_SAME_SITE:lax}
+        # Defaults to false so plain-HTTP local development still gets a session at all (a
+        # Secure cookie is dropped by the browser over http://localhost). Production must set
+        # SESSION_COOKIE_SECURE=true: this is a 7-day session cookie, and without it the
+        # cookie is eligible to travel over a plain-HTTP request.
+        secure: ${SESSION_COOKIE_SECURE:false}
 
 app:
   club-location-repair:
@@ -125,8 +136,15 @@ mybatis:
   type-aliases-package: com.example.demo
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # Statement logging is a local-dev aid and stays off by default: StdOutImpl prints every
+    # statement together with its bound parameters, which for the auth-layer queries means
+    # user emails, display names, and avatar URLs land in the process log. The h2 profile
+    # turns it back on (see application-h2.yaml), and MYBATIS_LOG_IMPL can enable it
+    # temporarily anywhere else.
+    log-impl: ${MYBATIS_LOG_IMPL:org.apache.ibatis.logging.nologging.NoLoggingImpl}
 
-# H2 Console (dev only)
-spring.h2.console.enabled: true
-spring.h2.console.path: /h2-console
+# The H2 console is deliberately NOT configured here. It used to be enabled in this base file
+# despite its "dev only" comment, and since the H2 driver is a runtime dependency and
+# SecurityConfig ends in anyRequest().permitAll(), that left /h2-console reachable by anyone
+# on a production deployment, with a login form that accepts an arbitrary JDBC URL. It is now
+# only enabled by the h2 profile (application-h2.yaml), which is local development.

@@ -23,3 +23,9 @@ spring:
     console:
       enabled: true
       path: /h2-console
+
+# Local development wants to see the SQL MyBatis actually runs; the base config keeps this off
+# because the printed bound parameters include user PII (see application.yaml).
+mybatis:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
