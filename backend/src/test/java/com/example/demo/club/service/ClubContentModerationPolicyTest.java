@@ -81,4 +81,45 @@ class ClubContentModerationPolicyTest {
 
         assertThat(result).isFalse();
     }
+
+    // canModerateAnyContent is the exact branch ClubPostController#feed and
+    // ClubPostCommentController#list reuse for their own viewerCanModerateAnyPost capability
+    // flag, and ClubPostController#requireManageAccess reuses for pin/unpin: it must agree with
+    // canModerate's own non-author branch in every case, since canModerate delegates to it.
+    @Test
+    void canModerateAnyContentIsTrueForTheClubPresident() {
+        Club club = clubWithCanManage(true);
+        when(authenticatedUserResolver.isPlatformOwner(authentication)).thenReturn(false);
+
+        assertThat(clubContentModerationPolicy.canModerateAnyContent(club, authentication)).isTrue();
+    }
+
+    @Test
+    void canModerateAnyContentIsTrueForAPlatformOwner() {
+        Club club = clubWithCanManage(false);
+        when(authenticatedUserResolver.isPlatformOwner(authentication)).thenReturn(true);
+
+        assertThat(clubContentModerationPolicy.canModerateAnyContent(club, authentication)).isTrue();
+    }
+
+    @Test
+    void canModerateAnyContentIsFalseForAnOrdinaryMember() {
+        Club club = clubWithCanManage(false);
+        when(authenticatedUserResolver.isPlatformOwner(authentication)).thenReturn(false);
+
+        assertThat(clubContentModerationPolicy.canModerateAnyContent(club, authentication)).isFalse();
+    }
+
+    // canModerate must not grant an ordinary member (not the author, not a president, not an
+    // owner) access just because canModerateAnyContent happens to be checked -- this is the
+    // delegation itself under test, not just canModerateAnyContent in isolation.
+    @Test
+    void canModerateDelegatesToCanModerateAnyContentForItsNonAuthorBranch() {
+        Club club = clubWithCanManage(true);
+
+        boolean result = clubContentModerationPolicy.canModerate(99L, AUTHOR_OAUTH_USER_ID, club, authentication);
+
+        assertThat(result).isEqualTo(clubContentModerationPolicy.canModerateAnyContent(club, authentication));
+        assertThat(result).isTrue();
+    }
 }

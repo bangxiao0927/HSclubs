@@ -3,6 +3,7 @@ package com.example.demo.club.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -20,6 +21,7 @@ import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubPost;
 import com.example.demo.club.model.PublicClubPost;
 import com.example.demo.club.service.ClubContentModerationPolicy;
+import com.example.demo.club.service.ImageProcessingUnavailableException;
 import com.example.demo.club.service.ClubPostService;
 import com.example.demo.club.service.ClubService;
 import com.example.demo.club.service.ClubVisibilityPolicy;
@@ -240,13 +242,33 @@ class ClubPostControllerTest {
             .andExpect(status().isInternalServerError());
     }
 
+    // The decode-capacity fix (round 3): too many concurrent decodes is a transient server
+    // capacity limit, not a problem with this particular file, so it must be a 503 -- distinct
+    // from both the 400 (bad file) and 500 (storage failure) cases above.
+    @Test
+    void publishReturnsServiceUnavailableWhenDecodeCapacityIsExhausted() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setViewerIsMember(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(oAuthUserMapper.findIdByEmail(MEMBER_EMAIL)).thenReturn(42L);
+        when(clubPostService.publish(any(), any(), any(), any()))
+            .thenThrow(new ImageProcessingUnavailableException("Too many images are being processed right now."));
+
+        mockMvc.perform(multipart("/api/clubs/1/posts")
+                .file(aPhoto())
+                .param("title", "Meeting recap")
+                .principal(oauthToken(MEMBER_EMAIL)))
+            .andExpect(status().isServiceUnavailable());
+    }
+
     @Test
     void feedIsReachableByALoggedOutVisitor() throws Exception {
         Club club = new Club();
         club.setId(1L);
         club.setStatus("active");
         when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
-        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
             .thenReturn(new ClubPostService.PostFeedPage(List.of(), 0, 12, 0));
 
         mockMvc.perform(get("/api/clubs/1/posts"))
@@ -266,12 +288,51 @@ class ClubPostControllerTest {
         PublicClubPost post = new PublicClubPost();
         post.setId(9L);
         post.setCommentCount(3);
-        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
             .thenReturn(new ClubPostService.PostFeedPage(List.of(post), 0, 12, 1));
 
         mockMvc.perform(get("/api/clubs/1/posts"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].commentCount").value(3));
+    }
+
+    // The capability field the frontend uses to show a delete control to a post's own author
+    // without ever seeing an oauth_user_id: the controller must forward the club's own
+    // canManage/platform-owner outcome, not recompute it differently from deletePost's own check.
+    @Test
+    void feedItemsCarryViewerCanDeleteFromTheServiceUnchanged() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setStatus("active");
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        PublicClubPost post = new PublicClubPost();
+        post.setId(9L);
+        post.setViewerCanDelete(true);
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
+            .thenReturn(new ClubPostService.PostFeedPage(List.of(post), 0, 12, 1));
+
+        mockMvc.perform(get("/api/clubs/1/posts"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(true));
+    }
+
+    // A club's own president must give the controller a viewerCanModerateAnyPost of true, so
+    // the feed's viewerCanDelete can reflect the president's own moderation power over posts
+    // they did not author -- the exact ClubContentModerationPolicy matrix deletePost enforces.
+    @Test
+    void feedComputesViewerCanModerateAnyPostFromTheClubsCanManage() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setStatus("active");
+        club.setCanManage(true);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), eq(true)))
+            .thenReturn(new ClubPostService.PostFeedPage(List.of(), 0, 12, 0));
+
+        mockMvc.perform(get("/api/clubs/1/posts").principal(oauthToken(PRESIDENT_EMAIL)))
+            .andExpect(status().isOk());
+
+        verify(clubPostService).findPublicFeed(eq(1L), anyInt(), anyInt(), any(), eq(true));
     }
 
     @Test
@@ -302,7 +363,7 @@ class ClubPostControllerTest {
         club.setStatus("pending");
         club.setViewerIsMember(true);
         when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
-        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt()))
+        when(clubPostService.findPublicFeed(eq(1L), anyInt(), anyInt(), any(), anyBoolean()))
             .thenReturn(new ClubPostService.PostFeedPage(List.of(), 0, 12, 0));
 
         mockMvc.perform(get("/api/clubs/1/posts").principal(oauthToken(MEMBER_EMAIL)))
@@ -386,7 +447,11 @@ class ClubPostControllerTest {
 
         mockMvc.perform(put("/api/clubs/1/posts/9/pin").principal(oauthToken(MEMBER_EMAIL)))
             .andExpect(status().isConflict())
-            .andExpect(status().reason("At most 3 posts can be pinned. Unpin one first."));
+            // Not status().reason(): ApiExceptionHandler now handles ResponseStatusException
+            // itself, via @ExceptionHandler, so the response body -- not
+            // MockHttpServletResponse#getErrorMessage(), which only ResponseStatusExceptionResolver's
+            // own sendError() populates -- is where the message actually lives now.
+            .andExpect(jsonPath("$.detail").value("At most 3 posts can be pinned. Unpin one first."));
     }
 
     @Test

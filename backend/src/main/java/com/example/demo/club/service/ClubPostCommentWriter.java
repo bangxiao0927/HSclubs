@@ -54,7 +54,10 @@ class ClubPostCommentWriter {
         comment.setBody(body);
         clubPostMapper.insertComment(comment);
 
-        PublicClubPostComment created = clubPostMapper.findPublicCommentByIdAndPostId(comment.getId(), postId);
+        // Mirrors ClubPostWriter#insertAndReadBack: the just-created comment's own author is
+        // always the viewer here, so viewerCanDelete reads back true unconditionally.
+        PublicClubPostComment created = clubPostMapper.findPublicCommentByIdAndPostId(
+            comment.getId(), postId, authorOauthUserId, false);
         if (created == null) {
             throw new IllegalStateException(
                 "Comment " + comment.getId() + " was not found immediately after being inserted");

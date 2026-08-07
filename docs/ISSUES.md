@@ -26,20 +26,21 @@ Work through issues in this order. Completed issues are collapsed at the bottom.
 | Seq | # | Issue | Status | Priority | Effort |
 |-----|---|-------|--------|----------|--------|
 | 1 | #9 | Verify president permissions | open | P0 | Small |
-| 2 | #17 | Club image storage verify & cleanup | open | P0 | Small |
-| 3 | #7 | Club creation UI in admin page | open | P0 | Medium |
-| 4 | #18 | Document SecurityConfig authorization model | open | P0 | Tiny |
-| 5 | #5 | Account creation data collection (home school) | open | P1 | Medium |
-| 6 | #8 | President assignment page | open | P1 | Medium |
-| 7 | #14 | Profile page completeness | open | P1 | Small |
-| 8 | #6 | Homepage images from DB | open | P1 | Small |
-| 9 | #3 | Club summary API | open | P1 | Medium |
-| 10 | #16 | Login remember period | open | P2 | Small |
-| 11 | #15 | Theme matching design PDF | open | P2 | Medium |
-| 12 | #11 | Club recommendation page | open | P2 | Medium |
-| 13 | #10 | Comment & rating system | deferred | P3 | Large |
-| 14 | #12 | QR code club application | deferred | P3 | Medium |
-| 15 | #13 | Meeting attendance system | deferred | P3 | Large |
+| 2 | #7 | Club creation UI in admin page | open | P0 | Medium |
+| 3 | #18 | Document SecurityConfig authorization model | open | P0 | Tiny |
+| 4 | #5 | Account creation data collection (home school) | open | P1 | Medium |
+| 5 | #8 | President assignment page | open | P1 | Medium |
+| 6 | #14 | Profile page completeness | open | P1 | Small |
+| 7 | #6 | Homepage images from DB | open | P1 | Small |
+| 8 | #3 | Club summary API | open | P1 | Medium |
+| 9 | #16 | Login remember period | open | P2 | Small |
+| 10 | #15 | Theme matching design PDF | open | P2 | Medium |
+| 11 | #11 | Club recommendation page | open | P2 | Medium |
+| 12 | #10 | Comment & rating system | deferred | P3 | Large |
+| 13 | #12 | QR code club application | deferred | P3 | Medium |
+| 14 | #13 | Meeting attendance system | deferred | P3 | Large |
+| 15 | #20 | Define `clubs.visibility` semantics | open | P3 | Medium |
+| 16 | #21 | Rate limiting on media publishing | open | P3 | Small |
 
 ---
 
@@ -495,9 +496,18 @@ CREATE TABLE persistent_logins (
 
 ## Issue #17: Verify Club Image Storage & Serving
 
-**Status:** `open`
-**PR:** —
-**Verified:** 2025-07-17 — WebConfig.java serves /uploads/** correctly. Gaps: old image not deleted on replacement (orphan leak), no scheduled cleanup of unreferenced files.
+**Status:** `done`
+**PR:** bangxiao0927/HSclubs#45, bangxiao0927/HSclubs#85
+**Verified:** 2026-08-04 — `WebConfig.java` still serves `/uploads/**` correctly (it later
+gained an explicit `X-Content-Type-Options: nosniff` header via bangxiao0927/HSclubs#85, but
+the resource mapping itself is unchanged since the 2025-07-17 pass). Both original gaps are
+closed: `ClubImageController#uploadImage` deletes the
+previous `imageUrl` file after the new one is committed (bangxiao0927/HSclubs#45), and
+`UploadCleanupService` runs a nightly (3 AM) scheduled sweep, introduced in
+bangxiao0927/HSclubs#45. That original sweep had neither a grace period nor any notion of
+`club-posts/` (club posts did not exist yet); bangxiao0927/HSclubs#85 later added the
+10-minute grace period, widened the scope to also walk `club-posts/` recursively, and
+explicitly excluded the Instagram avatar cache. No open gap remains.
 
 **Problem (Verification):**
 `ClubImageController.java` saves images to `backend/uploads/` with UUID filenames and returns `/uploads/{uuid}.{ext}` URLs. Need to verify:
@@ -510,12 +520,16 @@ CREATE TABLE persistent_logins (
 1. Confirm Spring Boot serves `/uploads/**` from the `uploads/` directory (check `WebConfig.java` or `application.yaml`).
 2. Test upload flow end-to-end: select file -> upload -> verify image displays.
 3. Delete old image file when a club's image is updated (currently the old file is orphaned).
+   -- Done in bangxiao0927/HSclubs#45.
 4. Add a scheduled task to clean up orphaned upload files not referenced by any club.
+   -- Done in bangxiao0927/HSclubs#45; rescoped to also walk `club-posts/` (and stay isolated
+   from the Instagram avatar cache) in bangxiao0927/HSclubs#85.
 
 **Expected Outcome:**
 - Club images upload and display correctly.
 - Old images are deleted when replaced.
-- No disk space leaks from orphaned files.
+- No disk space leaks from orphaned files under the legacy top-level upload location or
+  `club-posts/`.
 
 ---
 
@@ -542,6 +556,124 @@ A future maintainer opening `SecurityConfig.java` has to reverse-engineer the in
 
 ---
 
+## Issue #19: Club Media - Photo Feed, Comments, and Pinning
+
+**Status:** `done`
+**PR:** bangxiao0927/HSclubs#84, bangxiao0927/HSclubs#85, bangxiao0927/HSclubs#86, bangxiao0927/HSclubs#87, bangxiao0927/HSclubs#88, bangxiao0927/HSclubs#89, bangxiao0927/HSclubs#91
+**Verified:** 2026-08-04 — All eight `/api/clubs/{clubSlugOrId}/posts...` endpoints exist and match `docs/API.md`; see that file for the full request/response reference.
+
+**Problem:**
+`docs/FIRST_REPO_ROADMAP.md` item 23 ("Media area and media timeline") was filed under
+"P4 - Defer" because a social feed or story-like timeline creates moderation, storage, abuse,
+and deletion requirements that did not have answers yet.
+
+**Solution:**
+Shipped a per-club photo post feed, implemented in issues bangxiao0927/HSclubs#76 through
+bangxiao0927/HSclubs#82 (bangxiao0927/HSclubs#83, this entry's own issue, is the documentation
+and roadmap reconciliation that followed, not implementation), with those requirements
+answered directly:
+1. `ClubPost`/`ClubPostComment` schema, mapper, and `ImageStorageService` hardening
+   (bangxiao0927/HSclubs#76, bangxiao0927/HSclubs#77; PRs bangxiao0927/HSclubs#84,
+   bangxiao0927/HSclubs#85).
+2. Publish-a-post and read-the-feed endpoints (bangxiao0927/HSclubs#78; PR
+   bangxiao0927/HSclubs#86).
+3. Comments (capped at 50 per post) and moderation-gated deletion of posts and comments
+   (bangxiao0927/HSclubs#79; PR bangxiao0927/HSclubs#88).
+4. Pinning, capped at 3 posts per club (bangxiao0927/HSclubs#80; PR bangxiao0927/HSclubs#87).
+5. The public, read-only media page (bangxiao0927/HSclubs#81; PR bangxiao0927/HSclubs#89).
+6. Authenticated publish/comment/delete/pin interactions on that page
+   (bangxiao0927/HSclubs#82; PR bangxiao0927/HSclubs#91).
+
+**Expected Outcome:**
+- Moderation: a club's own president, or a platform owner, can delete any post or comment in
+  that club; only members can publish a post or a comment.
+- Storage: every non-GIF upload is re-encoded to a flattened, EXIF-stripped JPEG capped at
+  1600px; GIFs are capped at 2MB; a nightly (3 AM) job reclaims orphaned files under the
+  legacy top-level club-image upload location and `club-posts/` after a 10-minute grace
+  period, excluding the Instagram avatar cache and any other subsystem on the same upload
+  root.
+- Deletion: deleting a post removes its photo file from disk, not just its row.
+- Abuse: partially addressed by per-file size caps and the 50-comment-per-post cap. Rate
+  limiting on how often a member can publish is still open — see Issue #21 below.
+- Left explicitly out of scope: `clubs.visibility` semantics (see Issue #20 below) and photo
+  URLs (post images only, not author avatars) remain unauthenticated, unguessable capability
+  URLs (see `docs/API.md`).
+
+---
+
+## Issue #20: `clubs.visibility` Column Has No Defined Semantics
+
+**Status:** `open`
+**PR:** —
+
+**Problem:**
+`clubs.visibility` (`schema.sql`, default `'public'`) is selected, inserted, and updated by
+`ClubMapper`/`ClubMapper.xml`, but no query anywhere filters or branches on it. The only
+visibility gating that exists is `ClubVisibilityPolicy`, which uses `clubs.status = 'active'`
+for the club media feed (introduced in bangxiao0927/HSclubs#78; see
+`docs/FIRST_REPO_ROADMAP.md` item 23 and this gap's own reconciliation in
+bangxiao0927/HSclubs#83), not `clubs.visibility`. The club media feature deliberately did not
+become the first place to enforce this column: hiding a club's post feed while
+`GET /api/clubs/{id}` still returns that same club's full details publicly would be
+incoherent, not a fix.
+
+**Solution:**
+Define private-club behavior as its own standalone design task before writing any code that
+reads `clubs.visibility`:
+1. Decide what "private" should mean for a club: hidden from `GET /api/clubs` listing only,
+   hidden from `GET /api/clubs/{id}` detail too, or hidden from the media feed and comments
+   as well.
+2. Decide who can still see a private club (members, the president, platform owners; anyone
+   else at all).
+3. Apply that decision consistently across every endpoint that currently treats "active" as
+   "publicly visible" (`ClubController`, `ClubVisibilityPolicy`, the summary/recommendation
+   endpoints), not just the media feed.
+4. Only then start reading `clubs.visibility` in a `WHERE` clause or policy check.
+
+**Expected Outcome:**
+- `clubs.visibility` either has a documented, enforced meaning everywhere club visibility is
+  decided, or is removed if it turns out to duplicate `clubs.status`.
+- No endpoint is left checking `clubs.status` for the general case and `clubs.visibility` for
+  another, with the two silently able to disagree.
+
+---
+
+## Issue #21: No Rate Limiting on Media Publishing
+
+**Status:** `open`
+**PR:** —
+
+**Problem:**
+Neither `ClubPostController#publish` nor `ClubPostCommentController#create` limits how often
+a single member can call them. The only constraints in place are per-request: a 5MB
+(JPEG/PNG/WebP) or 2MB (GIF) file size cap per post, a 140-character title cap, a
+300-character comment body cap, and a 50-comment-per-post cap. A member who is otherwise in
+good standing can loop the publish endpoint to fill disk space with posts, or loop the
+comment endpoint to fill a post's 50-comment cap on many posts in quick succession. No
+rate-limiting mechanism (in-memory token bucket, Redis-backed limiter, or similar) exists
+anywhere in the codebase yet.
+
+**Solution:**
+1. Pick a scope and window: per-member-per-club, or per-member platform-wide; per-minute,
+   per-hour, or per-day.
+2. Pick a mechanism appropriate for a single-instance deployment first (e.g. an in-memory
+   token bucket keyed by `oauth_user_id`), since this is a single-school app with one backend
+   instance; only move to a shared store (Redis, a database-backed counter) if the app is
+   ever run with more than one backend instance.
+3. Return 429 (or the existing 409 "try again" convention already used for the comment-cap
+   and pin-cap conflicts) with a message the frontend can show as a cooldown notice.
+4. Add the limiter to both `ClubPostController#publish` and
+   `ClubPostCommentController#create`; consider whether pin/unpin need it too (lower priority:
+   they do not create new storage).
+
+**Expected Outcome:**
+- A member cannot exhaust disk space or spam a club's feed by looping the publish or comment
+  endpoint.
+- The limiter fails closed (rejects) rather than failing open if its own state is
+  unavailable.
+
+---
+
 ## Summary Table (historical — see Work Order at top for current sequence)
 
 | # | Issue | Status | Priority | Effort |
@@ -562,5 +694,8 @@ A future maintainer opening `SecurityConfig.java` has to reverse-engineer the in
 | 14 | Profile page completeness | open | P1 | Small |
 | 15 | Theme matching PDF | open | P2 | Medium |
 | 16 | Login remember period | open | P2 | Small |
-| 17 | Club image storage verify | open | P0 | Small |
+| 17 | Club image storage verify & cleanup | done | — | — |
 | 18 | Document SecurityConfig | open | P0 | Tiny |
+| 19 | Club media - photo feed, comments, pinning | done | — | — |
+| 20 | Define `clubs.visibility` semantics | open | P3 | Medium |
+| 21 | Rate limiting on media publishing | open | P3 | Small |

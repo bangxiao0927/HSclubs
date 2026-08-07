@@ -148,7 +148,14 @@ class ClubPostFeedIntegrationTest {
     }
 
     @Test
-    void memberCanPublishAndTheStoredFileIsShrunkBelowFourHundredKilobytesWithNoExif() throws Exception {
+    // The stored ceiling here is looser than it once was: peak decode memory must now be
+    // bounded for every accepted format/encoding, not just progressive JPEG (see
+    // ImageStorageService#decodeFullImage and ImageStorageServiceOomRegressionTest), so a
+    // large baseline JPEG like this one now also decodes via reader-level subsampling rather
+    // than a full decode -- a real, accepted trade-off of some sharpness/compression
+    // efficiency for a hard memory bound. 700KB is still a large reduction from the original
+    // ~4MB upload and catches a genuine regression (e.g. skipping re-encoding entirely).
+    void memberCanPublishAndTheStoredFileIsShrunkWellBelowTheOriginalSizeWithNoExif() throws Exception {
         long clubId = createActiveClubWithAMember();
         byte[] fourMegabyteJpeg = fourMegabyteJpegWithExif();
 
@@ -164,7 +171,7 @@ class ClubPostFeedIntegrationTest {
         Path storedFile = uploadDir.resolve(imageUrl.substring("/uploads/".length()));
         assertThat(Files.exists(storedFile)).isTrue();
         byte[] storedBytes = Files.readAllBytes(storedFile);
-        assertThat(storedBytes.length).isLessThan(400 * 1024);
+        assertThat(storedBytes.length).isLessThan(700 * 1024);
         assertThat(containsApp1ExifMarker(storedBytes)).isFalse();
     }
 
@@ -201,7 +208,8 @@ class ClubPostFeedIntegrationTest {
         long filesBefore = countRegularFiles(clubPostsDir);
         int rowsBefore = countPostRows(clubId);
 
-        doReturn(null).when(clubPostMapperSpy).findPublicPostByIdAndClubId(any(), eq(clubId));
+        doReturn(null).when(clubPostMapperSpy)
+            .findPublicPostByIdAndClubId(any(), eq(clubId), any(), org.mockito.ArgumentMatchers.anyBoolean());
 
         mockMvc.perform(multipart("/api/clubs/" + clubId + "/posts")
                 .file(new MockMultipartFile("file", "photo.jpg", "image/jpeg", tinyJpeg()))
@@ -280,6 +288,36 @@ class ClubPostFeedIntegrationTest {
             .andExpect(jsonPath("$.items", Matchers.hasSize(1)))
             .andExpect(jsonPath("$.items[0].authorDisplayName").value("Ada Lovelace"))
             .andExpect(jsonPath("$.items[0].authorAvatarUrl").value("/uploads/avatar-cache/ada.jpg"));
+    }
+
+    // Full-stack proof of the capability field: the frontend can show a delete control to the
+    // post's own author, and to a club president, without either ever seeing an
+    // author_oauth_user_id or inferring authorship by comparing display names.
+    @Test
+    void feedItemsMarkViewerCanDeleteTrueForTheAuthorAndPresidentButFalseForEveryoneElse() throws Exception {
+        long clubId = createActiveClubWithAMember();
+        insertPost(clubId, "Post 1", null);
+        String presidentEmail = "president@example.com";
+        long presidentUid = insertOauthUser(presidentEmail, "President", null);
+        jdbcTemplate.update(
+            "INSERT INTO club_member (club_id, oauth_user_id, role_name) VALUES (?, ?, 'president')",
+            clubId, presidentUid);
+
+        mockMvc.perform(get("/api/clubs/" + clubId + "/posts").with(authentication(oauthToken(MEMBER_EMAIL))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(true));
+
+        mockMvc.perform(get("/api/clubs/" + clubId + "/posts").with(authentication(oauthToken(presidentEmail))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(true));
+
+        mockMvc.perform(get("/api/clubs/" + clubId + "/posts").with(authentication(oauthToken(OUTSIDER_EMAIL))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(false));
+
+        mockMvc.perform(get("/api/clubs/" + clubId + "/posts"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].viewerCanDelete").value(false));
     }
 
     // Real DB, real join: proves the correlated subquery in ClubPostMapper.xml's
@@ -498,8 +536,8 @@ class ClubPostFeedIntegrationTest {
 
     // A large (~4MB), fine-grained-but-not-uniformly-random JPEG: real camera photos are large
     // because of sensor-level detail across a big canvas, which mostly averages away once
-    // Thumbnailator downscales to 1600x1600 -- unlike pure per-pixel noise, which doesn't
-    // compress any better after resampling and would fail the "under 400KB" expectation.
+    // downscaled to 1600x1600 -- unlike pure per-pixel noise, which doesn't compress any
+    // better after resampling and would fail the "well below the original size" expectation.
     // Embeds a minimal Exif APP1 segment so "carries no EXIF" is a meaningful assertion rather
     // than trivially true for any input.
     private static byte[] fourMegabyteJpegWithExif() throws Exception {

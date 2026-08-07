@@ -180,7 +180,10 @@ Keep each implementation chunk small enough to verify in one sitting:
 
 Avoid these until the core loop is stable:
 
-- Social media timelines.
+- Social media timelines beyond the club post photo feed already shipped (see
+  docs/FIRST_REPO_ROADMAP.md item 23): no stories, likes, algorithmic ranking, or
+  cross-club timelines. That feed still has no publish rate limiting (see docs/ISSUES.md);
+  close that gap before expanding the feature rather than building on top of it.
 - Complex recommendation algorithms.
 - Native mobile development.
 - Separate aggregator backend.

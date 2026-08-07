@@ -19,28 +19,11 @@
         id, club_id, author_oauth_user_id, title, image_url, pinned_at, pinned_by_oauth_user_id, created_at
     </sql>
 
-    <!-- Shared by findFeedByClubId, findPublicFeedByClubId, and countFeedByClubId so the count
-         can never disagree with either items query about which rows are "this club's feed". -->
+    <!-- Shared by findPublicFeedByClubId and countFeedByClubId so the count can never disagree
+         with the items query about which rows are "this club's feed". -->
     <sql id="FeedClause">
         club_id = #{clubId}
     </sql>
-
-    <!-- The CASE WHEN form is required over "(pinned_at IS NOT NULL) DESC": that expression is
-         1/0 in MySQL but BOOLEAN in H2 MODE=MySQL, an engine-dependent difference this repo has
-         already been bitten by (see schema.sql's achievements CLOB-vs-JSON comment). The
-         trailing "id DESC" is a deliberate pagination-stability tiebreaker: created_at only has
-         second granularity, so without it two posts created in the same second could swap
-         places between page requests, duplicating or skipping items across a page boundary. -->
-    <select id="findFeedByClubId" resultMap="ClubPostResultMap">
-        SELECT <include refid="PostColumnList" />
-        FROM club_post
-        WHERE <include refid="FeedClause" />
-        ORDER BY CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC,
-                 pinned_at  DESC,
-                 created_at DESC,
-                 id         DESC
-        LIMIT #{limit} OFFSET #{offset}
-    </select>
 
     <select id="countFeedByClubId" resultType="int">
         SELECT COUNT(*) FROM club_post WHERE <include refid="FeedClause" />
@@ -57,6 +40,7 @@
         <result column="author_display_name" property="authorDisplayName" />
         <result column="author_avatar_url" property="authorAvatarUrl" />
         <result column="comment_count" property="commentCount" />
+        <result column="viewer_can_delete" property="viewerCanDelete" />
     </resultMap>
 
     <!-- Shared by findPublicFeedByClubId and findPublicPostByIdAndClubId so a freshly published
@@ -67,20 +51,37 @@
          through as-is: see EpochSecondsInstantTypeHandler's Javadoc for why that (not the raw
          column) is what makes PublicClubPost#createdAt an unambiguous instant instead of a
          wall-clock reading a browser in a different timezone could misread as its own local
-         time. -->
+         time.
+
+         viewer_can_delete is computed here, not exposed as author_oauth_user_id itself: TRUE
+         when the caller already has club-wide moderation power (viewerCanModerateAnyPost, the
+         club's own canManage or a platform owner) or is this row's own author. A NULL
+         viewerOauthUserId (an anonymous caller) makes the equality below unknown, which CASE
+         WHEN treats as false, same as MySQL/H2's own three-valued logic everywhere else in this
+         file. -->
     <sql id="PublicPostColumnList">
         cp.id, cp.club_id, cp.title, cp.image_url, cp.pinned_at,
         UNIX_TIMESTAMP(cp.created_at) AS created_at,
         ou.display_name AS author_display_name,
         ou.avatar_url   AS author_avatar_url,
-        (SELECT COUNT(*) FROM club_post_comment cpc WHERE cpc.post_id = cp.id) AS comment_count
+        (SELECT COUNT(*) FROM club_post_comment cpc WHERE cpc.post_id = cp.id) AS comment_count,
+        CASE WHEN #{viewerCanModerateAnyPost} = TRUE OR cp.author_oauth_user_id = #{viewerOauthUserId}
+             THEN TRUE ELSE FALSE END AS viewer_can_delete
     </sql>
 
     <!-- Deliberately not a wildcard select and not a reuse of ClubMemberView's/
          ClubMembershipRequest's result maps (both select ou.email and both sit behind
          requireManageAccess): this is the first anonymous, unauthenticated endpoint to join
          oauth_users, so only its display_name/avatar_url columns are selected, aliased so the
-         result map above cannot accidentally widen into any other oauth_users column. -->
+         result map above cannot accidentally widen into any other oauth_users column.
+
+         The CASE WHEN form in ORDER BY is required over "(cp.pinned_at IS NOT NULL) DESC": that
+         expression is 1/0 in MySQL but BOOLEAN in H2 MODE=MySQL, an engine-dependent difference
+         this repo has already been bitten by (see schema.sql's achievements CLOB-vs-JSON
+         comment). The trailing "cp.id DESC" is a deliberate pagination-stability tiebreaker:
+         created_at only has second granularity, so without it two posts created in the same
+         second could swap places between page requests, duplicating or skipping items across a
+         page boundary. -->
     <select id="findPublicFeedByClubId" resultMap="PublicClubPostResultMap">
         SELECT <include refid="PublicPostColumnList" />
         FROM club_post cp
@@ -150,13 +151,6 @@
         <result column="created_at" property="createdAt" />
     </resultMap>
 
-    <select id="findCommentsByPostId" resultMap="ClubPostCommentResultMap">
-        SELECT id, post_id, author_oauth_user_id, body, created_at
-        FROM club_post_comment
-        WHERE post_id = #{postId}
-        ORDER BY created_at ASC, id ASC
-    </select>
-
     <select id="findCommentByIdAndPostId" resultMap="ClubPostCommentResultMap">
         SELECT id, post_id, author_oauth_user_id, body, created_at
         FROM club_post_comment
@@ -171,6 +165,7 @@
                 typeHandler="com.example.demo.club.mapper.EpochSecondsInstantTypeHandler" />
         <result column="author_display_name" property="authorDisplayName" />
         <result column="author_avatar_url" property="authorAvatarUrl" />
+        <result column="viewer_can_delete" property="viewerCanDelete" />
     </resultMap>
 
     <!-- Shared by findPublicCommentsByPostId and findPublicCommentByIdAndPostId, mirroring
@@ -180,16 +175,22 @@
          PublicPostColumnList's cp.created_at: see EpochSecondsInstantTypeHandler's Javadoc for
          why that is what makes PublicClubPostComment#createdAt an unambiguous instant instead
          of a wall-clock reading a browser in a different timezone could misread as its own
-         local time. -->
+         local time.
+
+         viewer_can_delete follows the exact same rule as PublicPostColumnList's own column: see
+         that comment for why a NULL viewerOauthUserId (anonymous caller) correctly evaluates to
+         false rather than NULL. -->
     <sql id="PublicCommentColumnList">
         cpc.id, cpc.post_id, cpc.body,
         UNIX_TIMESTAMP(cpc.created_at) AS created_at,
         ou.display_name AS author_display_name,
-        ou.avatar_url   AS author_avatar_url
+        ou.avatar_url   AS author_avatar_url,
+        CASE WHEN #{viewerCanModerateAnyPost} = TRUE OR cpc.author_oauth_user_id = #{viewerOauthUserId}
+             THEN TRUE ELSE FALSE END AS viewer_can_delete
     </sql>
 
     <!-- Oldest first, flat, uncapped by pagination (the 50-comment cap makes it unnecessary,
-         see #79). "id ASC" is the same same-second tiebreaker findFeedByClubId relies on. -->
+         see #79). "id ASC" is the same same-second tiebreaker findPublicFeedByClubId relies on. -->
     <select id="findPublicCommentsByPostId" resultMap="PublicClubPostCommentResultMap">
         SELECT <include refid="PublicCommentColumnList" />
         FROM club_post_comment cpc
