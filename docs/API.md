@@ -93,6 +93,13 @@ Status: 201 | 400 | 403
 ### GET /api/clubs/{clubSlugOrId}
 Get club detail. Accepts numeric ID or slug string. Viewer permissions (viewerIsMember, canManage, viewerHasPendingRequest) included when authenticated.
 
+Visibility follows `ClubVisibilityPolicy`, the same policy the post feed and comment list use:
+an `active` club is readable by anyone, while a non-`active` (pending or archived) club is
+readable only by a member, the club's president, or a platform owner. Everyone else gets 404,
+not 403 -- a 403 would confirm the club exists. This matters because the underlying
+`findById`/`findBySlug` queries carry no status filter, unlike every listing query, so this is
+the one read path that could otherwise surface a club the directory deliberately hides.
+
 ### PUT /api/clubs/{clubSlugOrId}
 Update club. Requires: platform_owner, or club president.
 
