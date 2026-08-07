@@ -18,13 +18,16 @@ import type { Club } from '../types/club'
 import type { ClubPost, ClubPostComment } from '../types/clubPost'
 import { clubPostImage } from '../utils/clubImages'
 import { userAvatar } from '../utils/avatarImages'
+import { createViewSessionOwner, type ViewSession } from '../utils/viewSession'
 import BackButton from '../components/BackButton.vue'
 
 const DEFAULT_PAGE_SIZE = 12
 const TITLE_MAX_LENGTH = 140
 const COMMENT_MAX_LENGTH = 300
 const SUPPORTED_FORMATS_NOTICE =
-  'Supported formats: JPEG, PNG, WebP, and GIF. HEIC (the default photo format on many iPhones) is not supported.'
+  'Supported formats: JPEG, PNG, and GIF. WebP is also supported, but limited to smaller images '
+  + '(3 megapixels or less, e.g. up to about 2000x1500). HEIC (the default photo format on many '
+  + 'iPhones) is not supported.'
 const PUBLIC_VISIBILITY_NOTICE =
   'This photo will be visible to anyone who visits this page, including people who are not logged in.'
 
@@ -55,14 +58,35 @@ const error = ref('')
 
 const expandedPostIds = ref<Set<number>>(new Set())
 const commentsByPost = ref<Record<number, CommentsEntry>>({})
-// A per-post monotonically increasing counter, never reset (not even by `load()`'s own state
-// reset): the single source of truth for "which in-flight comments request is the newest one"
-// for a given post. Comparing a response's captured generation against the live one at
-// resolution time is what lets loadComments and reconcileCommentsAfterSubmit below tell a
-// still-relevant response apart from a stale one that must be discarded, regardless of which
-// of two in-flight requests happens to resolve (or reject) last.
-const commentsRequestGeneration = ref<Record<number, number>>({})
 let loadedClubId: string | null = null
+
+// Everything `load()` resets below -- club/posts/page/size/total/error, the `loading` spinner,
+// the expanded-comments set, the per-post comment lists, drafts, action errors and in-flight
+// id sets -- is owned by one feed session at a time. Three rules, together, are what make
+// "no interleaving of load / backfill / navigation can display stale data or strand the
+// loading state" hold by construction rather than by case analysis:
+//
+//   1. `load()` is the only caller of `begin()`, and the only other place a session ends is
+//      `onBeforeUnmount`, where the whole view (spinner included) goes away. A navigation
+//      therefore ends the previous session and no *action* can end one -- so no action can
+//      invalidate the load that owns the spinner.
+//   2. `loading` is set true synchronously by the same call that begins the session, and is
+//      only ever cleared through that session's own `apply()`. The newest load always reaches
+//      its `finally` while current, so the spinner always clears; an older load's `finally`
+//      is dropped, so it cannot clear a spinner it no longer owns.
+//   3. Every other async flow captures `current()` *synchronously at the start of the user
+//      gesture* and writes only through it. A response that arrives after a navigation is
+//      dropped whole -- not compared field-by-field against re-derived route values, which is
+//      what the two previous designs got wrong (a flat counter let a backfill invalidate an
+//      unrelated load; a context key was built from the server-echoed page size but validated
+//      against the raw route query, so a clamped size never matched).
+//
+// Ordering *within* a session -- two backfills from two quick deletes, or a comments refetch
+// racing the GET that opened the panel -- is a separate concern handled by named claims on
+// that session, so it can never be confused with cross-navigation staleness.
+const feedSessions = createViewSessionOwner()
+const FEED_CHANNEL = 'feed'
+const commentsChannel = (postId: number) => `comments:${postId}`
 
 const routeClubId = computed(() => {
   const raw = route.params.id
@@ -82,6 +106,13 @@ const backTarget = computed(() => (routeClubId.value ? `/clubs/${routeClubId.val
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / Math.max(size.value, 1))))
 const hasNextPage = computed(() => (page.value + 1) * size.value < total.value)
 const hasPreviousPage = computed(() => page.value > 0)
+// The backend's clampPage only clamps to max(0, page) -- it cannot know the total at request
+// time -- so ?page=999 from a stale bookmark comes back as an empty page while total > 0. The
+// pagination nav stays reachable for exactly that case, but stepping back one page at a time
+// would mean hundreds of clicks through empty pages, so from beyond the end Previous goes
+// straight to the last page the server-reported total can actually fill. On a page that is
+// genuinely in range this is just page - 1, unchanged.
+const previousPageTarget = computed(() => Math.min(page.value - 1, totalPages.value - 1))
 
 const parseQueryInt = (raw: unknown, fallback: number) => {
   const value = Array.isArray(raw) ? raw[0] : raw
@@ -90,8 +121,14 @@ const parseQueryInt = (raw: unknown, fallback: number) => {
 }
 
 const load = async () => {
+  // Begun before anything else, and unconditionally: a navigation ends the previous session
+  // even when the new route has nothing to fetch, so a response for the club just left can
+  // never land on a view that has already moved on.
+  const session = feedSessions.begin()
   const clubIdOrSlug = routeClubId.value
   if (!clubIdOrSlug) {
+    // No request will follow, so nothing would ever clear a spinner left up here.
+    loading.value = false
     return
   }
 
@@ -120,21 +157,29 @@ const load = async () => {
       needsClub ? fetchClubById(clubIdOrSlug) : Promise.resolve(club.value),
       fetchClubMediaFeed(clubIdOrSlug, requestedPage, requestedSize),
     ])
-    if (needsClub) {
-      club.value = clubResponse
-      loadedClubId = clubIdOrSlug
-    }
-    posts.value = feed.items
-    page.value = feed.page
-    size.value = feed.size
-    total.value = feed.total
+    // Dropped whole if a newer load() has since superseded this one: applying a stale response
+    // would silently undo whatever that newer request already wrote.
+    session.apply(() => {
+      if (needsClub) {
+        club.value = clubResponse
+        loadedClubId = clubIdOrSlug
+      }
+      posts.value = feed.items
+      page.value = feed.page
+      size.value = feed.size
+      total.value = feed.total
+    })
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load club media'
-    club.value = null
-    posts.value = []
-    loadedClubId = null
+    session.apply(() => {
+      error.value = err instanceof Error ? err.message : 'Failed to load club media'
+      club.value = null
+      posts.value = []
+      loadedClubId = null
+    })
   } finally {
-    loading.value = false
+    session.apply(() => {
+      loading.value = false
+    })
   }
 }
 
@@ -154,42 +199,31 @@ const isExpanded = (postId: number) => expandedPostIds.value.has(postId)
 const emptyCommentsEntry: CommentsEntry = { loading: false, error: '', comments: [] }
 const commentsState = (postId: number) => commentsByPost.value[postId] ?? emptyCommentsEntry
 
-// Claims the next generation number for a post's comments request and records it as the live
-// one; a caller compares its own captured number against `commentsRequestGeneration.value[postId]`
-// once its request settles to know whether it is still the newest one.
-const bumpCommentsGeneration = (postId: number) => {
-  const next = (commentsRequestGeneration.value[postId] ?? 0) + 1
-  commentsRequestGeneration.value = { ...commentsRequestGeneration.value, [postId]: next }
-  return next
-}
-
 const loadComments = async (postId: number) => {
-  const generation = bumpCommentsGeneration(postId)
+  // One claim per post on the current session: the newest request for a post wins over any
+  // older one for that same post (another expand, or a post-submit reconciliation), while a
+  // navigation ends the session and so drops all of them at once.
+  const attempt = feedSessions.current().claim(commentsChannel(postId))
   commentsByPost.value = {
     ...commentsByPost.value,
     [postId]: { loading: true, error: '', comments: [] },
   }
   try {
     const comments = await fetchClubPostComments(routeClubId.value, postId)
-    if (commentsRequestGeneration.value[postId] !== generation) {
-      // A newer request for this same post (another loadComments call, or a post-submit
-      // reconciliation) has since superseded this one; applying this stale response now would
-      // silently undo whatever that newer request already wrote.
-      return
-    }
-    commentsByPost.value = {
-      ...commentsByPost.value,
-      [postId]: { loading: false, error: '', comments },
-    }
+    attempt.apply(() => {
+      commentsByPost.value = {
+        ...commentsByPost.value,
+        [postId]: { loading: false, error: '', comments },
+      }
+    })
   } catch (err) {
-    if (commentsRequestGeneration.value[postId] !== generation) {
-      return
-    }
     const message = err instanceof Error ? err.message : 'Failed to load comments'
-    commentsByPost.value = {
-      ...commentsByPost.value,
-      [postId]: { loading: false, error: message, comments: [] },
-    }
+    attempt.apply(() => {
+      commentsByPost.value = {
+        ...commentsByPost.value,
+        [postId]: { loading: false, error: message, comments: [] },
+      }
+    })
   }
 }
 
@@ -255,12 +289,18 @@ const handlePublish = async () => {
     return
   }
 
+  // The publish form itself (its draft, `publishing` flag and error) is not part of the feed
+  // state a session owns -- `load()` never resets it -- so those writes stay unguarded and the
+  // form can always recover. Only the feed mutation below belongs to the session.
+  const session = feedSessions.current()
   publishing.value = true
   publishError.value = ''
   try {
     const created = await publishClubPost(routeClubId.value, publishTitle.value, publishFile.value)
-    posts.value = [created, ...posts.value]
-    total.value += 1
+    session.apply(() => {
+      posts.value = [created, ...posts.value]
+      total.value += 1
+    })
     resetPublishForm()
   } catch (err) {
     publishError.value = err instanceof Error ? err.message : 'Failed to publish post'
@@ -288,6 +328,7 @@ const submitComment = async (postId: number) => {
   if (state.submitting) {
     return
   }
+  const session = feedSessions.current()
   commentForms.value = { ...commentForms.value, [postId]: { ...state, submitting: true, error: '' } }
   try {
     const created = await createClubPostComment(routeClubId.value, postId, state.body)
@@ -295,22 +336,32 @@ const submitComment = async (postId: number) => {
     // whatever is currently displayed -- even if that is empty because the list was still
     // loading or had errored. reconcileCommentsAfterSubmit below replaces this with the
     // authoritative server list right after, so this optimistic view is never the last word.
-    const existing = commentsState(postId)
-    commentsByPost.value = {
-      ...commentsByPost.value,
-      [postId]: { loading: false, error: '', comments: [...existing.comments, created] },
+    const applied = session.apply(() => {
+      const existing = commentsState(postId)
+      commentsByPost.value = {
+        ...commentsByPost.value,
+        [postId]: { loading: false, error: '', comments: [...existing.comments, created] },
+      }
+      posts.value = posts.value.map((post) =>
+        post.id === postId ? { ...post, commentCount: post.commentCount + 1 } : post,
+      )
+      commentForms.value = { ...commentForms.value, [postId]: { ...emptyCommentFormState } }
+    })
+    if (!applied) {
+      // The comment was created, but this post's panel and draft belong to a feed the viewer
+      // has already navigated away from; reconciling it would only write to state that is
+      // gone.
+      return
     }
-    posts.value = posts.value.map((post) =>
-      post.id === postId ? { ...post, commentCount: post.commentCount + 1 } : post,
-    )
-    commentForms.value = { ...commentForms.value, [postId]: { ...emptyCommentFormState } }
-    await reconcileCommentsAfterSubmit(postId)
+    await reconcileCommentsAfterSubmit(session, postId)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to post comment'
-    commentForms.value = {
-      ...commentForms.value,
-      [postId]: { ...state, submitting: false, error: message },
-    }
+    session.apply(() => {
+      commentForms.value = {
+        ...commentForms.value,
+        [postId]: { ...state, submitting: false, error: message },
+      }
+    })
   }
 }
 
@@ -319,24 +370,23 @@ const submitComment = async (postId: number) => {
 // submitComment above can start from an incomplete or empty list. Worse, an older loadComments
 // GET issued before this submit (e.g. from expanding the comments panel) can still be in flight
 // and would otherwise resolve afterwards with a pre-submission snapshot that clobbers the new
-// comment. Refetching here under the same generation-token guard loadComments uses fixes both:
+// comment. Refetching here on the same per-post claim channel loadComments uses fixes both:
 // whichever request for this post is actually the newest is the only one ever applied, and the
 // comment count is set from the authoritative list's own length rather than layered on top of
 // the optimistic +1 above, so the two can never double-count.
-const reconcileCommentsAfterSubmit = async (postId: number) => {
-  const generation = bumpCommentsGeneration(postId)
+const reconcileCommentsAfterSubmit = async (session: ViewSession, postId: number) => {
+  const attempt = session.claim(commentsChannel(postId))
   try {
     const comments = await fetchClubPostComments(routeClubId.value, postId)
-    if (commentsRequestGeneration.value[postId] !== generation) {
-      return
-    }
-    commentsByPost.value = {
-      ...commentsByPost.value,
-      [postId]: { loading: false, error: '', comments },
-    }
-    posts.value = posts.value.map((post) =>
-      post.id === postId ? { ...post, commentCount: comments.length } : post,
-    )
+    attempt.apply(() => {
+      commentsByPost.value = {
+        ...commentsByPost.value,
+        [postId]: { loading: false, error: '', comments },
+      }
+      posts.value = posts.value.map((post) =>
+        post.id === postId ? { ...post, commentCount: comments.length } : post,
+      )
+    })
   } catch {
     // The comment itself was already posted successfully -- the optimistic append above is
     // still visible -- so a failed reconciliation fetch does not surface a second, confusing
@@ -360,24 +410,41 @@ const handleDeletePost = async (postId: number) => {
   if (isDeletingPost(postId)) {
     return
   }
+  // Captured before the delete's own network round-trip, so a navigation landing *during* the
+  // delete -- before the backfill has even started -- already invalidates everything that
+  // follows, including the optimistic removal below.
+  const session = feedSessions.current()
   const next = new Set(deletingPostIds.value)
   next.add(postId)
   deletingPostIds.value = next
   postActionError.value = { ...postActionError.value, [postId]: '' }
   try {
     await deleteClubPost(routeClubId.value, postId)
-    posts.value = posts.value.filter((post) => post.id !== postId)
-    total.value = Math.max(0, total.value - 1)
-    await backfillCurrentPageAfterPostDeletion()
-  } catch (err) {
-    postActionError.value = {
-      ...postActionError.value,
-      [postId]: err instanceof Error ? err.message : 'Failed to delete post',
+    const applied = session.apply(() => {
+      posts.value = posts.value.filter((post) => post.id !== postId)
+      total.value = Math.max(0, total.value - 1)
+    })
+    if (!applied) {
+      // The post is gone server-side, but this feed is not on screen any more: post ids are
+      // global, so removing "post 42" from whatever the viewer navigated to would delete an
+      // unrelated club's post from the list, and the total being decremented is not the total
+      // this delete shrank. A backfill would be equally meaningless, so none is issued.
+      return
     }
+    await backfillCurrentPageAfterPostDeletion(session)
+  } catch (err) {
+    session.apply(() => {
+      postActionError.value = {
+        ...postActionError.value,
+        [postId]: err instanceof Error ? err.message : 'Failed to delete post',
+      }
+    })
   } finally {
-    const cleared = new Set(deletingPostIds.value)
-    cleared.delete(postId)
-    deletingPostIds.value = cleared
+    session.apply(() => {
+      const cleared = new Set(deletingPostIds.value)
+      cleared.delete(postId)
+      deletingPostIds.value = cleared
+    })
   }
 }
 
@@ -389,35 +456,38 @@ const handleDeletePost = async (postId: number) => {
 // on a page with nothing to show, so this navigates back to the previous (now-valid) page
 // instead, which itself reloads through the normal query-driven `load()` path.
 //
-// The request's own club id, page, and size are captured up front, before the `await`, and
-// re-checked against the live route once the response arrives: a fast Next/Previous click (or a
-// club navigation) issued while this backfill is still in flight must not let this now-stale
-// response overwrite whatever that newer navigation's own `load()` call already wrote -- last
-// network response to resolve is not necessarily the last request the viewer actually intended.
-const backfillCurrentPageAfterPostDeletion = async () => {
+// Runs on the session that was current when the delete was *initiated* (see handleDeletePost).
+// It never begins a session, only claims a slot on one, so a backfill can neither invalidate
+// nor outrun the load() that owns `loading`. The claim on FEED_CHANNEL is what orders two
+// backfills against each other -- two deletes on the same page in quick succession, with no
+// navigation in between -- so the older one is dropped even though both belong to the same,
+// still-current session. Note it re-requests the *server-confirmed* page/size
+// (page.value/size.value), which can legitimately differ from the raw values in the URL when
+// the server clamps an oversized ?size=999; that difference is exactly why relevance is
+// decided by session identity here and never by re-deriving a key from route.query.
+const backfillCurrentPageAfterPostDeletion = async (session: ViewSession) => {
+  const attempt = session.claim(FEED_CHANNEL)
   const requestedClubId = routeClubId.value
   const requestedPage = page.value
   const requestedSize = size.value
-  const requestedQueryPage = route.query.page
-  const requestedQuerySize = route.query.size
-  const isStillTheSameFeedContext = () =>
-    routeClubId.value === requestedClubId &&
-    route.query.page === requestedQueryPage &&
-    route.query.size === requestedQuerySize
 
   try {
     const feed = await fetchClubMediaFeed(requestedClubId, requestedPage, requestedSize)
-    if (!isStillTheSameFeedContext()) {
-      return
-    }
-    if (feed.items.length === 0 && requestedPage > 0) {
-      goToPage(requestedPage - 1)
-      return
-    }
-    posts.value = feed.items
-    page.value = feed.page
-    size.value = feed.size
-    total.value = feed.total
+    attempt.apply(() => {
+      if (feed.items.length === 0 && requestedPage > 0) {
+        // One page back is only the right target if that page still exists: other viewers may
+        // have deleted whole pages' worth while this delete was in flight. This response's own
+        // total/size say how much is left, so land on the last page that can still hold
+        // something rather than on another empty page.
+        const lastPageWithContent = Math.max(0, Math.ceil(feed.total / Math.max(feed.size, 1)) - 1)
+        goToPage(Math.min(requestedPage - 1, lastPageWithContent))
+        return
+      }
+      posts.value = feed.items
+      page.value = feed.page
+      size.value = feed.size
+      total.value = feed.total
+    })
   } catch {
     // The delete itself already succeeded; a failed backfill just leaves the optimistic,
     // already-shorter local list in place rather than surfacing a second, confusing error.
@@ -428,6 +498,7 @@ const handleTogglePin = async (post: ClubPost) => {
   if (isPinningPost(post.id)) {
     return
   }
+  const session = feedSessions.current()
   const next = new Set(pinningPostIds.value)
   next.add(post.id)
   pinningPostIds.value = next
@@ -435,22 +506,30 @@ const handleTogglePin = async (post: ClubPost) => {
   try {
     if (post.pinnedAt) {
       await unpinClubPost(routeClubId.value, post.id)
-      posts.value = posts.value.map((p) => (p.id === post.id ? { ...p, pinnedAt: null } : p))
+      session.apply(() => {
+        posts.value = posts.value.map((p) => (p.id === post.id ? { ...p, pinnedAt: null } : p))
+      })
     } else {
       await pinClubPost(routeClubId.value, post.id)
-      posts.value = posts.value.map((p) =>
-        p.id === post.id ? { ...p, pinnedAt: new Date().toISOString() } : p,
-      )
+      session.apply(() => {
+        posts.value = posts.value.map((p) =>
+          p.id === post.id ? { ...p, pinnedAt: new Date().toISOString() } : p,
+        )
+      })
     }
   } catch (err) {
-    postActionError.value = {
-      ...postActionError.value,
-      [post.id]: err instanceof Error ? err.message : 'Failed to update pin',
-    }
+    session.apply(() => {
+      postActionError.value = {
+        ...postActionError.value,
+        [post.id]: err instanceof Error ? err.message : 'Failed to update pin',
+      }
+    })
   } finally {
-    const cleared = new Set(pinningPostIds.value)
-    cleared.delete(post.id)
-    pinningPostIds.value = cleared
+    session.apply(() => {
+      const cleared = new Set(pinningPostIds.value)
+      cleared.delete(post.id)
+      pinningPostIds.value = cleared
+    })
   }
 }
 
@@ -458,29 +537,36 @@ const handleDeleteComment = async (postId: number, commentId: number) => {
   if (isDeletingComment(commentId)) {
     return
   }
+  const session = feedSessions.current()
   const next = new Set(deletingCommentIds.value)
   next.add(commentId)
   deletingCommentIds.value = next
   commentActionError.value = { ...commentActionError.value, [commentId]: '' }
   try {
     await deleteClubPostComment(routeClubId.value, postId, commentId)
-    const existing = commentsState(postId)
-    commentsByPost.value = {
-      ...commentsByPost.value,
-      [postId]: { ...existing, comments: existing.comments.filter((comment) => comment.id !== commentId) },
-    }
-    posts.value = posts.value.map((post) =>
-      post.id === postId ? { ...post, commentCount: Math.max(0, post.commentCount - 1) } : post,
-    )
+    session.apply(() => {
+      const existing = commentsState(postId)
+      commentsByPost.value = {
+        ...commentsByPost.value,
+        [postId]: { ...existing, comments: existing.comments.filter((comment) => comment.id !== commentId) },
+      }
+      posts.value = posts.value.map((post) =>
+        post.id === postId ? { ...post, commentCount: Math.max(0, post.commentCount - 1) } : post,
+      )
+    })
   } catch (err) {
-    commentActionError.value = {
-      ...commentActionError.value,
-      [commentId]: err instanceof Error ? err.message : 'Failed to delete comment',
-    }
+    session.apply(() => {
+      commentActionError.value = {
+        ...commentActionError.value,
+        [commentId]: err instanceof Error ? err.message : 'Failed to delete comment',
+      }
+    })
   } finally {
-    const cleared = new Set(deletingCommentIds.value)
-    cleared.delete(commentId)
-    deletingCommentIds.value = cleared
+    session.apply(() => {
+      const cleared = new Set(deletingCommentIds.value)
+      cleared.delete(commentId)
+      deletingCommentIds.value = cleared
+    })
   }
 }
 
@@ -532,6 +618,11 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  // Leaving this view is a navigation like any other, but no load() follows it to take over
+  // ownership, so the session has to be ended explicitly. Without this, a backfill still in
+  // flight would still look current and its "this page is empty now, step back a page" branch
+  // would push a page/size query onto whatever route the viewer has moved on to.
+  feedSessions.end()
   revokePublishPreview()
   const existing = document.head.querySelector('meta[name="robots"]')
   if (!existing) {
@@ -616,7 +707,10 @@ watch(
         </form>
       </section>
 
-      <p v-if="posts.length === 0" class="mv-empty">No posts yet. Check back soon.</p>
+      <p v-if="posts.length === 0 && total === 0" class="mv-empty">No posts yet. Check back soon.</p>
+      <p v-else-if="posts.length === 0" class="mv-empty">
+        No posts on this page. Use the pagination below to go back.
+      </p>
 
       <ul v-else class="mv-post-list">
         <li v-for="post in posts" :key="post.id" class="mv-post-card">
@@ -732,8 +826,8 @@ watch(
         </li>
       </ul>
 
-      <nav v-if="posts.length" class="mv-pagination">
-        <button type="button" :disabled="!hasPreviousPage" @click="goToPage(page - 1)">Previous</button>
+      <nav v-if="posts.length || page > 0" class="mv-pagination">
+        <button type="button" :disabled="!hasPreviousPage" @click="goToPage(previousPageTarget)">Previous</button>
         <span class="mv-pagination-status">Page {{ page + 1 }} of {{ totalPages }}</span>
         <button type="button" :disabled="!hasNextPage" @click="goToPage(page + 1)">Next</button>
       </nav>

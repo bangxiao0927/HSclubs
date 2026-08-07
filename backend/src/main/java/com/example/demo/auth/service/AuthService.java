@@ -93,8 +93,37 @@ public class AuthService {
         return user;
     }
 
-    public void acceptTerms(String email) {
-        oAuthUserMapper.acceptTerms(email);
+    /**
+     * Records terms acceptance for the signed-in session.
+     *
+     * <p>Takes the session rather than just an email so a row that has gone missing under a
+     * still-valid session (sessions last 7 days, so a database restore or migration can
+     * outlive one) can be re-created from the session principal first. Without that the
+     * UPDATE below matches nothing and the student is walled out of registration for good:
+     * /api/auth/me keeps reporting acceptedTerms=false, so the SPA keeps sending them back to
+     * the terms page. Unlike the removed recordLogin() call on the read path (see commit
+     * "make /api/auth/me read-only"), this only ever INSERTs a row that is absent, so a
+     * manually elevated role and the stored last_login_at are never touched.
+     *
+     * @return true when the account now has an acceptance timestamp -- either because this
+     *         call wrote one, or because a previous call already did (the endpoint has to stay
+     *         idempotent: the SPA can retry, and the UPDATE deliberately only touches rows
+     *         whose accepted_terms_at is still NULL). false means acceptance could not be
+     *         recorded at all, which must never be reported to the SPA as success.
+     */
+    public boolean acceptTerms(OAuth2AuthenticationToken authentication) {
+        OAuth2User principal = authentication == null ? null : authentication.getPrincipal();
+        if (principal == null) {
+            return false;
+        }
+        Map<String, Object> attributes = principal.getAttributes();
+        String email = firstNonBlank(attributes, "email");
+        if (email == null) {
+            return false;
+        }
+        oAuthUserService.ensureStoredUser(authentication.getAuthorizedClientRegistrationId(), attributes);
+        int updated = oAuthUserMapper.acceptTerms(email);
+        return updated > 0 || hasAcceptedTerms(email);
     }
 
     public boolean hasAcceptedTerms(String email) {

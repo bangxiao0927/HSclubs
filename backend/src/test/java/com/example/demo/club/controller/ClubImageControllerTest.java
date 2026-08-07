@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.demo.auth.config.SecurityProperties;
 import com.example.demo.club.model.Club;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.club.service.ImageProcessingUnavailableException;
 import com.example.demo.club.service.ImageStorageService;
 import com.example.demo.security.AuthenticatedUserResolver;
 import java.awt.image.BufferedImage;
@@ -144,6 +145,26 @@ class ClubImageControllerTest {
                 .file(file)
                 .principal(oauthToken(OWNER_EMAIL)))
             .andExpect(status().isInternalServerError());
+    }
+
+    // The decode-capacity fix (round 3): too many concurrent decodes is a transient server
+    // capacity limit, not a problem with this particular file, so it must be a 503 -- distinct
+    // from both the 400 (bad file) and 500 (storage failure) cases above.
+    @Test
+    void uploadImageReturnsServiceUnavailableWhenDecodeCapacityIsExhausted() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        club.setCanManage(false);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(imageStorageService.store(any())).thenThrow(
+            new ImageProcessingUnavailableException("Too many images are being processed right now."));
+
+        MockMultipartFile file = realPngFile();
+
+        mockMvc.perform(multipart("/api/clubs/1/image")
+                .file(file)
+                .principal(oauthToken(OWNER_EMAIL)))
+            .andExpect(status().isServiceUnavailable());
     }
 
     private static MockMultipartFile realPngFile() throws IOException {

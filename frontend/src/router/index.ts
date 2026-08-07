@@ -2,6 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import { useAuthStore } from '../stores/auth'
 import { DEFAULT_POST_AUTH_PATH, resolvePostAuthRoute } from '../utils/authRedirect'
+import {
+  clearStaleChunkRecovery,
+  isStaleChunkError,
+  recoverFromStaleChunk,
+} from '../utils/staleChunk'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -193,6 +198,26 @@ router.beforeEach(async (to) => {
   }
 
   return true
+})
+
+// A navigation that dies because its lazily-imported view chunk no longer
+// exists (see utils/staleChunk.ts) otherwise looks like a dead button: the URL
+// never changes and nothing is rendered. Reload at the requested URL so the
+// browser picks up the current chunk manifest and the student can carry on.
+router.onError((error, to) => {
+  if (isStaleChunkError(error)) {
+    recoverFromStaleChunk(to.fullPath)
+  }
+})
+
+// Only a navigation that actually landed proves the chunks are loadable again.
+// vue-router also runs afterEach for aborted/duplicated navigations (it carries
+// the failure as the third argument), and clearing the marker on one of those
+// would hand back a fresh reload attempt for a chunk that is still missing.
+router.afterEach((_to, _from, failure) => {
+  if (!failure) {
+    clearStaleChunkRecovery()
+  }
 })
 
 export default router
