@@ -70,6 +70,28 @@ FRONTEND_ORIGIN=http://localhost:4173
 # APP_AUTHORIZATION_REQUEST_BASE_URI=/api/auth/authorize
 ```
 
+### Production session cookie
+
+Set this on any HTTPS deployment:
+
+```bash
+SESSION_COOKIE_SECURE=true
+```
+
+It defaults to `false` so that plain-HTTP local development still gets a session at all (a
+`Secure` cookie is dropped by the browser on `http://localhost`). The session cookie lives for
+7 days, so leaving it unset in production means that cookie is eligible to be sent over a
+plain-HTTP request.
+
+This depends on the reverse proxy forwarding the original scheme: the backend sits behind
+TLS termination and would otherwise see every request as insecure. The app reads
+`X-Forwarded-Proto` (`server.forward-headers-strategy: framework`), and the nginx example
+below sends it on every proxied location.
+
+The H2 console is not part of a production deployment. It is enabled only by the `h2`
+profile; do not set `SPRING_PROFILES_ACTIVE=h2` on a server, since that profile also points
+the datasource at an in-memory database and runs the destructive local schema fixture.
+
 ### Instaloader avatar cache
 
 The Linux initializer creates a private Python virtual environment, installs
@@ -405,6 +427,11 @@ server {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Required, like the /api/ block above: without the original scheme the backend
+        # treats the request as plain HTTP, so JSESSIONID loses its Secure attribute and
+        # any absolute URL the app builds during the OAuth handshake comes out as http://.
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     # Gzip
@@ -489,6 +516,8 @@ The `/api/auth/providers` endpoint auto-discovers all configured providers.
 - [ ] `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set
 - [ ] `APP_OWNER_EMAILS` populated (comma-separated)
 - [ ] `FRONTEND_ORIGIN` matches production URL
+- [ ] `SESSION_COOKIE_SECURE=true` set, and the proxy sends `X-Forwarded-Proto`
+- [ ] `SPRING_PROFILES_ACTIVE` is unset (the `h2` profile is local-only and enables the H2 console)
 - [ ] Google OAuth redirect URIs include production URL
 - [ ] Frontend built with correct `VITE_API_BASE_URL`
 - [ ] Nginx configured with SSL (certbot)
