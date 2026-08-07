@@ -153,7 +153,12 @@ const hydrateForm = (data: Club) => {
 
 const authStore = useAuthStore()
 const { currentUser } = storeToRefs(authStore)
-const canManageMembers = computed(() => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner))
+// Manage rights for this club: the same rule the backend enforces on every write from this page
+// (ClubController#requireManageAccess, ClubImageController), covering both the roster section
+// and the editor itself. The route is only guarded by requiresAuth and fetchClubById is a public
+// endpoint, so without gating on this the whole editor -- form, image upload, Save -- rendered
+// for any signed-in visitor and only failed once they pressed Save.
+const canManageClub = computed(() => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner))
 const presidents = computed(() => members.value.filter((m) => m.roleName?.toLowerCase() === 'president'))
 
 const loadClub = async (id: string) => {
@@ -165,7 +170,7 @@ const loadClub = async (id: string) => {
     const response = await fetchClubById(id)
     club.value = response
     hydrateForm(response)
-    if (canManageMembers.value) {
+    if (canManageClub.value) {
       void loadMembers(id)
     } else {
       members.value = []
@@ -182,7 +187,7 @@ const loadClub = async (id: string) => {
 }
 
 const loadMembers = async (id: string) => {
-  if (!id || !canManageMembers.value) {
+  if (!id || !canManageClub.value) {
     membersLoading.value = false
     members.value = []
     return
@@ -200,13 +205,13 @@ const loadMembers = async (id: string) => {
 }
 
 const refreshMembers = async () => {
-  if (club.value && canManageMembers.value) {
+  if (club.value && canManageClub.value) {
     await loadMembers(String(club.value.id))
   }
 }
 
 const handleMemberRoleChange = async (member: ClubMember, event: Event) => {
-  if (!club.value || !canManageMembers.value || roleSavingMemberId.value) {
+  if (!club.value || !canManageClub.value || roleSavingMemberId.value) {
     return
   }
   const select = event.target as HTMLSelectElement
@@ -333,7 +338,7 @@ watch(
 )
 
 watch(
-  canManageMembers,
+  canManageClub,
   (allowed) => {
     if (allowed && club.value) {
       void loadMembers(String(club.value.id))
@@ -348,7 +353,7 @@ watch(
   <section class="club-admin page-shell">
     <div class="admin-toolbar">
       <BackButton>← Back to clubs</BackButton>
-      <div class="toolbar-actions" v-if="!loading">
+      <div class="toolbar-actions" v-if="!loading && canManageClub">
         <RouterLink
           v-if="club"
           :to="`/clubs/${club.id}`"
@@ -367,6 +372,10 @@ watch(
     <div v-else-if="loadError" class="status-card error">
       <p>{{ loadError }}</p>
       <button type="button" class="ghost-btn" @click="retryLoad" :disabled="loading">Try again</button>
+    </div>
+    <div v-else-if="club && !canManageClub" class="status-card muted">
+      <p>You do not manage {{ club.name }}, so its settings are not editable from your account.</p>
+      <RouterLink :to="`/clubs/${club.id}`" class="ghost-btn">View the club page</RouterLink>
     </div>
     <template v-else-if="club">
       <header class="admin-hero">
@@ -487,19 +496,19 @@ watch(
           </div>
           <div class="member-panel__actions">
             <RouterLink
-              v-if="club && canManageMembers"
+              v-if="club && canManageClub"
               :to="`/clubs/${club.id}/admin/pending`"
               class="ghost-btn"
             >
               Review pending requests
             </RouterLink>
-            <button type="button" class="ghost-btn" @click="refreshMembers" :disabled="membersLoading || !canManageMembers">
+            <button type="button" class="ghost-btn" @click="refreshMembers" :disabled="membersLoading || !canManageClub">
               {{ membersLoading ? 'Refreshing…' : 'Refresh roster' }}
             </button>
           </div>
         </div>
 
-        <p v-if="!canManageMembers" class="member-hint">
+        <p v-if="!canManageClub" class="member-hint">
           Only club leaders or site owners can view the roster.
         </p>
 

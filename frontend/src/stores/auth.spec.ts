@@ -17,12 +17,14 @@ vi.mock('../utils/authRedirect', async (importOriginal) => {
   }
 })
 
-import { fetchAuthenticatedUser, fetchAuthProviders } from '../services/authService'
+import { fetchAuthenticatedUser, fetchAuthProviders, logout as apiLogout } from '../services/authService'
+import { reportUnauthorized } from '../services/httpClient'
 import { savePendingAuthRedirect } from '../utils/authRedirect'
 import { useAuthStore } from './auth'
 
 const fetchAuthenticatedUserMock = vi.mocked(fetchAuthenticatedUser)
 const fetchAuthProvidersMock = vi.mocked(fetchAuthProviders)
+const apiLogoutMock = vi.mocked(apiLogout)
 const savePendingAuthRedirectMock = vi.mocked(savePendingAuthRedirect)
 
 const knownUser: AuthUser = {
@@ -97,6 +99,61 @@ describe('refreshUser', () => {
     expect(fetchAuthenticatedUserMock).toHaveBeenCalledTimes(2)
     expect(store.currentUser?.id).toBe('user-1')
     expect(store.userError).toBeNull()
+  })
+
+  // fetchAuthenticatedUser returns null for a real 401 and only throws for a network error or
+  // a 5xx. Collapsing both into "signed out" meant one blip on cold load kicked a student with
+  // a perfectly valid session off whatever page they were on.
+  it('keeps the signed-in user when the session check fails for a transient reason', async () => {
+    fetchAuthenticatedUserMock.mockResolvedValueOnce(knownUser)
+    const store = useAuthStore()
+    await store.refreshUser()
+
+    fetchAuthenticatedUserMock.mockRejectedValueOnce(new Error('Failed to fetch'))
+    await store.refreshUser()
+
+    expect(store.currentUser?.id).toBe('user-1')
+    expect(store.userError).toBe('Failed to fetch')
+  })
+
+  it('still clears the user when the server actually reports no session', async () => {
+    fetchAuthenticatedUserMock.mockResolvedValueOnce(knownUser)
+    const store = useAuthStore()
+    await store.refreshUser()
+
+    fetchAuthenticatedUserMock.mockResolvedValueOnce(null)
+    await store.refreshUser()
+
+    expect(store.currentUser).toBeNull()
+  })
+})
+
+describe('logout', () => {
+  it('clears the local session even when the server call fails, without rejecting', async () => {
+    fetchAuthenticatedUserMock.mockResolvedValueOnce(knownUser)
+    const store = useAuthStore()
+    await store.refreshUser()
+
+    apiLogoutMock.mockRejectedValueOnce(new Error('401 Unauthorized'))
+    await expect(store.logout()).resolves.toBeUndefined()
+
+    expect(store.currentUser).toBeNull()
+  })
+})
+
+describe('unauthorized responses from other endpoints', () => {
+  // Any data endpoint answering 401 means this session is gone. Without this the store went on
+  // reporting the user as signed in, so the router guards kept letting them into pages where
+  // every request then failed with a raw server error body.
+  it('clears the signed-in user', async () => {
+    fetchAuthenticatedUserMock.mockResolvedValueOnce(knownUser)
+    const store = useAuthStore()
+    await store.refreshUser()
+
+    reportUnauthorized()
+
+    expect(store.currentUser).toBeNull()
+    expect(store.isAuthenticated).toBe(false)
   })
 })
 
