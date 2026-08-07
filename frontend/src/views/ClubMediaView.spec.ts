@@ -131,7 +131,11 @@ let router: Router
 const mountAtMediaRoute = async (path = '/clubs/1/media') => {
   router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/clubs/:id/media', name: 'club-media', component: ClubMediaView }],
+    routes: [
+      { path: '/clubs/:id/media', name: 'club-media', component: ClubMediaView },
+      // Somewhere to navigate *off* the media route to, for the unmount cases.
+      { path: '/clubs/:id', name: 'club-detail', component: { template: '<div />' } },
+    ],
   })
   await router.push(path)
   await router.isReady()
@@ -205,6 +209,97 @@ describe('ClubMediaView loading, error and empty states', () => {
 
     expect(wrapper.text()).toContain('No posts yet.')
     expect(wrapper.findAll('li.mv-post-card')).toHaveLength(0)
+  })
+})
+
+describe('ClubMediaView out-of-range pagination', () => {
+  // Backend clampPage only ever clamps to max(0, page); it has no way to know the current
+  // total when the request is made, so an out-of-range ?page=N (a stale bookmark, or a Next
+  // click against a total another viewer has since shrunk) returns an empty page while
+  // total > 0. That must read differently from -- and stay navigable unlike -- a club that
+  // genuinely has zero posts.
+  it('distinguishes an out-of-range page from a genuinely empty club, and keeps the pagination nav reachable', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [], page: 5, size: 12, total: 36 }))
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=5')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('No posts yet.')
+    expect(wrapper.find('nav.mv-pagination').exists()).toBe(true)
+    expect(wrapper.find('.mv-pagination button:first-of-type').attributes('disabled')).toBeUndefined()
+  })
+
+  it('still shows the genuinely-empty copy and hides the pagination nav when the club truly has no posts', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed({ items: [], page: 0, size: 12, total: 0 }))
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No posts yet.')
+    expect(wrapper.find('nav.mv-pagination').exists()).toBe(false)
+  })
+
+  it('can navigate back to a valid page from an out-of-range page using the still-reachable Previous button', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed({ items: [], page: 5, size: 12, total: 36 }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      // total 36 at size 12 makes page 2 the last page that can hold anything, so a
+      // self-consistent fixture cannot serve items for page 4: one Previous click has to land
+      // on page 2 for this to be a single-click recovery at all.
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1' })], page: 2, size: 12, total: 36 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=5')
+    await flushPromises()
+
+    await wrapper.find('.mv-pagination button:first-of-type').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenLastCalledWith('1', 2, 12)
+    expect(router.currentRoute.value.query.page).toBe('2')
+    expect(wrapper.text()).toContain('Post 1')
+  })
+
+  // A stale bookmark can be arbitrarily far past the end (?page=999). Stepping back one page at
+  // a time would mean hundreds of clicks through empty pages, so Previous jumps straight to the
+  // last page the reported total can fill.
+  it('jumps straight to the last populated page from a far out-of-range page instead of stepping back one at a time', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed({ items: [], page: 999, size: 12, total: 36 }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1' })], page: 2, size: 12, total: 36 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=999')
+    await flushPromises()
+
+    await wrapper.find('.mv-pagination button:first-of-type').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenLastCalledWith('1', 2, 12)
+    expect(wrapper.text()).toContain('Post 1')
+  })
+
+  // The clamp must not change what Previous means on a page that is genuinely in range.
+  it('still steps back exactly one page from a valid page', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 9, title: 'Post 9' })], page: 2, size: 12, total: 36 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Post 5' })], page: 1, size: 12, total: 36 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-pagination button:first-of-type').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenLastCalledWith('1', 1, 12)
+    expect(wrapper.text()).toContain('Post 5')
   })
 })
 
@@ -371,6 +466,98 @@ describe('ClubMediaView pagination', () => {
   })
 })
 
+describe('ClubMediaView load staleness across overlapping navigations', () => {
+  // Route changes (Back/Forward, or a fast page-to-page navigation) can overlap: the app is
+  // reachable while an earlier load() is still in flight, and there is no guarantee the
+  // network responses resolve in the same order the requests were issued.
+  it('ignores a stale successful load response that resolves after a newer navigation already applied its own response', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1' })], page: 0, size: 12, total: 36 }),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Post 1')
+
+    const olderNavigation = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(olderNavigation.promise)
+    await router.push('/clubs/1/media?page=1')
+    await flushPromises()
+
+    const newerNavigation = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(newerNavigation.promise)
+    await router.push('/clubs/1/media?page=2')
+    await flushPromises()
+
+    newerNavigation.resolve(buildFeed({ items: [buildPost({ id: 3, title: 'Post 3' })], page: 2, size: 12, total: 36 }))
+    await flushPromises()
+    expect(wrapper.text()).toContain('Post 3')
+
+    olderNavigation.resolve(buildFeed({ items: [buildPost({ id: 2, title: 'Post 2' })], page: 1, size: 12, total: 36 }))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Post 3')
+    expect(wrapper.text()).not.toContain('Post 2')
+    expect(wrapper.find('.mv-status').exists()).toBe(false)
+  })
+
+  it('ignores a stale failed load response that rejects after a newer navigation already applied its own response', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1' })], page: 0, size: 12, total: 36 }),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    const olderNavigation = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(olderNavigation.promise)
+    await router.push('/clubs/1/media?page=1')
+    await flushPromises()
+
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 3, title: 'Post 3' })], page: 2, size: 12, total: 36 }),
+    )
+    await router.push('/clubs/1/media?page=2')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Post 3')
+
+    olderNavigation.reject(new Error('Network error from an abandoned request'))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Post 3')
+    expect(wrapper.text()).not.toContain('Network error from an abandoned request')
+    expect(wrapper.find('.mv-status--error').exists()).toBe(false)
+  })
+
+  it('ignores a stale load response that resolves after navigating to a different club before it settled', async () => {
+    fetchClubByIdMock.mockImplementation(async (idOrSlug: unknown) =>
+      buildClub({ name: idOrSlug === '1' ? 'Chess Club' : 'Robotics Club', viewerIsMember: idOrSlug === '2' }),
+    )
+    const club1Feed = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(club1Feed.promise)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 9, title: 'Robotics post' })], total: 1 }),
+    )
+    await router.push('/clubs/2/media')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Robotics post')
+    expect(wrapper.text()).toContain('Robotics Club')
+
+    club1Feed.resolve(buildFeed({ items: [buildPost({ id: 1, title: 'Chess post' })], total: 1 }))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Robotics post')
+    expect(wrapper.text()).toContain('Robotics Club')
+    expect(wrapper.text()).not.toContain('Chess post')
+  })
+})
+
 describe('ClubMediaView comments', () => {
   it('loads and shows escaped comments when a post is expanded', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub())
@@ -523,6 +710,9 @@ describe('ClubMediaView publish form', () => {
     expect(publishSection.text()).toContain('GIF')
     expect(publishSection.text()).toContain('HEIC')
     expect(publishSection.text()).toContain('not supported')
+    // WebP's much stricter resolution cap (see docs/API.md) means it should not be advertised
+    // as an unconditionally-supported format alongside JPEG/PNG/GIF.
+    expect(publishSection.text()).toContain('3 megapixels')
   })
 
   it('counts down the title character limit as the member types', async () => {
@@ -972,6 +1162,47 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     expect(titles).toEqual(['Post 2', 'Post 3'])
   })
 
+  // The round-3 review's finding: backfill re-requests the *server-confirmed* page/size
+  // (page.value/size.value), which can legitimately differ from the raw, unclamped values in
+  // the URL (?size=999 clamped by the server to size=100, echoed back and stored in
+  // size.value). A staleness check that reconstructs a "current" key from route.query instead
+  // of comparing against what the request itself is for would never match in this case, so
+  // the backfill's response would always look stale and get dropped -- silently breaking the
+  // exact rescue this mechanism exists to provide.
+  it('backfills the current page after a delete even when the requested size was clamped by the server', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true }),
+          buildPost({ id: 2, title: 'Post 2' }),
+        ],
+        page: 0,
+        size: 100,
+        total: 101,
+      }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [buildPost({ id: 2, title: 'Post 2' }), buildPost({ id: 3, title: 'Post 3' })],
+        page: 0,
+        size: 100,
+        total: 100,
+      }),
+    )
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=999')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(2, '1', 0, 100)
+    const titles = wrapper.findAll('.mv-post-title').map((node) => node.text())
+    expect(titles).toEqual(['Post 2', 'Post 3'])
+  })
+
   // The stranding scenario the issue calls out: deleting the only post on a nonzero page must
   // not leave the viewer looking at an empty page when earlier pages still have content.
   it('navigates back to the previous page when deleting the last item strands the viewer on an emptied nonzero page', async () => {
@@ -998,6 +1229,39 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     expect(router.currentRoute.value.query.page).toBe('0')
     expect(wrapper.text()).toContain('Post 1')
     expect(wrapper.text()).toContain('Page 1 of 1')
+  })
+
+  // Stepping back exactly one page is only right when that page still exists. If other viewers
+  // deleted whole pages' worth in the meantime, the backfill's own response says how much is
+  // left, so the step back should land on the last page that total can fill rather than on
+  // another empty page the viewer would have to click back out of again.
+  it('lands on the last page the backfill still reports content for, not blindly one page back', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 8, title: 'Post 8', viewerCanDelete: true })], page: 3, size: 2, total: 8 }),
+    )
+    // Only two posts are left club-wide by the time the backfill runs, so page 0 is the last
+    // page with anything on it -- page 2 would be just as empty as page 3.
+    fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed({ items: [], page: 3, size: 2, total: 2 }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [buildPost({ id: 1, title: 'Post 1' }), buildPost({ id: 2, title: 'Post 2' })],
+        page: 0,
+        size: 2,
+        total: 2,
+      }),
+    )
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=3&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(3, '1', 0, 2)
+    expect(router.currentRoute.value.query.page).toBe('0')
+    expect(wrapper.text()).toContain('Post 1')
   })
 
   it('does not navigate away when deleting the last item leaves page zero empty', async () => {
@@ -1075,7 +1339,278 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     expect(wrapper.text()).not.toContain('Stale Backfill Post')
     expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 2 of 2')
   })
+
+  // The exact race the audit called out: deleting post A, then post B before A's own backfill
+  // has resolved, issues two backfill fetches for the same page/route. If A's older backfill
+  // (still reflecting a world where B was not yet deleted) resolves after B's newer one, it
+  // must not win and resurrect B.
+  it('ignores an older backfill response that resolves after a newer backfill from a second, later delete', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true }),
+          buildPost({ id: 2, title: 'Post 2', viewerCanDelete: true }),
+        ],
+        page: 0,
+        size: 2,
+        total: 3,
+      }),
+    )
+    const backfillAfterDeletingPost1 = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillAfterDeletingPost1.promise)
+    const backfillAfterDeletingPost2 = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillAfterDeletingPost2.promise)
+    deleteClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=2')
+    await flushPromises()
+
+    const deleteButtons = () => wrapper.findAll('.mv-post-delete')
+    await deleteButtons()[0]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Post 2')
+
+    await deleteButtons()[0]!.trigger('click')
+    await flushPromises()
+
+    // Post 2's newer backfill resolves first: only Post 3 remains.
+    backfillAfterDeletingPost2.resolve(
+      buildFeed({ items: [buildPost({ id: 3, title: 'Post 3' })], page: 0, size: 2, total: 1 }),
+    )
+    await flushPromises()
+    expect(wrapper.text()).toContain('Post 3')
+
+    // Post 1's older backfill (a stale snapshot from before Post 2 was also deleted) resolves
+    // last and must be ignored entirely, not resurrect Post 2.
+    backfillAfterDeletingPost1.resolve(
+      buildFeed({
+        items: [buildPost({ id: 2, title: 'Post 2' }), buildPost({ id: 3, title: 'Post 3' })],
+        page: 0,
+        size: 2,
+        total: 2,
+      }),
+    )
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Post 2')
+    expect(wrapper.text()).toContain('Post 3')
+  })
+
+  // A second review round's finding: load()'s own `finally` only cleared `loading` when it
+  // was still the newest request, but backfillCurrentPageAfterPostDeletion bumped the *same*
+  // shared counter and never cleared `loading` itself. The precise ordering that breaks a flat
+  // counter: load() must bump *first* (a Next click while the delete request itself, not just
+  // its backfill, is still in flight) and the delete's backfill only bumps *after*, once the
+  // delete resolves -- deferring deleteClubPost itself (not just its backfill fetch) is what
+  // lets the test force that exact interleaving instead of hoping a real race lines up the
+  // same way. Under the old shared counter, that made load()'s finally guard fail (the
+  // backfill's later bump made load() look stale even though its page matched the URL), and
+  // nothing was left to ever clear `loading` -- the view got stuck on the loading state.
+  it('clears the loading state once the newer navigation resolves, even though a still-in-flight delete/backfill bumps request tracking after it started', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true }),
+          buildPost({ id: 2, title: 'Post 2' }),
+        ],
+        page: 0,
+        size: 2,
+        total: 4,
+      }),
+    )
+    const deleteDeferred = createDeferred<void>()
+    deleteClubPostMock.mockReturnValueOnce(deleteDeferred.promise)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=2')
+    await flushPromises()
+
+    // Delete is clicked but its own request has not resolved yet.
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    // Next is clicked while the delete is still in flight: load() bumps request tracking for
+    // page=1 first.
+    const nextPageDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(nextPageDeferred.promise)
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+
+    // Only now does the delete resolve, so backfillCurrentPageAfterPostDeletion bumps request
+    // tracking *after* load() already did.
+    const backfillDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillDeferred.promise)
+    deleteDeferred.resolve()
+    await flushPromises()
+
+    nextPageDeferred.resolve(buildFeed({ items: [buildPost({ id: 4, title: 'Post 4' })], page: 1, size: 2, total: 3 }))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Loading club media')
+    expect(wrapper.text()).toContain('Post 4')
+
+    backfillDeferred.resolve(buildFeed({ items: [buildPost({ id: 2, title: 'Post 2' })], page: 0, size: 2, total: 1 }))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Loading club media')
+    expect(wrapper.text()).toContain('Post 4')
+  })
+
+  // Same precise interleaving (delete's own request resolves *after* the Next click, so its
+  // backfill's request-tracking bump happens after load()'s), but checking the write itself
+  // rather than just `loading`: a flat, shared counter alone would let this stale backfill
+  // apply since nothing bumped past it *after* it started -- only comparing against the live
+  // route (which already moved on to page=1 the moment Next was clicked) catches it.
+  it('ignores a stale backfill response for the abandoned page once the route has already moved on to Next, regardless of request-tracking order', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true }),
+          buildPost({ id: 2, title: 'Post 2' }),
+        ],
+        page: 0,
+        size: 2,
+        total: 4,
+      }),
+    )
+    const deleteDeferred = createDeferred<void>()
+    deleteClubPostMock.mockReturnValueOnce(deleteDeferred.promise)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    const nextPageDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(nextPageDeferred.promise)
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.page).toBe('1')
+
+    const backfillDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillDeferred.promise)
+    deleteDeferred.resolve()
+    await flushPromises()
+
+    // The stale backfill (for the abandoned page=0) resolves before the new page's own load()
+    // has resolved at all.
+    backfillDeferred.resolve(buildFeed({ items: [buildPost({ id: 2, title: 'Post 2' })], page: 0, size: 2, total: 1 }))
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.page).toBe('1')
+    expect(wrapper.text()).not.toContain('Post 2')
+
+    nextPageDeferred.resolve(buildFeed({ items: [buildPost({ id: 4, title: 'Post 4' })], page: 1, size: 2, total: 3 }))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Post 4')
+  })
+
+  // Same race, but the newer navigation is to a *different club* rather than a different
+  // page: the stale backfill must not clobber club.value/loadedClubId with the previous
+  // club's data once the viewer has moved on. Unlike page/size (only overwritten once a
+  // load() actually resolves), routeClubId is a computed straight off route.params.id, so it
+  // is already live/current the instant router.push resolves -- the only way a backfill can
+  // capture the *old* club at all is if it starts (and captures routeClubId) before that
+  // navigation happens, with its own fetch still in flight when the navigation lands.
+  it('ignores a stale backfill response for the abandoned club once the route has already moved on to a different club', async () => {
+    fetchClubByIdMock.mockImplementation(async (idOrSlug: unknown) =>
+      buildClub({ name: idOrSlug === '1' ? 'Chess Club' : 'Robotics Club' }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true })], page: 0, size: 12, total: 2 }),
+    )
+    deleteClubPostMock.mockResolvedValueOnce(undefined)
+    const backfillDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillDeferred.promise)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    // The delete resolves immediately, so backfillCurrentPageAfterPostDeletion starts (and
+    // captures club id '1') right away; its own fetch is left in flight (backfillDeferred).
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 9, title: 'Robotics post' })], page: 0, size: 12, total: 1 }),
+    )
+    await router.push('/clubs/2/media')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Robotics post')
+    expect(wrapper.text()).toContain('Robotics Club')
+
+    // The stale backfill for club '1' finally resolves, after the viewer has already moved on
+    // to club '2'.
+    backfillDeferred.resolve(buildFeed({ items: [], page: 0, size: 12, total: 0 }))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Robotics post')
+    expect(wrapper.text()).toContain('Robotics Club')
+    expect(wrapper.text()).not.toContain('Chess Club')
+  })
+
+  // Round-3 review's finding: unlike the page-based stuck-spinner test above, a delete's
+  // backfill can *collide* with the new club's own load() key rather than merely be for a
+  // different one. If the delete resolves after the club navigation has already landed,
+  // backfillCurrentPageAfterPostDeletion reads the *already-updated* routeClubId -- and if
+  // both clubs use the default page/size (no query params), the backfill's key and the new
+  // club's load() key are the exact same string. A context-keyed generation counter then
+  // treats the backfill as "the newest request for that key", so it can bump straight past
+  // the new club's own load() -- which never touches `loading` -- and strand the spinner.
+  it('clears the loading state after navigating to a different club even when the delete backfill key would collide with the new club load', async () => {
+    fetchClubByIdMock.mockImplementation(async (idOrSlug: unknown) =>
+      buildClub({ name: idOrSlug === '1' ? 'Chess Club' : 'Robotics Club' }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Post 1', viewerCanDelete: true })], page: 0, size: 12, total: 1 }),
+    )
+    const deleteDeferred = createDeferred<void>()
+    deleteClubPostMock.mockReturnValueOnce(deleteDeferred.promise)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    // Delete is clicked but its own request has not resolved yet.
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    // The viewer navigates to a different club (default page/size, same as club 1's) while the
+    // delete is still in flight: load() for club 2 starts first.
+    const club2LoadDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(club2LoadDeferred.promise)
+    await router.push('/clubs/2/media')
+    await flushPromises()
+
+    // Only now does the delete resolve, so backfillCurrentPageAfterPostDeletion starts --
+    // reading the *already-updated* routeClubId ('2') and the still-unchanged page/size (0/12,
+    // the same defaults club 2's own load() also uses).
+    const backfillDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillDeferred.promise)
+    deleteDeferred.resolve()
+    await flushPromises()
+
+    club2LoadDeferred.resolve(
+      buildFeed({ items: [buildPost({ id: 9, title: 'Robotics post' })], page: 0, size: 12, total: 1 }),
+    )
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Loading club media')
+    expect(wrapper.text()).toContain('Robotics post')
+    expect(wrapper.text()).toContain('Robotics Club')
+
+    backfillDeferred.resolve(buildFeed({ items: [], page: 0, size: 12, total: 0 }))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Loading club media')
+    expect(wrapper.text()).toContain('Robotics post')
+    expect(wrapper.text()).toContain('Robotics Club')
+  })
 })
+
 
 describe('ClubMediaView pin and unpin', () => {
   it('shows pin controls only when the viewer canManage the club', async () => {
@@ -1277,5 +1812,231 @@ describe('ClubMediaView relative time under a non-UTC browser timezone', () => {
 
     const relativeTimeText = wrapper.find('.mv-comment-time').text()
     expect(relativeTimeText).not.toMatch(/^in /)
+  })
+})
+
+// Every one of these covers the same structural rule rather than a single incident: an async
+// user action captures the view session that was current when the gesture started, and any
+// write it makes afterwards is dropped if a navigation has since begun a new session. Before
+// that rule existed, only the post-delete *backfill* was guarded, so the delete's own
+// optimistic write -- and publish, pin/unpin, comment delete, and a stale comments GET --
+// could all still land on a feed the viewer had already navigated away from.
+describe('ClubMediaView view-state ownership across navigations', () => {
+  it('drops a post delete that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Club One Post One', viewerCanDelete: true }),
+          buildPost({ id: 2, title: 'Club One Post Two' }),
+        ],
+        page: 0,
+        size: 2,
+        total: 4,
+      }),
+    )
+    const deleteDeferred = createDeferred<void>()
+    deleteClubPostMock.mockReturnValueOnce(deleteDeferred.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Club Two Post One' }),
+          buildPost({ id: 9, title: 'Club Two Post Nine' }),
+        ],
+        page: 0,
+        size: 2,
+        total: 5,
+      }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    await router.push('/clubs/2/media?page=0&size=2')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Club Two Post One')
+    expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 1 of 3')
+
+    // The delete for the abandoned club finally succeeds server-side. Its optimistic local
+    // removal and its total decrement belong to a feed that is no longer on screen: post id 1
+    // here is a *different* club's post that happens to share the id, and the total is club
+    // two's, not club one's.
+    deleteDeferred.resolve()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Club Two Post One')
+    expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 1 of 3')
+    // No backfill either: a backfill for the abandoned session would be a wasted request whose
+    // response could only ever be discarded.
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('drops a publish that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Club One Post One' })], page: 0, size: 2, total: 4 }),
+    )
+    const publishDeferred = createDeferred<ClubPost>()
+    publishClubPostMock.mockReturnValueOnce(publishDeferred.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 9, title: 'Club Two Post Nine' })], page: 0, size: 2, total: 5 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=0&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-publish-title-input').setValue('Meeting recap')
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [new File(['a'], 'photo.jpg', { type: 'image/jpeg' })],
+    })
+    await fileInput.trigger('change')
+    await wrapper.find('.mv-publish-form').trigger('submit')
+    await flushPromises()
+
+    await router.push('/clubs/2/media?page=0&size=2')
+    await flushPromises()
+
+    publishDeferred.resolve(buildPost({ id: 42, title: 'Freshly Published' }))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Freshly Published')
+    expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 1 of 3')
+  })
+
+  it('drops a pin that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: true }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 7, title: 'Club One Post Seven', pinnedAt: null })], total: 1 }),
+    )
+    const pinDeferred = createDeferred<void>()
+    pinClubPostMock.mockReturnValueOnce(pinDeferred.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 7, title: 'Club Two Post Seven', pinnedAt: null })], total: 1 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    await wrapper.find('.mv-pin-toggle').trigger('click')
+    await flushPromises()
+
+    await router.push('/clubs/2/media')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Club Two Post Seven')
+
+    pinDeferred.resolve()
+    await flushPromises()
+
+    // Post ids are global, but "post 7 is pinned" was decided for the club the viewer left.
+    expect(wrapper.find('.mv-badge-pinned').exists()).toBe(false)
+    expect(wrapper.find('.mv-pin-toggle').text()).toBe('Pin')
+  })
+
+  it('drops a comment delete that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Club One Post Five', commentCount: 1 })], total: 1 }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 11, postId: 5, body: 'Club one comment', viewerCanDelete: true }),
+    ])
+    const deleteCommentDeferred = createDeferred<void>()
+    deleteClubPostCommentMock.mockReturnValueOnce(deleteCommentDeferred.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Club Two Post Five', commentCount: 3 })], total: 1 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.find('.mv-comment-delete').trigger('click')
+    await flushPromises()
+
+    await router.push('/clubs/2/media')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Club Two Post Five')
+
+    deleteCommentDeferred.resolve()
+    await flushPromises()
+
+    expect(wrapper.find('.mv-comments-toggle').text()).toContain('3')
+  })
+
+  it('drops a comments response that resolves after the viewer already navigated to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Club One Post Five', commentCount: 1 })], total: 1 }),
+    )
+    const staleComments = createDeferred<ClubPostComment[]>()
+    fetchClubPostCommentsMock.mockReturnValueOnce(staleComments.promise)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 5, title: 'Club Two Post Five', commentCount: 1 })], total: 1 }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 22, postId: 5, body: 'Club two comment' }),
+    ])
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    await router.push('/clubs/2/media')
+    await flushPromises()
+
+    staleComments.resolve([buildComment({ id: 11, postId: 5, body: 'Club one comment' })])
+    await flushPromises()
+
+    // Expanding the same post id under the new club must issue a fresh fetch rather than reuse
+    // whatever the abandoned club's in-flight request happened to deliver.
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubPostCommentsMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Club two comment')
+    expect(wrapper.text()).not.toContain('Club one comment')
+  })
+
+  // Leaving the media route entirely is a navigation too, even though it starts no new load()
+  // here: the component is torn down instead. A backfill still in flight at that point would
+  // otherwise find its session current, and the "this page is now empty, step back one page"
+  // branch would push a page/size query onto whatever route the viewer has moved on to.
+  it('does not navigate after the view is unmounted when a post-delete backfill finds the page empty', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [buildPost({ id: 1, title: 'Last Post On Page Two', viewerCanDelete: true })],
+        page: 1,
+        size: 2,
+        total: 3,
+      }),
+    )
+    deleteClubPostMock.mockResolvedValue(undefined)
+    const backfillDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(backfillDeferred.promise)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=1&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await flushPromises()
+
+    wrapper.unmount()
+    await router.push('/clubs/1')
+    await flushPromises()
+
+    backfillDeferred.resolve(buildFeed({ items: [], page: 1, size: 2, total: 2 }))
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe('/clubs/1')
+    expect(router.currentRoute.value.query.page).toBeUndefined()
   })
 })

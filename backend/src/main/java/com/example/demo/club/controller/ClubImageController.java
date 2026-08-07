@@ -2,6 +2,7 @@ package com.example.demo.club.controller;
 
 import com.example.demo.club.model.Club;
 import com.example.demo.club.service.ClubService;
+import com.example.demo.club.service.ImageProcessingUnavailableException;
 import com.example.demo.club.service.ImageStorageService;
 import com.example.demo.security.AuthenticatedUserResolver;
 import org.springframework.http.HttpStatus;
@@ -44,6 +45,8 @@ public class ClubImageController {
             imageUrl = imageStorageService.store(file);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (ImageProcessingUnavailableException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store file");
         }
