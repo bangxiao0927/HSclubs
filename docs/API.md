@@ -70,6 +70,19 @@ All club endpoints live under `/api/clubs`. This is the single-school API patter
 ### GET /api/clubs
 List active clubs. Public. Supports `page` and `size` query parameters for pagination.
 
+Also accepts the search parameters `q` (free text), `name`, `category`, `alias`, and
+`advisor`. `q` is split on whitespace: every word must match, but each word may match a
+different column (name, alias, category, advisor, description, meeting schedule, contact
+email, location), so "club chess" finds "Chess Club" and "robotics wednesday" finds a
+robotics club that meets on Wednesday. The number of words turned into SQL conditions is
+capped (see `ClubService`).
+
+This matches the frontend's in-memory filter (`frontend/src/utils/clubSearch.ts`) word for
+word and column for column, with one deliberate exception: that filter also searches a club's
+Instagram URL and treats the whole query `ins`/`instagram` as "clubs that have Instagram".
+`instagram_url` is not a column on `clubs` (it comes from `club_social_medias` through a
+correlated subquery), so the SQL search does not cover it.
+
 ### POST /api/clubs
 Create a club. Requires: platform_owner.
 

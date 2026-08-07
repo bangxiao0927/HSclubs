@@ -96,13 +96,21 @@
         <if test="advisor != null and advisor != ''">
           AND LOWER(advisor) LIKE CONCAT('%', LOWER(#{advisor}), '%')
         </if>
-        <if test="query != null and query != ''">
-          AND (LOWER(name) LIKE CONCAT('%', LOWER(#{query}), '%')
-               OR LOWER(alias_name) LIKE CONCAT('%', LOWER(#{query}), '%')
-               OR LOWER(category) LIKE CONCAT('%', LOWER(#{query}), '%')
-               OR LOWER(advisor) LIKE CONCAT('%', LOWER(#{query}), '%')
-               OR LOWER(description) LIKE CONCAT('%', LOWER(#{query}), '%')
-               OR LOWER(location) LIKE CONCAT('%', LOWER(#{query}), '%'))
+        <!-- One AND per word, each word free to match a different field. Matching the whole
+             query as a single substring required the words to be contiguous and in the club's
+             own order inside one field, so "club chess" missed "Chess Club". The token list is
+             built and capped by ClubService. -->
+        <if test="queryTokens != null and queryTokens.size() > 0">
+          <foreach collection="queryTokens" item="token">
+            AND (LOWER(name) LIKE CONCAT('%', LOWER(#{token}), '%')
+                 OR LOWER(alias_name) LIKE CONCAT('%', LOWER(#{token}), '%')
+                 OR LOWER(category) LIKE CONCAT('%', LOWER(#{token}), '%')
+                 OR LOWER(advisor) LIKE CONCAT('%', LOWER(#{token}), '%')
+                 OR LOWER(description) LIKE CONCAT('%', LOWER(#{token}), '%')
+                 OR LOWER(meeting_schedule) LIKE CONCAT('%', LOWER(#{token}), '%')
+                 OR LOWER(contact_email) LIKE CONCAT('%', LOWER(#{token}), '%')
+                 OR LOWER(location) LIKE CONCAT('%', LOWER(#{token}), '%'))
+          </foreach>
         </if>
         ORDER BY name ASC
         LIMIT #{limit} OFFSET #{offset}

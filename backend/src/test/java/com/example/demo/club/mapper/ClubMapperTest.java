@@ -142,6 +142,52 @@ class ClubMapperTest {
             String.class, clubId, oauthUserId);
     }
 
+    // The server-side counterpart of frontend/src/utils/clubSearch.ts: each word may match a
+    // different column, so the two cannot disagree about what a student's query means.
+    @Test
+    void searchMatchesWordsInAnyOrderAndAcrossDifferentColumns() {
+        insertSearchableClub();
+
+        assertThat(clubMapper.search(null, null, null, null, List.of("club", "chess"), 0, 10))
+            .extracting(Club::getName)
+            .containsExactly("Chess Club");
+        assertThat(clubMapper.search(null, null, null, null, List.of("chess", "214"), 0, 10))
+            .hasSize(1);
+    }
+
+    // The example in docs/API.md: the words live in the name and the meeting schedule.
+    @Test
+    void searchMatchesAWordThatOnlyAppearsInTheMeetingSchedule() {
+        insertSearchableClub();
+
+        assertThat(clubMapper.search(null, null, null, null, List.of("chess", "wednesday"), 0, 10))
+            .hasSize(1);
+    }
+
+    @Test
+    void searchStillRequiresEveryWordToMatchSomething() {
+        insertSearchableClub();
+
+        assertThat(clubMapper.search(null, null, null, null, List.of("chess", "badminton"), 0, 10))
+            .isEmpty();
+    }
+
+    @Test
+    void searchWithNoWordsReturnsEveryActiveClub() {
+        insertSearchableClub();
+
+        assertThat(clubMapper.search(null, null, null, null, List.of(), 0, 10)).hasSize(1);
+    }
+
+    private void insertSearchableClub() {
+        jdbcTemplate.update("""
+            INSERT INTO clubs (id, name, category, description, location, advisor,
+                               meeting_schedule, contact_email, status)
+            VALUES (4, 'Chess Club', 'Competition & Strategy', 'Casual and competitive play',
+                    'Room 214', 'Ms. Lee', 'Wednesday lunch', 'chess@example.com', 'active')
+            """);
+    }
+
     @Test
     void findAllPaginatedReportsMemberCountFromClubMemberTableNotTheStaleColumn() {
         jdbcTemplate.update(
