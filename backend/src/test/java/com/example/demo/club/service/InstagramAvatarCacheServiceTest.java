@@ -210,6 +210,45 @@ class InstagramAvatarCacheServiceTest {
         assertThat(avatar.mediaType().toString()).isEqualTo("image/svg+xml");
     }
 
+    // stdout and stderr are merged into a single pipe, so a chatty child (a traceback, a noisy
+    // browser_cookie3 failure) that writes more than the OS pipe buffer blocks on write until
+    // someone reads it. Draining only after waitFor turned such a run into a guaranteed timeout,
+    // even though the URL this script prints last is perfectly good.
+    @Test
+    void resolveAvatarStillReadsTheUrlFromAChildThatFloodsThePipeFirst() throws Exception {
+        byte[] bytes = new byte[] { 1, 2, 3, 4 };
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/avatar.png", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "image/png");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            String avatarUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/avatar.png";
+            Path chatty = tempDir.resolve("chatty-instaloader.sh");
+            // ~200 KB of noise, comfortably past a 64 KB pipe buffer, then the real answer.
+            Files.writeString(chatty,
+                "#!/bin/sh\ni=0\nwhile [ $i -lt 2000 ]; do\n"
+                    + "  echo 'WARNING xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n"
+                    + "  i=$((i+1))\ndone\necho '%s'\n".formatted(avatarUrl),
+                StandardCharsets.UTF_8);
+            assertThat(chatty.toFile().setExecutable(true)).isTrue();
+            InstagramAvatarCacheService service = service(true, chatty.toString(), 5000);
+
+            InstagramAvatarCacheService.ResolvedAvatar avatar = assertTimeoutPreemptively(
+                Duration.ofSeconds(20),
+                () -> service.resolveAvatar("mvhsclubs")
+            );
+
+            assertThat(avatar.mediaType()).isEqualTo(MediaType.IMAGE_PNG);
+            assertThat(avatar.bytes()).isEqualTo(bytes);
+        } finally {
+            server.stop(0);
+        }
+    }
+
     @Test
     void resolveAvatarCoalescesConcurrentCacheMisses() throws Exception {
         byte[] bytes = new byte[] { 9, 8, 7 };
