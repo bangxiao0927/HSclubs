@@ -29,6 +29,26 @@ Response:
 
 The `dataHash` is a SHA-256 digest of (clubId|name|category|memberCount) for all clubs. The aggregator compares this hash to detect changes without re-fetching.
 
+The response also carries an `ETag`, so a poller can ask the same question over HTTP instead of
+parsing a body first: send the tag back as `If-None-Match` and an unchanged summary answers
+`304 Not Modified` with no body. The tag is **not** `dataHash`: that digest covers only club id,
+name, category and member count, while the response also carries `lastUpdatedAt` and the school
+identity, so validating with it would answer 304 for a body that had in fact changed. The
+`ETag` is exposed cross-origin (`Access-Control-Expose-Headers`), so a browser-side caller can
+read it too.
+
+```bash
+curl -s -D- -o/dev/null https://school.example.org/api/summary            # note the ETag
+curl -s -o/dev/null -w '%{http_code}\n' \
+  -H 'If-None-Match: "<etag>"' https://school.example.org/api/summary      # 304
+```
+
+This endpoint is the **only** interface reserved for an aggregator: it is read-only, anonymous,
+and served with its own credential-less wildcard CORS policy, so a page on another origin can
+`fetch()` it directly. There is deliberately no upload or push endpoint -- a school site
+publishes, the aggregator pulls. Writing to it answers 401, and adding a push channel would
+need its own authentication design rather than an open port.
+
 The response is assembled from a narrow projection (club id, name, category, member count,
 updated time -- never the description or the achievements CLOB) and cached for
 `app.summary.cache-ttl-ms` (60s by default, 0 disables it). The endpoint is unauthenticated, so

@@ -100,4 +100,37 @@ class SummaryServiceTest {
 
         verify(clubMapper, times(2)).findSummaryProjections();
     }
+
+    // The entity tag validates the whole response, so it must move even when dataHash cannot:
+    // editing a club's description bumps updated_at, and therefore lastUpdatedAt, without
+    // touching any of the four fields dataHash digests. Reusing dataHash as the ETag would
+    // answer 304 for a body that really did change.
+    @Test
+    void theEntityTagCoversFieldsTheDataHashDoesNot() {
+        ClubMapper first = mock(ClubMapper.class);
+        when(first.findSummaryProjections()).thenReturn(directory());
+        SummaryService.Snapshot before = service(first, 0).buildSnapshot();
+
+        ClubMapper second = mock(ClubMapper.class);
+        when(second.findSummaryProjections()).thenReturn(List.of(
+            club(1L, "Chess Club", "Competition & Strategy", 12, LocalDateTime.of(2026, 1, 2, 3, 4)),
+            club(2L, "Robotics", "STEM & Innovation", 30, LocalDateTime.of(2026, 9, 9, 9, 9)),
+            club(3L, "Debate", "Competition & Strategy", 8, null)));
+        SummaryService.Snapshot after = service(second, 0).buildSnapshot();
+
+        assertThat(after.summary().getDataHash()).isEqualTo(before.summary().getDataHash());
+        assertThat(after.summary().getLastUpdatedAt()).isNotEqualTo(before.summary().getLastUpdatedAt());
+        assertThat(after.entityTag()).isNotEqualTo(before.entityTag());
+    }
+
+    @Test
+    void theEntityTagIsStableForUnchangedData() {
+        ClubMapper first = mock(ClubMapper.class);
+        when(first.findSummaryProjections()).thenReturn(directory());
+        ClubMapper second = mock(ClubMapper.class);
+        when(second.findSummaryProjections()).thenReturn(directory());
+
+        assertThat(service(second, 0).buildSnapshot().entityTag())
+            .isEqualTo(service(first, 0).buildSnapshot().entityTag());
+    }
 }
