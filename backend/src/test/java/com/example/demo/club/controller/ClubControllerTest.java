@@ -243,6 +243,18 @@ class ClubControllerTest {
             .andExpect(status().isNotFound());
     }
 
+    @Test
+    void restoringAClubThatWasNeverArchivedIsAConflict() throws Exception {
+        Club club = new Club();
+        club.setId(1L);
+        when(clubService.resolveBySlugOrId(eq("1"), any())).thenReturn(club);
+        when(clubService.restore(1L))
+            .thenThrow(new IllegalStateException("Only an archived club can be restored"));
+
+        mockMvc.perform(delete("/api/clubs/1/archive").principal(oauthToken(OWNER_EMAIL)))
+            .andExpect(status().isConflict());
+    }
+
     private static Club nonActiveClub() {
         Club club = new Club();
         club.setId(7L);

@@ -152,7 +152,11 @@ Status: 200 | 403 (not a platform owner) | 404 (club not found)
 Put an archived club back into the directory (sets its status back to `active`). Requires:
 platform_owner. Returns the updated club.
 
-Status: 200 | 403 | 404
+Only an `archived` club can be restored: no previous status is recorded anywhere, so
+activating a club in some other non-active state (a `pending` one, say) would publish something
+that was never approved and lose that state for good. Anything else is a 409.
+
+Status: 200 | 403 | 404 | 409 (the club is not archived)
 
 ---
 

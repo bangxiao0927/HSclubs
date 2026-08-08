@@ -143,7 +143,15 @@ public class ClubController {
         if (existing == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
-        return archived ? clubService.archive(existing.getId()) : clubService.restore(existing.getId());
+        try {
+            return archived ? clubService.archive(existing.getId()) : clubService.restore(existing.getId());
+        } catch (IllegalArgumentException ex) {
+            // The club was resolved a moment ago, so this means it disappeared in between.
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        } catch (IllegalStateException ex) {
+            // Restoring something that was never archived (e.g. a pending club).
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage());
+        }
     }
 
     // ---- Members ----

@@ -251,19 +251,26 @@ public class ClubService {
      * reach: a president must not be able to publish or hide their own club.
      */
     public Club archive(Long id) {
-        return setStatus(id, ARCHIVED_STATUS);
-    }
-
-    /** Puts an archived club back into the directory. */
-    public Club restore(Long id) {
-        return setStatus(id, ACTIVE_STATUS);
-    }
-
-    private Club setStatus(Long id, String status) {
-        if (clubMapper.findById(id) == null) {
+        if (clubMapper.updateStatus(id, ARCHIVED_STATUS) == 0) {
             throw new IllegalArgumentException("Club not found");
         }
-        clubMapper.updateStatus(id, status);
+        return clubMapper.findById(id);
+    }
+
+    /**
+     * Puts an archived club back into the directory. Deliberately refuses any other non-active
+     * status: no previous status is recorded anywhere, so activating (say) a pending club here
+     * would publish something that was never approved and lose that state for good.
+     */
+    public Club restore(Long id) {
+        Club existing = clubMapper.findById(id);
+        if (existing == null) {
+            throw new IllegalArgumentException("Club not found");
+        }
+        if (!ARCHIVED_STATUS.equalsIgnoreCase(existing.getStatus())) {
+            throw new IllegalStateException("Only an archived club can be restored");
+        }
+        clubMapper.updateStatus(id, ACTIVE_STATUS);
         return clubMapper.findById(id);
     }
 
