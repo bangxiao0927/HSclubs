@@ -62,6 +62,17 @@ class ProductionConfigDefaultsTest {
         assertThat(resolve(BASE_CONFIG, "server.forward-headers-strategy")).isEqualTo("framework");
     }
 
+    // Spring Boot's default is one thread for every @Scheduled method, so the Instagram avatar
+    // prewarm (which can hold its thread for minutes across subprocess and HTTP timeouts) would
+    // block the nightly orphan-upload cleanup behind it.
+    @Test
+    void scheduledJobsDoNotShareASingleThread() throws IOException {
+        String poolSize = resolve(BASE_CONFIG, "spring.task.scheduling.pool.size");
+
+        assertThat(poolSize).isNotNull();
+        assertThat(Integer.parseInt(poolSize)).isGreaterThanOrEqualTo(2);
+    }
+
     /**
      * Returns the property's value with placeholders resolved against nothing but the file
      * itself, i.e. the default a deployment gets when the corresponding environment variable is
