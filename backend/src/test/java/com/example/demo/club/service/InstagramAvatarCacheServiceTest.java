@@ -7,6 +7,8 @@ import com.example.demo.club.mapper.ClubMapper;
 import com.example.demo.club.model.Club;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.MediaType;
 
@@ -95,12 +97,13 @@ class InstagramAvatarCacheServiceTest {
     void resolveAvatarNeverSpawnsProcessForHandleNotLinkedToAKnownClub() throws IOException {
         Path invocations = tempDir.resolve("unknown-handle-invocations.txt");
         Files.writeString(invocations, "", StandardCharsets.UTF_8);
-        Path script = tempDir.resolve("would-be-invoked.sh");
-        Files.writeString(script, "#!/bin/sh\necho x >> \"%s\"\nexit 0\n".formatted(invocations), StandardCharsets.UTF_8);
-        assertThat(script.toFile().setExecutable(true)).isTrue();
+        String script = FakeInstaloader.Script.named(tempDir, "would-be-invoked")
+            .recordsInto(invocations)
+            .recordsMarker()
+            .create();
         // Only "mvhsclubs" is a known club handle -- "randomhandle" is well-formed but unknown.
         InstagramAvatarCacheService service =
-            service(true, script.toString(), "http://127.0.0.1/unused?username=%s", 1000, List.of(club("mvhsclubs")));
+            service(true, script, "http://127.0.0.1/unused?username=%s", 1000, List.of(club("mvhsclubs")));
 
         InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("randomhandle");
 
@@ -144,10 +147,12 @@ class InstagramAvatarCacheServiceTest {
     void resolveAvatarSkipsRetryForRecentlyFailedHandle() throws IOException {
         Path invocations = tempDir.resolve("negative-cache-invocations.txt");
         Files.writeString(invocations, "", StandardCharsets.UTF_8);
-        Path script = tempDir.resolve("always-failing-instaloader.sh");
-        Files.writeString(script, "#!/bin/sh\necho x >> \"%s\"\nexit 1\n".formatted(invocations), StandardCharsets.UTF_8);
-        assertThat(script.toFile().setExecutable(true)).isTrue();
-        InstagramAvatarCacheService service = service(true, script.toString(), "http://127.0.0.1/unused?username=%s", 1000);
+        String script = FakeInstaloader.Script.named(tempDir, "always-failing-instaloader")
+            .recordsInto(invocations)
+            .recordsMarker()
+            .exitsWith(1)
+            .create();
+        InstagramAvatarCacheService service = service(true, script, "http://127.0.0.1/unused?username=%s", 1000);
 
         service.resolveAvatar("mvhsclubs");
         service.resolveAvatar("mvhsclubs");
@@ -157,14 +162,15 @@ class InstagramAvatarCacheServiceTest {
 
     @Test
     void resolveAvatarLimitsConcurrentOnDemandRefreshesAcrossDistinctHandles() throws Exception {
-        Path script = tempDir.resolve("slow-instaloader.sh");
-        Files.writeString(script, "#!/bin/sh\nsleep 2\nexit 1\n", StandardCharsets.UTF_8);
-        assertThat(script.toFile().setExecutable(true)).isTrue();
+        String script = FakeInstaloader.Script.named(tempDir, "slow-instaloader")
+            .sleeps(2000)
+            .exitsWith(1)
+            .create();
         InstagramAvatarCacheService service = new InstagramAvatarCacheService(
             clubMapper(List.of(club("mvhsclubs"), club("otherclub"))),
             tempDir.toString(),
             true,
-            script.toString(),
+            script,
             "",
             "",
             "",
@@ -197,10 +203,10 @@ class InstagramAvatarCacheServiceTest {
 
     @Test
     void resolveAvatarTimesOutHungInstaloaderProcess() throws IOException {
-        Path sleeper = tempDir.resolve("sleepy-instaloader.sh");
-        Files.writeString(sleeper, "#!/bin/sh\nsleep 5\n", StandardCharsets.UTF_8);
-        assertThat(sleeper.toFile().setExecutable(true)).isTrue();
-        InstagramAvatarCacheService service = service(true, sleeper.toString(), 1000);
+        String sleeper = FakeInstaloader.Script.named(tempDir, "sleepy-instaloader")
+            .sleeps(5000)
+            .create();
+        InstagramAvatarCacheService service = service(true, sleeper, 1000);
 
         InstagramAvatarCacheService.ResolvedAvatar avatar = assertTimeoutPreemptively(
             Duration.ofSeconds(3),
@@ -227,15 +233,12 @@ class InstagramAvatarCacheServiceTest {
         server.start();
         try {
             String avatarUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/avatar.png";
-            Path chatty = tempDir.resolve("chatty-instaloader.sh");
             // ~200 KB of noise, comfortably past a 64 KB pipe buffer, then the real answer.
-            Files.writeString(chatty,
-                "#!/bin/sh\ni=0\nwhile [ $i -lt 2000 ]; do\n"
-                    + "  echo 'WARNING xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n"
-                    + "  i=$((i+1))\ndone\necho '%s'\n".formatted(avatarUrl),
-                StandardCharsets.UTF_8);
-            assertThat(chatty.toFile().setExecutable(true)).isTrue();
-            InstagramAvatarCacheService service = service(true, chatty.toString(), 5000);
+            String chatty = FakeInstaloader.Script.named(tempDir, "chatty-instaloader")
+                .printsNoiseLines(2000)
+                .prints(avatarUrl)
+                .create();
+            InstagramAvatarCacheService service = service(true, chatty, 5000);
 
             InstagramAvatarCacheService.ResolvedAvatar avatar = assertTimeoutPreemptively(
                 Duration.ofSeconds(20),
@@ -264,15 +267,13 @@ class InstagramAvatarCacheServiceTest {
 
         Path invocations = tempDir.resolve("coalesced-invocations.txt");
         Files.writeString(invocations, "", StandardCharsets.UTF_8);
-        Path script = tempDir.resolve("coalesced-instaloader.sh");
-        Files.writeString(
-            script,
-            "#!/bin/sh\necho x >> \"%s\"\nsleep 1\necho \"http://127.0.0.1:%d/avatar.png\"\n"
-                .formatted(invocations, port),
-            StandardCharsets.UTF_8
-        );
-        assertThat(script.toFile().setExecutable(true)).isTrue();
-        InstagramAvatarCacheService service = service(true, script.toString(), 4000);
+        String script = FakeInstaloader.Script.named(tempDir, "coalesced-instaloader")
+            .recordsInto(invocations)
+            .recordsMarker()
+            .sleeps(1000)
+            .prints("http://127.0.0.1:" + port + "/avatar.png")
+            .create();
+        InstagramAvatarCacheService service = service(true, script, 4000);
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -319,12 +320,12 @@ class InstagramAvatarCacheServiceTest {
             exchange.close();
         });
         server.start();
-        Path script = tempDir.resolve("failing-instaloader.sh");
-        Files.writeString(script, "#!/bin/sh\nexit 1\n", StandardCharsets.UTF_8);
-        assertThat(script.toFile().setExecutable(true)).isTrue();
+        String script = FakeInstaloader.Script.named(tempDir, "failing-instaloader")
+            .exitsWith(1)
+            .create();
         InstagramAvatarCacheService service = service(
             true,
-            script.toString(),
+            script,
             "http://127.0.0.1:%d/profile?username=%%s".formatted(server.getAddress().getPort()),
             4000
         );
@@ -339,22 +340,26 @@ class InstagramAvatarCacheServiceTest {
         }
     }
 
+    // POSIX only, and not because of the fake interpreter: Windows passes a command line to
+    // cmd.exe as one string, and the service's second argument is the multi-line Instaloader
+    // script, so everything after its first newline is truncated -- a launcher there simply
+    // cannot observe the later arguments this test is about. The behaviour under test is
+    // platform-independent and is verified by CI (see #109).
+    @EnabledOnOs({OS.LINUX, OS.MAC})
     @Test
     void refreshClubInstagramAvatarsCapsFailedAttempts() throws IOException {
         Path invocations = tempDir.resolve("failed-prewarm-invocations.txt");
         Files.writeString(invocations, "", StandardCharsets.UTF_8);
-        Path script = tempDir.resolve("failing-instaloader.sh");
-        Files.writeString(
-            script,
-            "#!/bin/sh\nprintf '%s\\n' \"$3\" >> \"%s\"\nexit 1\n".formatted("%s", invocations),
-            StandardCharsets.UTF_8
-        );
-        assertThat(script.toFile().setExecutable(true)).isTrue();
+        String script = FakeInstaloader.Script.named(tempDir, "failing-prewarm-instaloader")
+            .recordsInto(invocations)
+            .recordsArgument(3)
+            .exitsWith(1)
+            .create();
         InstagramAvatarCacheService service = new InstagramAvatarCacheService(
             clubMapper(List.of(club("alpha"), club("beta"), club("gamma"))),
             tempDir.toString(),
             true,
-            script.toString(),
+            script,
             "",
             "",
             "",
@@ -373,21 +378,25 @@ class InstagramAvatarCacheServiceTest {
         assertThat(Files.readAllLines(invocations, StandardCharsets.UTF_8)).containsExactly("alpha", "beta");
     }
 
-    @Test
-    void resolveAvatarPassesBrowserCookieConfigurationToInstaloader() throws Exception {
+    // POSIX only, and not because of the fake interpreter: Windows passes a command line to
+    // cmd.exe as one string, and the service's second argument is the multi-line Instaloader
+    // script, so everything after its first newline is truncated -- a launcher there simply
+    // cannot observe the later arguments this test is about. The behaviour under test is
+    // platform-independent and is verified by CI (see #109).
+    @EnabledOnOs({OS.LINUX, OS.MAC})
+    @Test    void resolveAvatarPassesBrowserCookieConfigurationToInstaloader() throws Exception {
         Path argsFile = tempDir.resolve("instaloader-args.txt");
-        Path script = tempDir.resolve("capturing-instaloader.sh");
-        Files.writeString(
-            script,
-            "#!/bin/sh\necho \"$6\" > \"%s\"\necho \"$7\" >> \"%s\"\nexit 1\n".formatted(argsFile, argsFile),
-            StandardCharsets.UTF_8
-        );
-        assertThat(script.toFile().setExecutable(true)).isTrue();
+        String script = FakeInstaloader.Script.named(tempDir, "capturing-instaloader")
+            .recordsInto(argsFile)
+            .recordsArgument(6)
+            .recordsArgument(7)
+            .exitsWith(1)
+            .create();
         InstagramAvatarCacheService service = new InstagramAvatarCacheService(
             clubMapper(List.of(club("mvhsclubs"))),
             tempDir.toString(),
             true,
-            script.toString(),
+            script,
             "",
             "",
             "firefox",
@@ -429,14 +438,10 @@ class InstagramAvatarCacheServiceTest {
         });
         server.start();
         int port = server.getAddress().getPort();
-        Path script = tempDir.resolve("avif-instaloader.sh");
-        Files.writeString(
-            script,
-            "#!/bin/sh\necho \"http://127.0.0.1:%d/avatar.avif\"\n".formatted(port),
-            StandardCharsets.UTF_8
-        );
-        assertThat(script.toFile().setExecutable(true)).isTrue();
-        InstagramAvatarCacheService service = service(true, script.toString(), 4000);
+        String script = FakeInstaloader.Script.named(tempDir, "avif-instaloader")
+            .prints("http://127.0.0.1:" + port + "/avatar.avif")
+            .create();
+        InstagramAvatarCacheService service = service(true, script, 4000);
 
         try {
             InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
@@ -470,14 +475,10 @@ class InstagramAvatarCacheServiceTest {
         });
         server.start();
         int port = server.getAddress().getPort();
-        Path script = tempDir.resolve("mislabeled-png-instaloader.sh");
-        Files.writeString(
-            script,
-            "#!/bin/sh\necho \"http://127.0.0.1:%d/avatar.bin\"\n".formatted(port),
-            StandardCharsets.UTF_8
-        );
-        assertThat(script.toFile().setExecutable(true)).isTrue();
-        InstagramAvatarCacheService service = service(true, script.toString(), 4000);
+        String script = FakeInstaloader.Script.named(tempDir, "mislabeled-png-instaloader")
+            .prints("http://127.0.0.1:" + port + "/avatar.bin")
+            .create();
+        InstagramAvatarCacheService service = service(true, script, 4000);
 
         try {
             InstagramAvatarCacheService.ResolvedAvatar first = service.resolveAvatar("mvhsclubs");
@@ -512,14 +513,10 @@ class InstagramAvatarCacheServiceTest {
         });
         server.start();
         int port = server.getAddress().getPort();
-        Path script = tempDir.resolve("svg-instaloader.sh");
-        Files.writeString(
-            script,
-            "#!/bin/sh\necho \"http://127.0.0.1:%d/avatar.svg\"\n".formatted(port),
-            StandardCharsets.UTF_8
-        );
-        assertThat(script.toFile().setExecutable(true)).isTrue();
-        InstagramAvatarCacheService service = service(true, script.toString(), 4000);
+        String script = FakeInstaloader.Script.named(tempDir, "svg-instaloader")
+            .prints("http://127.0.0.1:" + port + "/avatar.svg")
+            .create();
+        InstagramAvatarCacheService service = service(true, script, 4000);
 
         try {
             InstagramAvatarCacheService.ResolvedAvatar avatar = service.resolveAvatar("mvhsclubs");
@@ -554,14 +551,10 @@ class InstagramAvatarCacheServiceTest {
         });
         server.start();
         int port = server.getAddress().getPort();
-        Path script = tempDir.resolve("webp-instaloader.sh");
-        Files.writeString(
-            script,
-            "#!/bin/sh\necho \"http://127.0.0.1:%d/avatar.webp\"\n".formatted(port),
-            StandardCharsets.UTF_8
-        );
-        assertThat(script.toFile().setExecutable(true)).isTrue();
-        InstagramAvatarCacheService service = service(true, script.toString(), 4000);
+        String script = FakeInstaloader.Script.named(tempDir, "webp-instaloader")
+            .prints("http://127.0.0.1:" + port + "/avatar.webp")
+            .create();
+        InstagramAvatarCacheService service = service(true, script, 4000);
 
         try {
             InstagramAvatarCacheService.ResolvedAvatar first = service.resolveAvatar("mvhsclubs");
