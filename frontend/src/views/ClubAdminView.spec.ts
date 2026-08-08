@@ -118,6 +118,18 @@ describe('ClubAdminView member count', () => {
   // /clubs/:id/admin is only guarded by requiresAuth and fetchClubById is a public endpoint, so
   // the editor used to render for any signed-in visitor and only fail once they pressed Save.
   // The backend was always enforced; this is about not inviting the edit in the first place.
+  // Loading a club both calls loadMembers directly and flips canManageClub from false to true
+  // for a club president, which fires the watcher: two concurrent roster requests whose
+  // responses race to write members.value.
+  it('loads the roster once for a club president, not twice', async () => {
+    const club = buildClub({ canManage: true })
+    fetchClubMembersMock.mockResolvedValue([])
+
+    await mountView(club)
+
+    expect(fetchClubMembersMock).toHaveBeenCalledTimes(1)
+  })
+
   it('renders a read-only notice instead of the editor for someone who does not manage the club', async () => {
     const club = buildClub({ canManage: false })
 

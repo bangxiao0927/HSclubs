@@ -192,6 +192,12 @@ const loadMembers = async (id: string) => {
     members.value = []
     return
   }
+  // Loading the club both calls this directly and flips canManageClub from false to true for a
+  // club president, which fires the watcher below -- two concurrent roster requests whose
+  // responses race to write members.value. One request in flight is enough.
+  if (membersLoading.value) {
+    return
+  }
   membersLoading.value = true
   membersError.value = ''
   try {
