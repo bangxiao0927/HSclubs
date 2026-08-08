@@ -215,6 +215,43 @@ class ClubServiceTest {
 
     // ---- Membership ----
 
+    // The recommendation endpoint is public and returns at most 20 rows; reading every club to
+    // sort and truncate in Java made that cost unbounded in table size.
+    @Test
+    void recommendationsForASignedOutVisitorAreOrderedAndLimitedInSql() {
+        clubService.getRecommendations(null, 8);
+
+        verify(clubMapper).findPopular(8);
+        verify(clubMapper, never()).findAll();
+    }
+
+    @Test
+    void recommendationsForAMemberAskSqlForTheirCategoriesExcludingClubsTheyJoined() {
+        when(oAuthUserMapper.findIdByEmail("student@example.com")).thenReturn(21L);
+        when(clubMapper.findCategoriesByOauthUserId(21L)).thenReturn(List.of("STEM & Innovation"));
+        when(clubMapper.findClubIdsByOauthUserId(21L)).thenReturn(List.of(3L));
+        when(clubMapper.findPopularInCategories(List.of("STEM & Innovation"), List.of(3L), 8))
+            .thenReturn(List.of(new Club()));
+
+        clubService.getRecommendations("student@example.com", 8);
+
+        verify(clubMapper).findPopularInCategories(List.of("STEM & Innovation"), List.of(3L), 8);
+        verify(clubMapper, never()).findAll();
+    }
+
+    @Test
+    void recommendationsFallBackToPopularClubsWhenNothingMatchesTheirCategories() {
+        when(oAuthUserMapper.findIdByEmail("student@example.com")).thenReturn(21L);
+        when(clubMapper.findCategoriesByOauthUserId(21L)).thenReturn(List.of("STEM & Innovation"));
+        when(clubMapper.findClubIdsByOauthUserId(21L)).thenReturn(List.of(3L));
+        when(clubMapper.findPopularInCategories(any(), any(), anyInt())).thenReturn(List.of());
+
+        clubService.getRecommendations("student@example.com", 8);
+
+        verify(clubMapper).findPopular(8);
+    }
+
+
     // status is deliberately not writable through update(), which a club president can reach,
     // so archiving has to go through the column-scoped statement instead.
     @Test

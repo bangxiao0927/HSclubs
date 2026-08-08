@@ -1,7 +1,7 @@
 package com.example.demo.summary.service;
 
 import com.example.demo.club.mapper.ClubMapper;
-import com.example.demo.club.model.Club;
+import com.example.demo.summary.model.ClubSummaryProjection;
 import com.example.demo.summary.model.SummaryResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -9,13 +9,24 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+/**
+ * Builds the public school summary the future aggregator repo consumes.
+ *
+ * <p>Two things keep this endpoint cheap, because it is unauthenticated and therefore the
+ * easiest thing on the site to hammer: it reads a narrow projection rather than whole club rows
+ * (no description, no {@code achievements} CLOB), and the assembled response is cached for a
+ * short TTL so a burst of requests collapses onto one query. The TTL is small enough that the
+ * aggregator still sees a change promptly.
+ */
 @Service
 public class SummaryService {
 
@@ -23,24 +34,38 @@ public class SummaryService {
     private final String schoolName;
     private final String shortName;
     private final String slug;
+    private final Duration cacheTtl;
+    private final AtomicReference<CachedSummary> cached = new AtomicReference<>();
 
     public SummaryService(ClubMapper clubMapper,
                           @Value("${app.summary.school-name:HS Clubs}") String schoolName,
                           @Value("${app.summary.short-name:HS Clubs}") String shortName,
-                          @Value("${app.summary.slug:hsclubs}") String slug) {
+                          @Value("${app.summary.slug:hsclubs}") String slug,
+                          @Value("${app.summary.cache-ttl-ms:60000}") long cacheTtlMillis) {
         this.clubMapper = clubMapper;
         this.schoolName = schoolName;
         this.shortName = shortName;
         this.slug = slug;
+        this.cacheTtl = Duration.ofMillis(Math.max(0, cacheTtlMillis));
     }
 
     public SummaryResponse buildSummary() {
-        List<Club> clubs = clubMapper.findAll();
+        CachedSummary snapshot = cached.get();
+        if (snapshot != null && !snapshot.isExpired(cacheTtl)) {
+            return snapshot.summary();
+        }
+        SummaryResponse summary = computeSummary();
+        cached.set(new CachedSummary(summary, System.nanoTime()));
+        return summary;
+    }
+
+    private SummaryResponse computeSummary() {
+        List<ClubSummaryProjection> clubs = clubMapper.findSummaryProjections();
 
         Map<String, Integer> categoryCounts = clubs.stream()
             .filter(c -> c.getCategory() != null && !c.getCategory().isBlank())
             .collect(Collectors.groupingBy(
-                Club::getCategory,
+                ClubSummaryProjection::getCategory,
                 LinkedHashMap::new,
                 Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
             ));
@@ -50,7 +75,7 @@ public class SummaryService {
             .sum();
 
         LocalDateTime lastUpdated = clubs.stream()
-            .map(Club::getUpdatedAt)
+            .map(ClubSummaryProjection::getUpdatedAt)
             .filter(t -> t != null)
             .max(LocalDateTime::compareTo)
             .orElse(null);
@@ -74,7 +99,7 @@ public class SummaryService {
      * The 2nd repo can compare this hash to detect changes without
      * re-fetching all club data.
      */
-    private String computeHash(List<Club> clubs) {
+    private String computeHash(List<ClubSummaryProjection> clubs) {
         String payload = clubs.stream()
             .sorted((a, b) -> Long.compare(a.getId() != null ? a.getId() : 0,
                                            b.getId() != null ? b.getId() : 0))
@@ -90,6 +115,12 @@ public class SummaryService {
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 not available", e);
+        }
+    }
+
+    private record CachedSummary(SummaryResponse summary, long builtAtNanos) {
+        boolean isExpired(Duration ttl) {
+            return System.nanoTime() - builtAtNanos >= ttl.toNanos();
         }
     }
 }

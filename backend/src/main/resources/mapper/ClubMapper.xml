@@ -46,6 +46,70 @@
         status = 'active'
     </sql>
 
+    <!-- Everything the calendar and the recommendation list actually render. Deliberately not
+         BaseColumnList: that one carries description and the achievements CLOB, which no
+         caller of these two endpoints ever reads, on every row of the table. -->
+    <sql id="SummaryColumnList">
+        id, name, slug, alias_name, category, meeting_schedule, schedule_note, location,
+        contact_email, advisor, image_url,
+        (SELECT link_url
+         FROM club_social_medias
+         WHERE club_id = clubs.id
+           AND social_type = 'instagram'
+         LIMIT 1) AS instagram_url,
+        (SELECT COUNT(*) FROM club_member WHERE club_id = clubs.id) AS member_count,
+        status, visibility, created_at, updated_at
+    </sql>
+
+    <!-- Popularity ordering and the row limit both live in SQL: this endpoint is public and
+         returns at most 20 clubs, so reading the whole table to sort and truncate it in Java
+         made the work unbounded in table size for a constant-size answer. -->
+    <select id="findPopular" resultMap="ClubResultMap">
+        SELECT <include refid="SummaryColumnList" />
+        FROM clubs
+        WHERE <include refid="ActiveClause" />
+        ORDER BY member_count DESC, name ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findPopularInCategories" resultMap="ClubResultMap">
+        SELECT <include refid="SummaryColumnList" />
+        FROM clubs
+        WHERE <include refid="ActiveClause" />
+        AND category IN
+        <foreach collection="categories" item="category" open="(" separator="," close=")">
+            #{category}
+        </foreach>
+        <if test="excludedClubIds != null and excludedClubIds.size() > 0">
+            AND id NOT IN
+            <foreach collection="excludedClubIds" item="clubId" open="(" separator="," close=")">
+                #{clubId}
+            </foreach>
+        </if>
+        ORDER BY member_count DESC, name ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findCalendarEntries" resultMap="ClubResultMap">
+        SELECT <include refid="SummaryColumnList" />
+        FROM clubs
+        WHERE <include refid="ActiveClause" />
+        ORDER BY name ASC
+    </select>
+
+    <!-- Just enough to count clubs and members, find the newest update, and fingerprint the
+         directory for /api/summary. No CLOBs, no description. -->
+    <select id="findSummaryProjections" resultType="com.example.demo.summary.model.ClubSummaryProjection">
+        SELECT id,
+               name,
+               category,
+               (SELECT COUNT(*) FROM club_member WHERE club_id = clubs.id) AS memberCount,
+               updated_at AS updatedAt
+        FROM clubs
+        WHERE <include refid="ActiveClause" />
+        ORDER BY id ASC
+    </select>
+
     <select id="findAll" resultMap="ClubResultMap">
         SELECT <include refid="BaseColumnList" />
         FROM clubs
