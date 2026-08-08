@@ -36,9 +36,12 @@ public class LoginEligibilityPolicy {
     public static final String EMAIL_NOT_VERIFIED = "email_not_verified";
 
     private final SecurityProperties securityProperties;
+    private final AuthenticatedUserResolver authenticatedUserResolver;
 
-    public LoginEligibilityPolicy(SecurityProperties securityProperties) {
+    public LoginEligibilityPolicy(SecurityProperties securityProperties,
+                                  AuthenticatedUserResolver authenticatedUserResolver) {
         this.securityProperties = securityProperties;
+        this.authenticatedUserResolver = authenticatedUserResolver;
     }
 
     /**
@@ -75,13 +78,11 @@ public class LoginEligibilityPolicy {
         }
     }
 
+    // Deliberately delegated rather than re-implemented: AuthenticatedUserResolver owns the
+    // owner-email comparison for authorization, and a second copy here would let the two drift
+    // -- this gate would keep admitting an address that authorization treats as an owner.
     private boolean isOwnerEmail(String email) {
-        if (!StringUtils.hasText(email)) {
-            return false;
-        }
-        return securityProperties.getOwnerEmails().stream()
-            .filter(StringUtils::hasText)
-            .anyMatch(owner -> owner.trim().equalsIgnoreCase(email.trim()));
+        return authenticatedUserResolver.isPlatformOwner(email);
     }
 
     private static boolean isEmailExplicitlyUnverified(Map<String, Object> attributes) {

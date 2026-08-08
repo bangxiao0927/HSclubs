@@ -23,7 +23,7 @@ class LoginEligibilityPolicyTest {
         properties.getLogin().setAllowedEmailDomains(allowedDomains);
         properties.getLogin().setRequireVerifiedEmail(requireVerifiedEmail);
         properties.setOwnerEmails(ownerEmails);
-        return new LoginEligibilityPolicy(properties);
+        return new LoginEligibilityPolicy(properties, new AuthenticatedUserResolver(properties));
     }
 
     private static Map<String, Object> account(String email, Object emailVerified) {

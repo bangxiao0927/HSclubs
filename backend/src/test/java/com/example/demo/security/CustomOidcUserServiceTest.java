@@ -56,7 +56,7 @@ class CustomOidcUserServiceTest {
         OAuthUserService oAuthUserService = mock(OAuthUserService.class);
 
         return new Fixture(
-            new CustomOidcUserService(delegate, oAuthUserService, new LoginEligibilityPolicy(properties)),
+            new CustomOidcUserService(delegate, oAuthUserService, new LoginEligibilityPolicy(properties, new AuthenticatedUserResolver(properties))),
             oAuthUserService);
     }
 
