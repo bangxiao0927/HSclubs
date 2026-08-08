@@ -5,6 +5,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import com.example.demo.security.CustomOAuth2UserService;
+import com.example.demo.security.CustomOidcUserService;
 import com.example.demo.security.LoginEligibilityPolicy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -40,6 +41,7 @@ public class SecurityConfig {
 
     private final SecurityProperties securityProperties;
     private final CustomOAuth2UserService customOAuth2UserService;
+    private final CustomOidcUserService customOidcUserService;
     private final ClientRegistrationRepository clientRegistrationRepository;
 
     /**
@@ -52,9 +54,11 @@ public class SecurityConfig {
 
     public SecurityConfig(SecurityProperties securityProperties,
                           CustomOAuth2UserService customOAuth2UserService,
+                          CustomOidcUserService customOidcUserService,
                           ClientRegistrationRepository clientRegistrationRepository) {
         this.securityProperties = securityProperties;
         this.customOAuth2UserService = customOAuth2UserService;
+        this.customOidcUserService = customOidcUserService;
         this.clientRegistrationRepository = clientRegistrationRepository;
         this.authenticatedCorsConfiguration = buildAuthenticatedCorsConfiguration();
     }
@@ -95,7 +99,13 @@ public class SecurityConfig {
                     .authorizationRequestResolver(new RedirectCapturingAuthorizationRequestResolver(
                         clientRegistrationRepository, resolveAuthorizationRequestBaseUri())))
                 .redirectionEndpoint(redirection -> redirection.baseUri("/api/auth/*/callback"))
-                .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
+                // Both services, deliberately: the Google registration requests the openid
+                // scope, so Spring Security takes the OIDC path and only ever calls the
+                // oidcUserService. Wiring just the plain one left the sign-in restrictions and
+                // the login record unreachable for the provider this school actually uses.
+                .userInfoEndpoint(userInfo -> userInfo
+                    .userService(customOAuth2UserService)
+                    .oidcUserService(customOidcUserService))
                 .successHandler((request, response, authentication) ->
                     response.sendRedirect(PostLoginRedirectResolver.buildRedirectUri(
                         resolveLoginRedirectUri(), consumeSessionRedirectTarget(request))))

@@ -48,8 +48,19 @@ public class LoginEligibilityPolicy {
      */
     public void verifyEligible(Map<String, Object> attributes) {
         SecurityProperties.Login login = securityProperties.getLogin();
+        String email = emailOf(attributes);
 
         if (login.isRequireVerifiedEmail() && !isEmailVerified(attributes)) {
+            throw reject(EMAIL_NOT_VERIFIED,
+                "This account's email address is not verified with its provider.");
+        }
+
+        // Platform-owner status is decided by comparing this address against
+        // app.security.owner-emails, and it is the highest privilege in the application, so an
+        // address the provider explicitly reports as unverified may never be used to claim it --
+        // whatever require-verified-email is set to. An absent claim is not "unverified" and is
+        // left alone, so a provider that does not send it cannot lock the owner out.
+        if (isOwnerEmail(email) && isEmailExplicitlyUnverified(attributes)) {
             throw reject(EMAIL_NOT_VERIFIED,
                 "This account's email address is not verified with its provider.");
         }
@@ -58,10 +69,27 @@ public class LoginEligibilityPolicy {
         if (allowedDomains.isEmpty()) {
             return;
         }
-        if (!isDomainAllowed(emailOf(attributes), allowedDomains)) {
+        if (!isDomainAllowed(email, allowedDomains)) {
             throw reject(EMAIL_DOMAIN_NOT_ALLOWED,
                 "This site is limited to accounts from a specific email domain.");
         }
+    }
+
+    private boolean isOwnerEmail(String email) {
+        if (!StringUtils.hasText(email)) {
+            return false;
+        }
+        return securityProperties.getOwnerEmails().stream()
+            .filter(StringUtils::hasText)
+            .anyMatch(owner -> owner.trim().equalsIgnoreCase(email.trim()));
+    }
+
+    private static boolean isEmailExplicitlyUnverified(Map<String, Object> attributes) {
+        Object verified = attributes == null ? null : attributes.get("email_verified");
+        if (verified == null) {
+            return false;
+        }
+        return !isEmailVerified(attributes);
     }
 
     private static boolean isEmailVerified(Map<String, Object> attributes) {

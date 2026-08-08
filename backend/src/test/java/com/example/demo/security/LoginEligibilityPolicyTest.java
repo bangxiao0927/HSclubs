@@ -14,9 +14,15 @@ import com.example.demo.auth.config.SecurityProperties;
 class LoginEligibilityPolicyTest {
 
     private static LoginEligibilityPolicy policy(List<String> allowedDomains, boolean requireVerifiedEmail) {
+        return policy(allowedDomains, requireVerifiedEmail, List.of());
+    }
+
+    private static LoginEligibilityPolicy policy(List<String> allowedDomains, boolean requireVerifiedEmail,
+                                                 List<String> ownerEmails) {
         SecurityProperties properties = new SecurityProperties();
         properties.getLogin().setAllowedEmailDomains(allowedDomains);
         properties.getLogin().setRequireVerifiedEmail(requireVerifiedEmail);
+        properties.setOwnerEmails(ownerEmails);
         return new LoginEligibilityPolicy(properties);
     }
 
@@ -95,5 +101,31 @@ class LoginEligibilityPolicyTest {
     void treatsAMissingVerifiedClaimAsNotVerifiedWhenTheCheckIsOn() {
         assertThatThrownBy(() -> policy(List.of(), true).verifyEligible(Map.of("email", "ada@gmail.com")))
             .isInstanceOf(OAuth2AuthenticationException.class);
+    }
+
+    // Platform-owner status is decided purely by comparing this address, and it is the highest
+    // privilege in the application, so an address the provider says is unverified must never be
+    // able to claim it -- whatever require-verified-email is set to.
+    @Test
+    void anOwnerAddressReportedAsUnverifiedIsRejectedEvenWithVerificationOff() {
+        assertThatThrownBy(() -> policy(List.of(), false, List.of("owner@example.com"))
+            .verifyEligible(account("owner@example.com", false)))
+            .isInstanceOf(OAuth2AuthenticationException.class)
+            .hasMessageContaining("not verified");
+    }
+
+    // A provider that does not send the claim at all must not be able to lock the owner out.
+    @Test
+    void anOwnerAddressWithNoVerifiedClaimIsStillAllowed() {
+        assertThatCode(() -> policy(List.of(), false, List.of("owner@example.com"))
+            .verifyEligible(Map.of("email", "owner@example.com")))
+            .doesNotThrowAnyException();
+    }
+
+    @Test
+    void anOrdinaryUnverifiedAccountIsUnaffectedByTheOwnerRule() {
+        assertThatCode(() -> policy(List.of(), false, List.of("owner@example.com"))
+            .verifyEligible(account("student@gmail.com", false)))
+            .doesNotThrowAnyException();
     }
 }
