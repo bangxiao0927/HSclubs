@@ -5,6 +5,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import com.example.demo.security.CustomOAuth2UserService;
+import com.example.demo.security.LoginEligibilityPolicy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -17,6 +18,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.web.SecurityFilterChain;
@@ -98,7 +101,9 @@ public class SecurityConfig {
                         resolveLoginRedirectUri(), consumeSessionRedirectTarget(request))))
                 .failureHandler((request, response, exception) ->
                     response.sendRedirect(PostLoginRedirectResolver.buildRedirectUri(
-                        resolveLoginRedirectUri(), consumeSessionRedirectTarget(request), "oauth2_login_failed"))))
+                        resolveLoginRedirectUri(),
+                        consumeSessionRedirectTarget(request),
+                        resolveLoginFailureCode(exception)))))
             .logout(logout -> logout
                 // Explicit POST-only matcher: logoutUrl(String) alone degrades to matching ANY
                 // HTTP method once CSRF protection is off, which let a plain
@@ -301,6 +306,23 @@ public class SecurityConfig {
     private String resolveLoginRedirectUri() {
         String redirect = securityProperties.getPostLoginRedirectUri();
         return StringUtils.hasText(redirect) ? redirect : "/";
+    }
+
+    /**
+     * The {@code error} code handed to the frontend after a failed login. Only this project's
+     * own eligibility codes are passed through, so a student turned away by the school's
+     * sign-in restrictions can be told why; anything else stays the generic code, since a
+     * provider-supplied error string is not ours to echo into a redirect.
+     */
+    private static String resolveLoginFailureCode(AuthenticationException exception) {
+        if (exception instanceof OAuth2AuthenticationException oauth2Exception) {
+            String errorCode = oauth2Exception.getError().getErrorCode();
+            if (LoginEligibilityPolicy.EMAIL_DOMAIN_NOT_ALLOWED.equals(errorCode)
+                || LoginEligibilityPolicy.EMAIL_NOT_VERIFIED.equals(errorCode)) {
+                return errorCode;
+            }
+        }
+        return "oauth2_login_failed";
     }
 
     private String resolveAuthorizationRequestBaseUri() {

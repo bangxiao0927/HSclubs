@@ -4,7 +4,7 @@
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────┐
-│   Browser    │────▶│   Nginx      │────▶│  Vue SPA │
+│   Browser    │────▶│ Reverse proxy│────▶│  Vue SPA │
 │              │     │   :80/:443   │     │  :4173   │
 └──────────────┘     └──────┬───────┘     └──────────┘
                             │
@@ -29,7 +29,7 @@
 | Node.js              | 20+                         | Frontend build             |
 | npm                  | 10+                         | Frontend dependencies      |
 | Python               | 3.10+ with `venv` and `pip` | Instaloader avatar cache   |
-| Nginx                | 1.24+                       | Reverse proxy (production) |
+| Caddy or nginx       | Caddy 2.7+ / nginx 1.24+    | Reverse proxy (production) |
 | Google Cloud Project | —                           | OAuth2 credentials         |
 | Domain               | —                           | HTTPS + OAuth redirect     |
 
@@ -70,6 +70,36 @@ FRONTEND_ORIGIN=http://localhost:4173
 # APP_AUTHORIZATION_REQUEST_BASE_URI=/api/auth/authorize
 ```
 
+### Restricting who may sign in
+
+By default **any** account the OAuth provider authenticates may sign in, which is what a fresh
+copy of this repo should do. A school running its own site usually wants that limited to its
+own Google Workspace:
+
+```bash
+# Comma-separated; empty (the default) means no restriction
+APP_ALLOWED_EMAIL_DOMAINS=students.example.edu,example.edu
+
+# Optional: also require the provider to report the address as verified
+APP_REQUIRE_VERIFIED_EMAIL=true
+```
+
+Only the domain after the last `@` is compared, case-insensitively, so
+`ada@students.example.edu.evil.com` does not pass a `students.example.edu` restriction. A
+rejected sign-in never creates an `oauth_users` row, and the student is returned to the sign-in
+page with an explanation rather than a generic "try again".
+
+Note this is also the boundary `APP_OWNER_EMAILS` sits behind: platform-owner status is decided
+by comparing the signed-in email address, so restricting the domain restricts who can even
+attempt to hold that address.
+
+The restriction is applied when an account signs in, not on every request, so it does not by
+itself evict someone who is already signed in — sessions last 7 days. In practice enabling it
+means restarting the backend, and sessions are held in the application's own memory (there is no
+external session store), so every existing session is dropped by that restart anyway. If you
+ever change this setting without a restart, expect existing sessions from a now-disallowed
+domain to survive until they expire.
+
 ### Production session cookie
 
 Set this on any HTTPS deployment:
@@ -83,10 +113,11 @@ It defaults to `false` so that plain-HTTP local development still gets a session
 7 days, so leaving it unset in production means that cookie is eligible to be sent over a
 plain-HTTP request.
 
-This depends on the reverse proxy forwarding the original scheme: the backend sits behind
-TLS termination and would otherwise see every request as insecure. The app reads
-`X-Forwarded-Proto` (`server.forward-headers-strategy: framework`), and the nginx example
-below sends it on every proxied location.
+This depends on the reverse proxy forwarding the original scheme: the backend sits behind TLS
+termination and would otherwise see every request as insecure. The app reads
+`X-Forwarded-Proto` (`server.forward-headers-strategy: framework`). Caddy's `reverse_proxy`
+sets that header itself, so nothing extra is needed there; nginx has to be told to send it on
+every proxied location (see both examples below).
 
 The H2 console is not part of a production deployment. It is enabled only by the `h2`
 profile; do not set `SPRING_PROFILES_ACTIVE=h2` on a server, since that profile also points
@@ -395,7 +426,60 @@ Or create `frontend/.env.production`:
 VITE_API_BASE_URL=https://api.yourdomain.com
 ```
 
-### Nginx reverse proxy
+### Reverse proxy
+
+Any reverse proxy works. The requirements the application actually has are:
+
+- Serve `frontend/dist` as static files with an SPA fallback to `index.html`.
+- Forward `/api/**`, `/oauth2/**`, and `/uploads/**` to the backend on `127.0.0.1:8080`.
+  `/uploads/**` is easy to forget: club photos are served from there by the backend, not from
+  the built frontend.
+- Send the original scheme through as `X-Forwarded-Proto`, so the backend knows the request
+  arrived over HTTPS (see "Production session cookie" above).
+- Terminate TLS.
+
+#### Caddy
+
+Caddy is the smaller configuration of the two, because it obtains and renews certificates
+itself and `reverse_proxy` already sets `X-Forwarded-Proto`, `X-Forwarded-For`, and
+`X-Forwarded-Host`.
+
+Example `/etc/caddy/Caddyfile`:
+
+```caddy
+yourdomain.com {
+    encode gzip
+
+    # Backend: API, the OAuth2 handshake, and stored club photos
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8080
+    }
+    handle /oauth2/* {
+        reverse_proxy 127.0.0.1:8080
+    }
+    handle /uploads/* {
+        reverse_proxy 127.0.0.1:8080
+    }
+
+    # Frontend static files, with the SPA fallback
+    handle {
+        root * /var/www/hsclubs/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
+```
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+With this single-origin layout the frontend build needs no absolute API base URL: leave
+`VITE_API_BASE_URL` empty (or set it to `https://yourdomain.com`) and set
+`FRONTEND_ORIGIN=https://yourdomain.com`.
+
+#### Nginx (alternative)
 
 Example `/etc/nginx/sites-available/hsclubs`:
 
@@ -434,6 +518,15 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # Stored club photos, served by the backend
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # Gzip
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml;
@@ -447,7 +540,11 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### SSL with Certbot
+#### TLS
+
+Caddy provisions and renews certificates on its own; nothing else to do.
+
+For nginx, use Certbot:
 
 ```bash
 sudo apt install certbot python3-certbot-nginx
@@ -520,7 +617,7 @@ The `/api/auth/providers` endpoint auto-discovers all configured providers.
 - [ ] `SPRING_PROFILES_ACTIVE` is unset (the `h2` profile is local-only and enables the H2 console)
 - [ ] Google OAuth redirect URIs include production URL
 - [ ] Frontend built with correct `VITE_API_BASE_URL`
-- [ ] Nginx configured with SSL (certbot)
+- [ ] Reverse proxy serving HTTPS, forwarding `/api/**`, `/oauth2/**` and `/uploads/**`
 - [ ] Backend running as systemd service
 - [ ] Firewall allows ports 80 and 443 only
 - [ ] Backend port 8080 not exposed publicly
