@@ -83,6 +83,11 @@ public class ClubService {
         return clubMapper.findAll();
     }
 
+    /** Active clubs carrying only the columns the calendar renders. */
+    public List<Club> findCalendarEntries() {
+        return clubMapper.findCalendarEntries();
+    }
+
     public List<Club> findAllPaginated(int page, int size) {
         int limit = PaginationClamps.clampPageSize(size);
         int offset = PaginationClamps.clampOffset(page, limit);
@@ -364,8 +369,6 @@ public class ClubService {
      * Falls back to popular clubs (highest member count) for cold start.
      */
     public List<Club> getRecommendations(String viewerEmail, int limit) {
-        List<Club> allClubs = clubMapper.findAll();
-
         if (viewerEmail != null && !viewerEmail.isBlank()) {
             Long userId = oAuthUserMapper.findIdByEmail(viewerEmail);
             if (userId != null) {
@@ -373,14 +376,12 @@ public class ClubService {
                 List<String> userCategories = clubMapper.findCategoriesByOauthUserId(userId);
                 if (!userCategories.isEmpty()) {
                     List<Long> joinedClubIds = clubMapper.findClubIdsByOauthUserId(userId);
-                    List<Club> personalized = allClubs.stream()
-                        .filter(c -> userCategories.contains(c.getCategory()))
-                        .filter(c -> !joinedClubIds.contains(c.getId()))
-                        .sorted((a, b) -> Integer.compare(
-                            b.getMemberCount() != null ? b.getMemberCount() : 0,
-                            a.getMemberCount() != null ? a.getMemberCount() : 0))
-                        .limit(limit)
-                        .toList();
+                    // Filtering, ordering and limiting all happen in SQL: this endpoint is
+                    // public and returns at most 20 rows, so reading every club to sort and
+                    // truncate in Java made the work unbounded in table size for a
+                    // constant-size answer.
+                    List<Club> personalized =
+                        clubMapper.findPopularInCategories(userCategories, joinedClubIds, limit);
                     if (!personalized.isEmpty()) {
                         return personalized;
                     }
@@ -390,12 +391,7 @@ public class ClubService {
         }
 
         // Cold start: return most popular clubs
-        return allClubs.stream()
-            .sorted((a, b) -> Integer.compare(
-                b.getMemberCount() != null ? b.getMemberCount() : 0,
-                a.getMemberCount() != null ? a.getMemberCount() : 0))
-            .limit(limit)
-            .toList();
+        return clubMapper.findPopular(limit);
     }
 
     // ---- President management ----

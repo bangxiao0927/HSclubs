@@ -1,6 +1,7 @@
 package com.example.demo.club.mapper;
 
 import com.example.demo.club.model.Club;
+import com.example.demo.summary.model.ClubSummaryProjection;
 import com.example.demo.club.model.ClubMemberView;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.model.ViewerMembershipStatus;
@@ -24,6 +25,24 @@ public interface ClubMapper {
 
     List<Club> findAllPaginated(@Param("offset") int offset,
                                 @Param("limit") int limit);
+
+    /**
+     * Most-joined active clubs, ordered and limited in SQL. The recommendation endpoint is
+     * public and returns at most 20 rows, so sorting and truncating the whole table in Java
+     * made its cost unbounded in table size for a constant-size answer.
+     */
+    List<Club> findPopular(@Param("limit") int limit);
+
+    /** Same, restricted to the given categories and excluding clubs the viewer already joined. */
+    List<Club> findPopularInCategories(@Param("categories") List<String> categories,
+                                       @Param("excludedClubIds") List<Long> excludedClubIds,
+                                       @Param("limit") int limit);
+
+    /** Active clubs with only the columns the calendar renders (no description, no CLOBs). */
+    List<Club> findCalendarEntries();
+
+    /** Narrow projection for {@code /api/summary}; see {@link ClubSummaryProjection}. */
+    List<ClubSummaryProjection> findSummaryProjections();
 
     List<Club> search(@Param("name") String name,
                       @Param("category") String category,

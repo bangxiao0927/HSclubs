@@ -207,6 +207,118 @@ class ClubMapperTest {
         assertThat(clubMapper.findAllPaginated(0, 10)).hasSize(1);
     }
 
+    // ---- Bounded public queries (#104) ----
+
+    @Test
+    void findPopularOrdersByMemberCountAndLimitsInSql() {
+        // Names chosen so alphabetical order disagrees with popularity, and stale member_count
+        // values written the wrong way round: clubs still has a real member_count column, so a
+        // query that sorted by it (or by an alias shadowing it) instead of the live count would
+        // return "Alpha Club" here and pass on nothing but the tie-break.
+        insertClub(10, "Alpha Club", "STEM & Innovation", 99);
+        insertClub(11, "Zebra Club", "STEM & Innovation", 0);
+        insertMembers(11, 100, 3);
+        insertMembers(10, 200, 1);
+
+        List<Club> popular = clubMapper.findPopular(1);
+
+        assertThat(popular).extracting(Club::getName).containsExactly("Zebra Club");
+        assertThat(popular.get(0).getMemberCount()).isEqualTo(3);
+    }
+
+    @Test
+    void findSummaryProjectionsReportsTheLiveMemberCountNotTheStaleColumn() {
+        insertClub(10, "Robotics", "STEM & Innovation", 99);
+        insertMembers(10, 400, 2);
+
+        assertThat(clubMapper.findSummaryProjections())
+            .singleElement()
+            .satisfies(projection -> assertThat(projection.getMemberCount()).isEqualTo(2));
+    }
+
+    @Test
+    void findPopularInCategoriesFiltersByCategoryAndExcludesJoinedClubs() {
+        insertClub(10, "Robotics", "STEM & Innovation");
+        insertClub(11, "Chess", "Competition & Strategy");
+        insertClub(12, "Rocketry", "STEM & Innovation");
+
+        List<Club> recommended =
+            clubMapper.findPopularInCategories(List.of("STEM & Innovation"), List.of(10L), 10);
+
+        assertThat(recommended).extracting(Club::getName).containsExactly("Rocketry");
+    }
+
+    @Test
+    void findPopularInCategoriesWorksWhenTheViewerHasJoinedNothingYet() {
+        insertClub(10, "Robotics", "STEM & Innovation");
+
+        List<Club> recommended =
+            clubMapper.findPopularInCategories(List.of("STEM & Innovation"), List.of(), 10);
+
+        assertThat(recommended).hasSize(1);
+    }
+
+    // The calendar renders scalar fields only, so its query must not drag the description and
+    // achievements CLOB along for every club.
+    @Test
+    void findCalendarEntriesReturnsTheRenderedFieldsWithoutTheHeavyOnes() {
+        insertSearchableClub();
+
+        List<Club> entries = clubMapper.findCalendarEntries();
+
+        assertThat(entries).singleElement().satisfies(entry -> {
+            assertThat(entry.getName()).isEqualTo("Chess Club");
+            assertThat(entry.getMeetingSchedule()).isEqualTo("Wednesday lunch");
+            assertThat(entry.getLocation()).isEqualTo("Room 214");
+            assertThat(entry.getAdvisor()).isEqualTo("Ms. Lee");
+            assertThat(entry.getDescription()).isNull();
+        });
+    }
+
+    @Test
+    void findSummaryProjectionsCountsMembersWithoutSelectingWholeClubRows() {
+        insertClub(10, "Robotics", "STEM & Innovation");
+        insertMembers(10, 300, 2);
+
+        assertThat(clubMapper.findSummaryProjections()).singleElement().satisfies(projection -> {
+            assertThat(projection.getName()).isEqualTo("Robotics");
+            assertThat(projection.getCategory()).isEqualTo("STEM & Innovation");
+            assertThat(projection.getMemberCount()).isEqualTo(2);
+        });
+    }
+
+    @Test
+    void theseQueriesAllHideNonActiveClubs() {
+        insertClub(10, "Archived Club", "STEM & Innovation");
+        clubMapper.updateStatus(10L, "archived");
+
+        assertThat(clubMapper.findPopular(10)).isEmpty();
+        assertThat(clubMapper.findPopularInCategories(List.of("STEM & Innovation"), List.of(), 10)).isEmpty();
+        assertThat(clubMapper.findCalendarEntries()).isEmpty();
+        assertThat(clubMapper.findSummaryProjections()).isEmpty();
+    }
+
+    private void insertClub(long id, String name, String category) {
+        insertClub(id, name, category, 0);
+    }
+
+    private void insertClub(long id, String name, String category, int staleMemberCount) {
+        jdbcTemplate.update(
+            "INSERT INTO clubs (id, name, category, member_count, status) VALUES (?, ?, ?, ?, 'active')",
+            id, name, category, staleMemberCount);
+    }
+
+    private void insertMembers(long clubId, long firstUserId, int count) {
+        for (int i = 0; i < count; i++) {
+            long userId = firstUserId + i;
+            jdbcTemplate.update(
+                "INSERT INTO oauth_users (uid, provider, provider_user_id) VALUES (?, 'google', ?)",
+                userId, "g-" + userId);
+            jdbcTemplate.update(
+                "INSERT INTO club_member (club_id, oauth_user_id) VALUES (?, ?)", clubId, userId);
+        }
+    }
+
     private void insertSearchableClub() {
         jdbcTemplate.update("""
             INSERT INTO clubs (id, name, category, description, location, advisor,

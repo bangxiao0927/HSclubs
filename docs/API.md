@@ -29,6 +29,12 @@ Response:
 
 The `dataHash` is a SHA-256 digest of (clubId|name|category|memberCount) for all clubs. The aggregator compares this hash to detect changes without re-fetching.
 
+The response is assembled from a narrow projection (club id, name, category, member count,
+updated time -- never the description or the achievements CLOB) and cached for
+`app.summary.cache-ttl-ms` (60s by default, 0 disables it). The endpoint is unauthenticated, so
+that cache is what keeps a burst of requests from turning into a burst of full-table reads; an
+aggregator polling on any sane interval still sees changes promptly.
+
 ## Authentication
 
 All endpoints use session-based auth via Spring Security OAuth2. Include credentials (`credentials: 'include'`) in client requests.
