@@ -70,6 +70,36 @@ FRONTEND_ORIGIN=http://localhost:4173
 # APP_AUTHORIZATION_REQUEST_BASE_URI=/api/auth/authorize
 ```
 
+### Restricting who may sign in
+
+By default **any** account the OAuth provider authenticates may sign in, which is what a fresh
+copy of this repo should do. A school running its own site usually wants that limited to its
+own Google Workspace:
+
+```bash
+# Comma-separated; empty (the default) means no restriction
+APP_ALLOWED_EMAIL_DOMAINS=students.example.edu,example.edu
+
+# Optional: also require the provider to report the address as verified
+APP_REQUIRE_VERIFIED_EMAIL=true
+```
+
+Only the domain after the last `@` is compared, case-insensitively, so
+`ada@students.example.edu.evil.com` does not pass a `students.example.edu` restriction. A
+rejected sign-in never creates an `oauth_users` row, and the student is returned to the sign-in
+page with an explanation rather than a generic "try again".
+
+Note this is also the boundary `APP_OWNER_EMAILS` sits behind: platform-owner status is decided
+by comparing the signed-in email address, so restricting the domain restricts who can even
+attempt to hold that address.
+
+The restriction is applied when an account signs in, not on every request, so it does not by
+itself evict someone who is already signed in — sessions last 7 days. In practice enabling it
+means restarting the backend, and sessions are held in the application's own memory (there is no
+external session store), so every existing session is dropped by that restart anyway. If you
+ever change this setting without a restart, expect existing sessions from a now-disallowed
+domain to survive until they expire.
+
 ### Production session cookie
 
 Set this on any HTTPS deployment:

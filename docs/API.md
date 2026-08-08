@@ -33,6 +33,12 @@ The `dataHash` is a SHA-256 digest of (clubId|name|category|memberCount) for all
 
 All endpoints use session-based auth via Spring Security OAuth2. Include credentials (`credentials: 'include'`) in client requests.
 
+Who may sign in is configurable and unrestricted by default (`app.security.login.*`, see
+`docs/DEPLOYMENT.md`). When a school restricts sign-in to its own email domains, a rejected
+account never reaches the session or the `oauth_users` table: the OAuth2 callback redirects back
+to the frontend with `?error=email_domain_not_allowed` (or `email_not_verified`) instead of the
+generic `oauth2_login_failed`, so the sign-in page can say why rather than inviting a retry.
+
 ### GET /api/auth/providers
 List available OAuth providers.
 

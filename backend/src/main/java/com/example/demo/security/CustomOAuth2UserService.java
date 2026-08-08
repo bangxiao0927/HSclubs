@@ -18,9 +18,12 @@ import com.example.demo.auth.service.OAuthUserService;
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     private final OAuthUserService oAuthUserService;
+    private final LoginEligibilityPolicy loginEligibilityPolicy;
 
-    public CustomOAuth2UserService(OAuthUserService oAuthUserService) {
+    public CustomOAuth2UserService(OAuthUserService oAuthUserService,
+                                   LoginEligibilityPolicy loginEligibilityPolicy) {
         this.oAuthUserService = oAuthUserService;
+        this.loginEligibilityPolicy = loginEligibilityPolicy;
     }
 
     @Override
@@ -30,6 +33,9 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         Map<String, Object> attributes = new HashMap<>(oauth2User.getAttributes());
         String registrationId = userRequest.getClientRegistration().getRegistrationId();
         normalizeAttributes(attributes, registrationId);
+        // Before recordLogin: a rejected account must not leave an oauth_users row behind, since
+        // that row is what every later lookup (and the owner-email comparison) keys on.
+        loginEligibilityPolicy.verifyEligible(attributes);
         oAuthUserService.recordLogin(registrationId, attributes);
 
         String userNameAttribute = userRequest.getClientRegistration()
