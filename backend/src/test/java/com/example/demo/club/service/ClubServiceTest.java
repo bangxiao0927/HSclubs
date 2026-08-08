@@ -256,7 +256,7 @@ class ClubServiceTest {
     // so archiving has to go through the column-scoped statement instead.
     @Test
     void archiveWritesOnlyTheStatusColumnAndNeverTheGeneralUpdate() {
-        when(clubMapper.updateStatus(7L, "archived")).thenReturn(1);
+        when(clubMapper.findById(7L)).thenReturn(storedClub());
 
         clubService.archive(7L);
 
@@ -288,6 +288,32 @@ class ClubServiceTest {
             .hasMessageContaining("archived");
 
         verify(clubMapper, never()).updateStatus(any(), any());
+    }
+
+    // Otherwise restore()'s guard is trivially bypassed: archive a pending club, and the only
+    // record of that state is gone, so restoring it publishes something never approved.
+    @Test
+    void archiveRefusesAClubThatIsNeitherActiveNorAlreadyArchived() {
+        Club pending = storedClub();
+        pending.setStatus("pending");
+        when(clubMapper.findById(7L)).thenReturn(pending);
+
+        assertThatThrownBy(() -> clubService.archive(7L))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("active");
+
+        verify(clubMapper, never()).updateStatus(any(), any());
+    }
+
+    @Test
+    void archivingAnAlreadyArchivedClubStaysIdempotent() {
+        Club archived = storedClub();
+        archived.setStatus("archived");
+        when(clubMapper.findById(7L)).thenReturn(archived);
+
+        clubService.archive(7L);
+
+        verify(clubMapper).updateStatus(7L, "archived");
     }
 
     @Test

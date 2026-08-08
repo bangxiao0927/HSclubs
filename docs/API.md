@@ -170,6 +170,10 @@ that was never approved and lose that state for good. Anything else is a 409.
 
 Status: 200 | 403 | 404 | 409 (the club is not archived)
 
+Symmetrically, only an `active` club can be archived (archiving an already-archived one is a
+no-op, so the endpoint stays idempotent). Otherwise the guard above could be side-stepped by
+archiving a `pending` club first, which would overwrite the only record of that state.
+
 ---
 
 ## Club Media (Posts and Comments)
@@ -427,6 +431,10 @@ Both 409 cases are real checks, not just documentation: an existing member (incl
 club's own president) is rejected before a request row is created, and a duplicate request
 that slips past the check-then-insert -- a double-clicked button, or two tabs -- surfaces as
 the same 409 through the unique constraint rather than a 500.
+
+Applying is gated by the same `ClubVisibilityPolicy` as the detail endpoint, so a club that is
+archived or still pending answers 404 here too rather than quietly queueing a request its
+president would see for a club nobody can open.
 
 ### DELETE /api/clubs/{id}/members/apply
 Cancel own membership application. Requires: authenticated.

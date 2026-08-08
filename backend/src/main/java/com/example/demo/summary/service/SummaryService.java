@@ -36,6 +36,7 @@ public class SummaryService {
     private final String slug;
     private final Duration cacheTtl;
     private final AtomicReference<CachedSummary> cached = new AtomicReference<>();
+    private final Object refreshLock = new Object();
 
     public SummaryService(ClubMapper clubMapper,
                           @Value("${app.summary.school-name:HS Clubs}") String schoolName,
@@ -54,9 +55,20 @@ public class SummaryService {
         if (snapshot != null && !snapshot.isExpired(cacheTtl)) {
             return snapshot.summary();
         }
-        SummaryResponse summary = computeSummary();
-        cached.set(new CachedSummary(summary, System.nanoTime()));
-        return summary;
+        // Single-flight: without this, every request in flight when the TTL expires (or on a
+        // cold start) runs its own query, which is exactly the burst the cache exists to
+        // absorb -- and this endpoint is unauthenticated, so the burst size is whatever the
+        // servlet pool allows. The second checked read inside the lock is what makes the
+        // losers reuse the winner's result instead of repeating it.
+        synchronized (refreshLock) {
+            CachedSummary current = cached.get();
+            if (current != null && !current.isExpired(cacheTtl)) {
+                return current.summary();
+            }
+            SummaryResponse summary = computeSummary();
+            cached.set(new CachedSummary(summary, System.nanoTime()));
+            return summary;
+        }
     }
 
     private SummaryResponse computeSummary() {

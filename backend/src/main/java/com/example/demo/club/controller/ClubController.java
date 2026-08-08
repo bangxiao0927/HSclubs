@@ -194,6 +194,13 @@ public class ClubController {
         if (club == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
         }
+        // Same policy and same 404 as the detail endpoint: resolveClub carries no status
+        // filter, so without this a caller who guesses an id could apply to a club that is
+        // archived or still pending -- landing in a president's request queue for a club the
+        // directory says does not exist, and which they cannot even open.
+        if (!clubVisibilityPolicy.isVisibleTo(club, authentication)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
         try {
             clubService.applyForMembership(club.getId(), viewerEmail);
         } catch (IllegalArgumentException ex) {
