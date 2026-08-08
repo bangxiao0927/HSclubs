@@ -37,7 +37,10 @@ import com.example.demo.summary.service.SummaryService;
 class SummaryControllerTest {
 
     private static final String DATA_HASH = "abc123";
-    private static final String ETAG = "\"" + DATA_HASH + "\"";
+    // Deliberately different from dataHash: the tag validates the whole representation, and a
+    // test that reused dataHash here would not notice if the two were confused again.
+    private static final String ENTITY_TAG = "representation-tag";
+    private static final String ETAG = "\"" + ENTITY_TAG + "\"";
 
     @TestConfiguration
     static class TestConfig {
@@ -59,7 +62,8 @@ class SummaryControllerTest {
         summary.setSchoolName("Example High School");
         summary.setClubCount(3);
         summary.setDataHash(DATA_HASH);
-        when(summaryService.buildSummary()).thenReturn(summary);
+        when(summaryService.buildSnapshot())
+            .thenReturn(new SummaryService.Snapshot(summary, ENTITY_TAG));
     }
 
     @Test

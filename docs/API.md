@@ -29,15 +29,18 @@ Response:
 
 The `dataHash` is a SHA-256 digest of (clubId|name|category|memberCount) for all clubs. The aggregator compares this hash to detect changes without re-fetching.
 
-The same hash is also the response's `ETag`, so a poller can ask the question over HTTP instead
-of parsing a body first: send it back as `If-None-Match` and an unchanged directory answers
-`304 Not Modified` with no body. Weak tags (`W/"..."`), multi-valued headers, and `*` are all
-understood; anything unrecognised simply gets the full response.
+The response also carries an `ETag`, so a poller can ask the same question over HTTP instead of
+parsing a body first: send the tag back as `If-None-Match` and an unchanged summary answers
+`304 Not Modified` with no body. The tag is **not** `dataHash`: that digest covers only club id,
+name, category and member count, while the response also carries `lastUpdatedAt` and the school
+identity, so validating with it would answer 304 for a body that had in fact changed. The
+`ETag` is exposed cross-origin (`Access-Control-Expose-Headers`), so a browser-side caller can
+read it too.
 
 ```bash
-curl -s -D- -o/dev/null https://school.example.org/api/summary
+curl -s -D- -o/dev/null https://school.example.org/api/summary            # note the ETag
 curl -s -o/dev/null -w '%{http_code}\n' \
-  -H 'If-None-Match: "<dataHash>"' https://school.example.org/api/summary   # 304
+  -H 'If-None-Match: "<etag>"' https://school.example.org/api/summary      # 304
 ```
 
 This endpoint is the **only** interface reserved for an aggregator: it is read-only, anonymous,

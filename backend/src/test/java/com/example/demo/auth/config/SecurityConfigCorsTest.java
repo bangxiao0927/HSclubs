@@ -50,6 +50,18 @@ class SecurityConfigCorsTest {
         assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)).isNull();
     }
 
+    // ETag is not a CORS-safelisted response header: without exposing it, a page on another
+    // origin can read /api/summary but not the tag it needs to poll it conditionally.
+    @Test
+    void publicSummaryGetExposesTheEtagToArbitraryOrigins() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(get("/api/summary").header(HttpHeaders.ORIGIN, ARBITRARY_ORIGIN))
+            .andReturn().getResponse();
+
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo("*");
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS)).contains(HttpHeaders.ETAG);
+        assertThat(response.getHeader(HttpHeaders.ETAG)).isNotBlank();
+    }
+
     @Test
     void publicClubDetailPreflightAllowsArbitraryOrigin() throws Exception {
         MockHttpServletResponse response = mockMvc.perform(options("/api/clubs/some-slug")

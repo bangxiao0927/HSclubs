@@ -296,6 +296,10 @@ public class SecurityConfig {
         configuration.setAllowedMethods(List.of("GET", "HEAD", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(false);
+        // ETag is not a CORS-safelisted response header, so without this a page on another
+        // origin -- exactly the caller this policy exists for -- could not read the tag off
+        // /api/summary and could never start a conditional poll from it.
+        configuration.setExposedHeaders(List.of(HttpHeaders.ETAG));
         return configuration;
     }
 

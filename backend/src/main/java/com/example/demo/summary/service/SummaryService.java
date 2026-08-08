@@ -51,9 +51,23 @@ public class SummaryService {
     }
 
     public SummaryResponse buildSummary() {
+        return buildSnapshot().summary();
+    }
+
+    /**
+     * The response together with an entity tag covering it.
+     *
+     * <p>The tag is deliberately not {@code dataHash}: that one digests only
+     * {@code (id|name|category|memberCount)} per club, while the response also carries
+     * {@code lastUpdatedAt} and the configured school identity. Validating the representation
+     * with it would answer 304 for a body that really did change -- editing a club's description
+     * bumps {@code updated_at}, and therefore {@code lastUpdatedAt}, without touching any of the
+     * four hashed fields.
+     */
+    public Snapshot buildSnapshot() {
         CachedSummary snapshot = cached.get();
         if (snapshot != null && !snapshot.isExpired(cacheTtl)) {
-            return snapshot.summary();
+            return snapshot.snapshot();
         }
         // Single-flight: without this, every request in flight when the TTL expires (or on a
         // cold start) runs its own query, which is exactly the burst the cache exists to
@@ -63,12 +77,32 @@ public class SummaryService {
         synchronized (refreshLock) {
             CachedSummary current = cached.get();
             if (current != null && !current.isExpired(cacheTtl)) {
-                return current.summary();
+                return current.snapshot();
             }
             SummaryResponse summary = computeSummary();
-            cached.set(new CachedSummary(summary, System.nanoTime()));
-            return summary;
+            Snapshot fresh = new Snapshot(summary, computeEntityTag(summary));
+            cached.set(new CachedSummary(fresh, System.nanoTime()));
+            return fresh;
         }
+    }
+
+    /** A summary response and the entity tag for exactly that representation. */
+    public record Snapshot(SummaryResponse summary, String entityTag) {
+    }
+
+    /** Digests every field the response actually carries, in a fixed order. */
+    private String computeEntityTag(SummaryResponse summary) {
+        String payload = String.join("\n",
+            String.valueOf(summary.getSchoolName()),
+            String.valueOf(summary.getShortName()),
+            String.valueOf(summary.getSlug()),
+            String.valueOf(summary.getStatus()),
+            String.valueOf(summary.getClubCount()),
+            String.valueOf(summary.getMemberCount()),
+            String.valueOf(summary.getLastUpdatedAt()),
+            String.valueOf(summary.getCategories()),
+            String.valueOf(summary.getDataHash()));
+        return sha256Hex(payload);
     }
 
     private SummaryResponse computeSummary() {
@@ -121,6 +155,10 @@ public class SummaryService {
                     + (c.getMemberCount() != null ? c.getMemberCount() : 0))
             .collect(Collectors.joining("\n"));
 
+        return sha256Hex(payload);
+    }
+
+    private static String sha256Hex(String payload) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(payload.getBytes(StandardCharsets.UTF_8));
@@ -130,7 +168,7 @@ public class SummaryService {
         }
     }
 
-    private record CachedSummary(SummaryResponse summary, long builtAtNanos) {
+    private record CachedSummary(Snapshot snapshot, long builtAtNanos) {
         boolean isExpired(Duration ttl) {
             return System.nanoTime() - builtAtNanos >= ttl.toNanos();
         }
