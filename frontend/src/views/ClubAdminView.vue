@@ -14,7 +14,7 @@ import type { Club, ClubMember } from '../types/club'
 import type { UserSearchResult } from '../services/userService'
 import { useAuthStore } from '../stores/auth'
 import { clubCategoryOptions } from '../utils/clubCategories'
-import { buildApiUrl } from '../services/httpClient'
+import { buildApiUrl, notifyIfUnauthorized } from '../services/httpClient'
 import { resolveErrorMessage } from '../services/httpErrorMessage'
 import { clubImage } from '../utils/clubImages'
 import { userAvatar } from '../utils/avatarImages'
@@ -236,6 +236,15 @@ const handleMemberRoleChange = async (member: ClubMember, event: Event) => {
   }
 }
 
+// The fields the API only fills in on a *read* for the current viewer. Any response that is a
+// plain stored row (the update endpoint) has to be merged with these rather than replacing them.
+const viewerContextOf = (current: Club) => ({
+  canManage: current.canManage,
+  viewerIsMember: current.viewerIsMember,
+  viewerRole: current.viewerRole,
+  viewerHasPendingRequest: current.viewerHasPendingRequest,
+})
+
 const refreshClubSnapshot = async () => {
   if (!club.value) {
     return
@@ -273,6 +282,7 @@ const handleImageUpload = async (event: Event) => {
       credentials: 'include',
       body: formData})
     if (!response.ok) {
+      notifyIfUnauthorized(response)
       const msg = await resolveErrorMessage(response, 'Upload failed')
       throw new Error(msg)
     }
@@ -317,7 +327,11 @@ const handleSave = async () => {
       imageUrl: form.imageUrl || null}
 
     const updated = await updateClub(club.value.id, payload)
-    club.value = updated
+    // The update endpoint answers with the stored row, which carries no viewer-scoped fields:
+    // canManage/viewerIsMember/viewerRole are only populated on the read path. Assigning it
+    // wholesale erased canManage, so a successful save flipped a club president straight into
+    // the "you do not manage this club" notice.
+    club.value = { ...updated, ...viewerContextOf(club.value) }
     hydrateForm(updated)
     successMessage.value = 'Changes saved'
   } catch (err) {

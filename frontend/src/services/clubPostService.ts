@@ -1,5 +1,5 @@
 import type { ClubPost, ClubPostComment, ClubPostFeedPage } from '../types/clubPost'
-import { buildApiUrl } from './httpClient'
+import { buildApiUrl, notifyIfUnauthorized } from './httpClient'
 import { resolveErrorMessage } from './httpErrorMessage'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -9,6 +9,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: init?.credentials ?? 'include',
   })
   if (!response.ok) {
+    notifyIfUnauthorized(response)
     const message = await resolveErrorMessage(response, `Request failed with status ${response.status}`)
     throw new Error(message)
   }
@@ -52,6 +53,7 @@ export const publishClubPost = async (
     body: formData,
   })
   if (!response.ok) {
+    notifyIfUnauthorized(response)
     const message = await resolveErrorMessage(response, `Request failed with status ${response.status}`)
     throw new Error(message)
   }
