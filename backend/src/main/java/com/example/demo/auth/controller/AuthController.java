@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,7 +61,16 @@ public class AuthController {
         // re-reads /api/auth/me, still sees acceptedTerms=false, and re-routes the student
         // back to the very page they just submitted -- a silent dead end with no error shown.
         // Fail loudly instead so the frontend can surface something actionable.
-        if (!authService.acceptTerms(token)) {
+        boolean accepted;
+        try {
+            accepted = authService.acceptTerms(token);
+        } catch (OAuth2AuthenticationException ex) {
+            // The session belongs to an account this school's sign-in rules no longer allow.
+            // Left to propagate it would be resolved by the security entry point as a bodyless
+            // 401, so the student would just be signed out with no idea why.
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getError().getDescription());
+        }
+        if (!accepted) {
             log.warn("Terms acceptance could not be recorded for the current session");
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Terms acceptance could not be recorded, please try again");

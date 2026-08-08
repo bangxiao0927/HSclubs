@@ -9,6 +9,7 @@ import com.example.demo.auth.model.AuthProvider;
 import com.example.demo.auth.model.AuthUser;
 import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.security.AuthenticatedUserResolver;
+import com.example.demo.security.LoginEligibilityPolicy;
 import com.example.demo.user.service.UserService;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -27,6 +28,7 @@ public class AuthService {
     private final UserService userService;
     private final OAuthUserMapper oAuthUserMapper;
     private final AuthenticatedUserResolver authenticatedUserResolver;
+    private final LoginEligibilityPolicy loginEligibilityPolicy;
     private final String authorizationRequestBaseUri;
 
     public AuthService(ClientRegistrationRepository clientRegistrationRepository,
@@ -34,7 +36,8 @@ public class AuthService {
                        OAuthUserService oAuthUserService,
                        SecurityProperties securityProperties,
                        UserService userService,
-                       AuthenticatedUserResolver authenticatedUserResolver) {
+                       AuthenticatedUserResolver authenticatedUserResolver,
+                       LoginEligibilityPolicy loginEligibilityPolicy) {
         if (clientRegistrationRepository instanceof Iterable<?>) {
             this.clientRegistrations = (Iterable<ClientRegistration>) clientRegistrationRepository;
         } else {
@@ -45,6 +48,7 @@ public class AuthService {
         this.userService = userService;
         this.oAuthUserMapper = oAuthUserMapper;
         this.authenticatedUserResolver = authenticatedUserResolver;
+        this.loginEligibilityPolicy = loginEligibilityPolicy;
         this.authorizationRequestBaseUri = resolveAuthorizationRequestBaseUri(securityProperties);
     }
 
@@ -121,6 +125,10 @@ public class AuthService {
         if (email == null) {
             return false;
         }
+        // The replay below re-creates an oauth_users row from the session principal, so it has
+        // to answer the same question the login path does: a session that predates a newly
+        // enabled sign-in restriction must not be able to write itself back in through it.
+        loginEligibilityPolicy.verifyEligible(attributes);
         oAuthUserService.ensureStoredUser(authentication.getAuthorizedClientRegistrationId(), attributes);
         int updated = oAuthUserMapper.acceptTerms(email);
         return updated > 0 || hasAcceptedTerms(email);
