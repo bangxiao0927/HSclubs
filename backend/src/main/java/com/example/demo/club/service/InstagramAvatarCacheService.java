@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -60,6 +61,9 @@ public class InstagramAvatarCacheService {
         return thread;
     });
     private static final long MAX_AVATAR_BYTES = 1024 * 1024;
+    // One pipe buffer's worth, which is all the child could ever produce before this output
+    // started being drained continuously. Only used for an abbreviated log message.
+    private static final int MAX_SUBPROCESS_OUTPUT_BYTES = 64 * 1024;
     private static final Pattern HANDLE_PATTERN = Pattern.compile("^[A-Za-z0-9._]{1,64}$");
     private static final List<String> IMAGE_EXTENSIONS = List.of("png", "jpg", "jpeg", "webp", "gif");
     private static final MediaType SVG_MEDIA_TYPE = MediaType.valueOf("image/svg+xml");
@@ -573,13 +577,37 @@ public class InstagramAvatarCacheService {
     private static CompletableFuture<String> readOutputAsync(Process process) {
         return CompletableFuture.supplyAsync(() -> {
             try (InputStream in = process.getInputStream()) {
-                return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                return readTail(in, MAX_SUBPROCESS_OUTPUT_BYTES);
             } catch (IOException e) {
                 // The process was killed mid-read, or the pipe broke: whatever it managed to say
                 // is only used for a log message, so this must not replace the real failure.
                 return "";
             }
         }, OUTPUT_READERS);
+    }
+
+    /**
+     * Reads the stream to the end but keeps only its last {@code maxBytes}.
+     *
+     * <p>Draining continuously is what stops the child from dead-locking on a full pipe, but it
+     * also removes the implicit ~64KB ceiling that pipe buffer used to impose, so a runaway
+     * child could otherwise accumulate everything it prints on the heap. Keeping the tail rather
+     * than the head is the right end to keep for both consumers: the script prints the avatar
+     * URL last, and a failure's most relevant output is the end of its traceback.
+     */
+    private static String readTail(InputStream in, int maxBytes) throws IOException {
+        byte[] buffer = new byte[8 * 1024];
+        ByteArrayOutputStream retained = new ByteArrayOutputStream();
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            retained.write(buffer, 0, read);
+            if (retained.size() > maxBytes) {
+                byte[] tail = retained.toByteArray();
+                retained.reset();
+                retained.write(tail, tail.length - maxBytes, maxBytes);
+            }
+        }
+        return retained.toString(StandardCharsets.UTF_8);
     }
 
     private static String awaitOutput(CompletableFuture<String> output) {
