@@ -8,6 +8,7 @@ import {
   publishClubPost,
   unpinClubPost,
 } from './clubPostService'
+import { setUnauthorizedHandler } from './httpClient'
 
 const jsonResponse = (body: unknown) => ({
   ok: true,
@@ -34,6 +35,59 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  setUnauthorizedHandler(null)
+})
+
+// A session can die while a student is on the club media page. Without reporting it, the auth
+// store goes on saying they are signed in, the router guards keep admitting them, and every
+// action on the page fails with a raw server error instead of a sign-in prompt.
+describe('unauthorized responses', () => {
+  it('reports a 401 from a media request', async () => {
+    const onUnauthorized = vi.fn()
+    setUnauthorizedHandler(onUnauthorized)
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: { get: () => null },
+      text: async () => 'Unauthorized',
+    })
+
+    await expect(deleteClubPost('1', 9)).rejects.toThrow()
+
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a 401 from the multipart publish call', async () => {
+    const onUnauthorized = vi.fn()
+    setUnauthorizedHandler(onUnauthorized)
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: { get: () => null },
+      text: async () => 'Unauthorized',
+    })
+
+    await expect(
+      publishClubPost('1', 'Meeting recap', new File(['image'], 'photo.jpg', { type: 'image/jpeg' })),
+    ).rejects.toThrow()
+
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not report an ordinary error response', async () => {
+    const onUnauthorized = vi.fn()
+    setUnauthorizedHandler(onUnauthorized)
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 403,
+      headers: { get: () => null },
+      text: async () => 'Members only',
+    })
+
+    await expect(deleteClubPost('1', 9)).rejects.toThrow()
+
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
 })
 
 describe('publishClubPost', () => {

@@ -145,6 +145,23 @@ describe('ClubAdminView member count', () => {
     expect(wrapper.find('form.admin-form').exists()).toBe(true)
   })
 
+  // The update endpoint answers with the stored row, which carries no viewer-scoped fields.
+  // Assigning it wholesale erased canManage, so a *successful* save flipped a club president
+  // straight into the "you do not manage this club" notice.
+  it('keeps the editor open after a successful save by a club president', async () => {
+    const club = buildClub({ canManage: true })
+    const { canManage: _ignored, ...storedRowFromUpdate } = buildClub({ name: 'Chess Team' })
+    updateClubMock.mockResolvedValue(storedRowFromUpdate as Club)
+
+    const wrapper = await mountView(club)
+    await wrapper.find('form.admin-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Changes saved')
+    expect(wrapper.find('form.admin-form').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('You do not manage')
+  })
+
   it('refreshes the club snapshot and invalidates list caches after assigning a president', async () => {
     const club = buildClub({ memberCount: 42, canManage: true })
     const refreshedClub = buildClub({ memberCount: 43, canManage: true })
