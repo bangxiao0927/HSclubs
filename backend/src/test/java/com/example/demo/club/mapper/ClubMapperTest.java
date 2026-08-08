@@ -207,6 +207,29 @@ class ClubMapperTest {
         assertThat(clubMapper.findAllPaginated(0, 10)).hasSize(1);
     }
 
+    // A club president reaches update() through PUT /api/clubs/{id}. The service refuses to
+    // take these fields from the request body, but it used to write back the values it had
+    // read a moment earlier, so an edit racing a platform owner's archive re-published the
+    // club. The statement simply does not touch them any more.
+    @Test
+    void updateNeverWritesStatusVisibilityOrTheApprovalColumns() {
+        insertSearchableClub();
+        clubMapper.updateStatus(4L, "archived");
+
+        Club edit = clubMapper.findById(4L);
+        edit.setName("Chess Team");
+        edit.setStatus("active");
+        edit.setVisibility("private");
+        edit.setApprovedByOauthUserId(99L);
+        clubMapper.update(edit);
+
+        Club stored = clubMapper.findById(4L);
+        assertThat(stored.getName()).isEqualTo("Chess Team");
+        assertThat(stored.getStatus()).isEqualTo("archived");
+        assertThat(stored.getVisibility()).isEqualTo("public");
+        assertThat(stored.getApprovedByOauthUserId()).isNull();
+    }
+
     // ---- Bounded public queries (#104) ----
 
     @Test

@@ -492,6 +492,12 @@ public class InstagramAvatarCacheService {
             future.completeExceptionally(ex);
             throw ex;
         } finally {
+            // Never leave the future incomplete: joiners park on it with no timeout, so an
+            // Error escaping this method (an OutOfMemoryError during a decode, say) would
+            // otherwise strand every request thread already waiting on this handle for the
+            // life of the process. Completing it here is a no-op on the paths above.
+            future.completeExceptionally(
+                new IOException("Avatar refresh for " + safeHandle + " ended without a result"));
             inFlightRefreshes.remove(safeHandle, future);
         }
     }

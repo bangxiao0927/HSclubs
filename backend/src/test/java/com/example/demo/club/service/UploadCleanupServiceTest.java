@@ -18,17 +18,23 @@ import org.junit.jupiter.api.io.TempDir;
 
 class UploadCleanupServiceTest {
 
+    // Cleanup only owns top-level files this application could itself have written, i.e. the
+    // UUID names ImageStorageService produces -- see the non-generated-name test below.
+    private static final String STILL_USED_FLAT_FILE = "11111111-1111-4111-8111-111111111111.png";
+    private static final String ORPHAN_FLAT_FILE = "22222222-2222-4222-8222-222222222222.png";
+    private static final String LEGACY_ORPHAN_FLAT_FILE = "33333333-3333-4333-8333-333333333333.png";
+
     @TempDir
     Path uploadDir;
 
     @Test
     void doesNotDeleteAnImageStillUsedByAnArchivedClub() throws Exception {
-        Path stillUsed = ageFile(uploadDir.resolve("still-used.png"));
-        Path orphan = ageFile(uploadDir.resolve("orphan.png"));
+        Path stillUsed = ageFile(uploadDir.resolve(STILL_USED_FLAT_FILE));
+        Path orphan = ageFile(uploadDir.resolve(ORPHAN_FLAT_FILE));
 
         Club archivedClub = new Club();
         archivedClub.setStatus("archived");
-        archivedClub.setImageUrl("/uploads/still-used.png");
+        archivedClub.setImageUrl("/uploads/" + STILL_USED_FLAT_FILE);
 
         ClubMapper clubMapper = mock(ClubMapper.class);
         when(clubMapper.findAllRegardlessOfStatus()).thenReturn(List.of(archivedClub));
@@ -99,7 +105,7 @@ class UploadCleanupServiceTest {
 
     @Test
     void stillReclaimsALegacyFlatOrphanDirectlyUnderTheUploadRoot() throws Exception {
-        Path legacyOrphan = ageFile(uploadDir.resolve("legacy-orphan.png"));
+        Path legacyOrphan = ageFile(uploadDir.resolve(LEGACY_ORPHAN_FLAT_FILE));
 
         ClubMapper clubMapper = mock(ClubMapper.class);
         when(clubMapper.findAllRegardlessOfStatus()).thenReturn(List.of());
@@ -111,6 +117,30 @@ class UploadCleanupServiceTest {
         service.cleanOrphanedUploads();
 
         assertThat(Files.exists(legacyOrphan)).isFalse();
+    }
+
+    // Files.list returns every regular file directly under the upload root, so without a name
+    // check this job would reclaim anything an operator or another subsystem keeps there --
+    // a README, an .env copy, a database dump -- purely because no club row points at it.
+    // ImageStorageService's own delete guard is scoped the same way.
+    @Test
+    void neverDeletesATopLevelFileThisApplicationCouldNotHaveWritten() throws Exception {
+        Path operatorFile = ageFile(uploadDir.resolve("README.txt"));
+        Path databaseDump = ageFile(uploadDir.resolve("backup-2026-02-01.sql"));
+        Path notAUuidImage = ageFile(uploadDir.resolve("logo.png"));
+
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findAllRegardlessOfStatus()).thenReturn(List.of());
+        ClubPostMapper clubPostMapper = mock(ClubPostMapper.class);
+        when(clubPostMapper.findAllImageUrls()).thenReturn(List.of());
+
+        UploadCleanupService service = new UploadCleanupService(clubMapper, clubPostMapper, uploadDir.toString());
+
+        service.cleanOrphanedUploads();
+
+        assertThat(Files.exists(operatorFile)).isTrue();
+        assertThat(Files.exists(databaseDump)).isTrue();
+        assertThat(Files.exists(notAUuidImage)).isTrue();
     }
 
     // Guards the race in the issue: a file can land on disk moments before its row commits, so

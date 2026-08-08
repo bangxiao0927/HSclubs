@@ -3,6 +3,7 @@ package com.example.demo.club.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -134,6 +135,19 @@ class ClubControllerTest {
 
         mockMvc.perform(post("/api/clubs/1/members/apply").principal(oauthToken(STUDENT_EMAIL)))
             .andExpect(status().isConflict());
+    }
+
+    // The apply endpoint resolves the club without a status filter, so it has to run the same
+    // visibility policy the detail endpoint does: otherwise a guessed id lands a request in a
+    // president's queue for a club the directory says does not exist.
+    @Test
+    void applyingToANonActiveClubIsANotFoundForANonMember() throws Exception {
+        when(clubService.resolveBySlugOrId(eq("7"), any())).thenReturn(nonActiveClub());
+
+        mockMvc.perform(post("/api/clubs/7/members/apply").principal(oauthToken(STUDENT_EMAIL)))
+            .andExpect(status().isNotFound());
+
+        verify(clubService, never()).applyForMembership(any(), any());
     }
 
     // ---- Detail visibility ----

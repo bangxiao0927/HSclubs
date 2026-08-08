@@ -231,6 +231,12 @@
              upload path, never through this general club-editing form: writing it from this
              statement would let a manager set their own club's imageUrl to another club's
              real, guessable stored image path via a PUT request body. -->
+        <!-- status, visibility, approved_at and approved_by_oauth_user_id are not written here
+             either, for the same reason and one more: a club president reaches this statement
+             through PUT /api/clubs/{id}. The service already refuses to take those fields from
+             the request body, but it still carried the values it read a moment earlier, so an
+             edit that raced a platform owner's archive would write the club back to active.
+             Status changes only through updateStatus (the archive endpoints). -->
         UPDATE clubs
         SET name = #{name},
             slug = #{slug},
@@ -243,10 +249,6 @@
             contact_email = #{contactEmail},
             advisor = #{advisor},
             achievements = #{achievements, typeHandler=com.example.demo.club.mapper.AchievementsTypeHandler},
-            status = #{status},
-            visibility = #{visibility},
-            approved_at = #{approvedAt},
-            approved_by_oauth_user_id = #{approvedByOauthUserId},
             updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id}
     </update>
