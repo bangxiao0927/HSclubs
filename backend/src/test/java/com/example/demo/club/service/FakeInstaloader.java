@@ -49,6 +49,8 @@ public final class FakeInstaloader {
         }
         List<String> serviceArgs = List.of(args).subList(1, args.length);
 
+        exitWhenTheLauncherDies();
+
         recordArguments(config, serviceArgs);
 
         PrintStream out = new PrintStream(System.out, true, StandardCharsets.UTF_8);
@@ -68,6 +70,26 @@ public final class FakeInstaloader {
         out.flush();
 
         System.exit(Integer.parseInt(config.getProperty(EXIT_CODE, "0")));
+    }
+
+    /**
+     * Ends this process as soon as the launcher that started it is gone.
+     *
+     * <p>On POSIX the launcher {@code exec}s this JVM, so the service's {@code destroyForcibly()}
+     * on a timed-out fetch kills it directly. Windows has no {@code exec}: the service kills
+     * {@code cmd.exe} and this JVM would keep running (and keep the inherited output pipe open)
+     * until its configured sleep finished, leaking a process per timeout test on the very
+     * platform this fake exists to support.
+     */
+    private static void exitWhenTheLauncherDies() {
+        ProcessHandle.current().parent().ifPresent(parent -> {
+            Thread watchdog = new Thread(() -> {
+                parent.onExit().join();
+                Runtime.getRuntime().halt(143);
+            }, "fake-instaloader-parent-watchdog");
+            watchdog.setDaemon(true);
+            watchdog.start();
+        });
     }
 
     /**
