@@ -184,6 +184,17 @@
         WHERE id = #{id}
     </update>
 
+    <!-- Column-scoped on purpose, like updateImageUrl above: status decides whether a club is
+         listed and readable at all, so it is deliberately not writable through the general
+         update() statement a club president can reach. Only the platform-owner archive and
+         restore endpoints use this. -->
+    <update id="updateStatus">
+        UPDATE clubs
+        SET status = #{status},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
     <update id="updateLocation">
         UPDATE clubs
         SET location = #{location},

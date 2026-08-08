@@ -119,6 +119,41 @@ public class ClubController {
         clubService.delete(existing.getId());
     }
 
+    // ---- Archive / restore (platform owner only) ----
+    //
+    // The reversible alternative to DELETE: an archived club keeps its rows, its posts, and its
+    // roster, but drops out of every listing, search result, and calendar entry, and its detail
+    // endpoint answers 404 for anyone but a member, its president, or a platform owner
+    // (ClubVisibilityPolicy). Status is not editable through PUT, so this is the only way to
+    // change it -- a club president must not be able to publish or hide their own club.
+
+    @PostMapping("/{clubSlugOrId}/archive")
+    public Club archive(@PathVariable String clubSlugOrId, Authentication authentication) {
+        return setArchived(clubSlugOrId, authentication, true);
+    }
+
+    @DeleteMapping("/{clubSlugOrId}/archive")
+    public Club restore(@PathVariable String clubSlugOrId, Authentication authentication) {
+        return setArchived(clubSlugOrId, authentication, false);
+    }
+
+    private Club setArchived(String clubSlugOrId, Authentication authentication, boolean archived) {
+        requirePlatformOwner(authentication);
+        Club existing = resolveClub(clubSlugOrId, resolveViewerEmail(authentication));
+        if (existing == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Club not found");
+        }
+        try {
+            return archived ? clubService.archive(existing.getId()) : clubService.restore(existing.getId());
+        } catch (IllegalArgumentException ex) {
+            // The club was resolved a moment ago, so this means it disappeared in between.
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        } catch (IllegalStateException ex) {
+            // Restoring something that was never archived (e.g. a pending club).
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage());
+        }
+    }
+
     // ---- Members ----
 
     @GetMapping("/{clubSlugOrId}/members")

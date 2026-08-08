@@ -42,6 +42,12 @@ public class ClubService {
     // bounds how many OR groups one statement can grow.
     private static final int MAX_SEARCH_TOKENS = 10;
 
+    // The only two club statuses this application writes. 'active' is what every listing query
+    // filters on (ActiveClause) and what ClubVisibilityPolicy treats as publicly readable;
+    // 'archived' is the reversible alternative to deleting a club outright.
+    static final String ACTIVE_STATUS = "active";
+    static final String ARCHIVED_STATUS = "archived";
+
     // Exactly the fields a club manager may edit through PUT /api/clubs/{id}. Everything else
     // the update statement writes -- slug (the club's public URL), status, visibility,
     // approved_at, approved_by_oauth_user_id -- is carried over from the stored row instead:
@@ -235,6 +241,39 @@ public class ClubService {
         return clubMapper.findById(id);
     }
 
+    /**
+     * Archives a club: it disappears from every listing, search result, calendar entry, and the
+     * public detail endpoint, but keeps its rows so the decision is reversible with
+     * {@link #restore(Long)} -- unlike delete(), which removes the club outright.
+     *
+     * <p>Platform-owner only, enforced by the controller. Status is written through its own
+     * column-scoped statement rather than the general update(), which a club president can
+     * reach: a president must not be able to publish or hide their own club.
+     */
+    public Club archive(Long id) {
+        if (clubMapper.updateStatus(id, ARCHIVED_STATUS) == 0) {
+            throw new IllegalArgumentException("Club not found");
+        }
+        return clubMapper.findById(id);
+    }
+
+    /**
+     * Puts an archived club back into the directory. Deliberately refuses any other non-active
+     * status: no previous status is recorded anywhere, so activating (say) a pending club here
+     * would publish something that was never approved and lose that state for good.
+     */
+    public Club restore(Long id) {
+        Club existing = clubMapper.findById(id);
+        if (existing == null) {
+            throw new IllegalArgumentException("Club not found");
+        }
+        if (!ARCHIVED_STATUS.equalsIgnoreCase(existing.getStatus())) {
+            throw new IllegalStateException("Only an archived club can be restored");
+        }
+        clubMapper.updateStatus(id, ACTIVE_STATUS);
+        return clubMapper.findById(id);
+    }
+
     public void delete(Long id) {
         clubMapper.delete(id);
     }
@@ -399,7 +438,7 @@ public class ClubService {
             club.setAchievements(Collections.emptyList());
         }
         if (!StringUtils.hasText(club.getStatus())) {
-            club.setStatus("active");
+            club.setStatus(ACTIVE_STATUS);
         }
         if (!StringUtils.hasText(club.getVisibility())) {
             club.setVisibility("public");

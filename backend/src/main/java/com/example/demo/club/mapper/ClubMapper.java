@@ -50,6 +50,12 @@ public interface ClubMapper {
     // club's imageUrl to another club's real /uploads/club-posts/<uuid>.jpg path via PUT.
     int updateImageUrl(@Param("id") Long id, @Param("imageUrl") String imageUrl);
 
+    /**
+     * Column-scoped status write for the platform-owner archive/restore endpoints. Status is
+     * deliberately not writable through {@link #update(Club)}, which a club president can reach.
+     */
+    int updateStatus(@Param("id") Long id, @Param("status") String status);
+
     int updateLocation(@Param("id") Long id, @Param("location") String location);
 
     int delete(@Param("id") Long id);
