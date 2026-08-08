@@ -11,7 +11,9 @@ import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -37,8 +39,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -46,7 +51,19 @@ import java.util.stream.Collectors;
 public class InstagramAvatarCacheService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(InstagramAvatarCacheService.class);
+    // Drains the Instaloader subprocess's merged stdout/stderr while it runs. Daemon threads, so
+    // a reader still blocked on a wedged child can never hold up JVM shutdown, and a cached pool
+    // because the work is pure blocking I/O whose concurrency is already capped upstream by the
+    // on-demand semaphore and the prewarm's per-run limit.
+    private static final ExecutorService OUTPUT_READERS = Executors.newCachedThreadPool(runnable -> {
+        Thread thread = new Thread(runnable, "instaloader-output-reader");
+        thread.setDaemon(true);
+        return thread;
+    });
     private static final long MAX_AVATAR_BYTES = 1024 * 1024;
+    // One pipe buffer's worth, which is all the child could ever produce before this output
+    // started being drained continuously. Only used for an abbreviated log message.
+    private static final int MAX_SUBPROCESS_OUTPUT_BYTES = 64 * 1024;
     private static final Pattern HANDLE_PATTERN = Pattern.compile("^[A-Za-z0-9._]{1,64}$");
     private static final List<String> IMAGE_EXTENSIONS = List.of("png", "jpg", "jpeg", "webp", "gif");
     private static final MediaType SVG_MEDIA_TYPE = MediaType.valueOf("image/svg+xml");
@@ -536,18 +553,74 @@ public class InstagramAvatarCacheService {
         processBuilder.redirectErrorStream(true);
         processBuilder.environment().put("PYTHONUNBUFFERED", "1");
         Process process = processBuilder.start();
+        // The child's output must be drained while it runs, not after waitFor: stdout and stderr
+        // are merged into one pipe, and a child that writes more than the OS pipe buffer (~64 KB
+        // on Linux -- a verbose traceback or a chatty browser_cookie3 failure is enough) blocks
+        // on write forever. Waiting first therefore turned a lookup that would have succeeded
+        // into a guaranteed timeout.
+        CompletableFuture<String> output = readOutputAsync(process);
         boolean finished = process.waitFor(fetchTimeoutMillis, TimeUnit.MILLISECONDS);
         if (!finished) {
             process.destroyForcibly();
             process.waitFor(1, TimeUnit.SECONDS);
+            output.cancel(true);
             throw new IOException("Instaloader timed out for " + safeHandle);
         }
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        String processOutput = awaitOutput(output).trim();
         if (process.exitValue() != 0) {
-            throw new IOException("Instaloader failed for " + safeHandle + ": " + abbreviate(output));
+            throw new IOException("Instaloader failed for " + safeHandle + ": " + abbreviate(processOutput));
         }
-        return lastHttpUrl(output)
+        return lastHttpUrl(processOutput)
             .orElseThrow(() -> new IOException("Instaloader did not return an avatar URL for " + safeHandle));
+    }
+
+    private static CompletableFuture<String> readOutputAsync(Process process) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (InputStream in = process.getInputStream()) {
+                return readTail(in, MAX_SUBPROCESS_OUTPUT_BYTES);
+            } catch (IOException e) {
+                // The process was killed mid-read, or the pipe broke: whatever it managed to say
+                // is only used for a log message, so this must not replace the real failure.
+                return "";
+            }
+        }, OUTPUT_READERS);
+    }
+
+    /**
+     * Reads the stream to the end but keeps only its last {@code maxBytes}.
+     *
+     * <p>Draining continuously is what stops the child from dead-locking on a full pipe, but it
+     * also removes the implicit ~64KB ceiling that pipe buffer used to impose, so a runaway
+     * child could otherwise accumulate everything it prints on the heap. Keeping the tail rather
+     * than the head is the right end to keep for both consumers: the script prints the avatar
+     * URL last, and a failure's most relevant output is the end of its traceback.
+     */
+    private static String readTail(InputStream in, int maxBytes) throws IOException {
+        byte[] buffer = new byte[8 * 1024];
+        ByteArrayOutputStream retained = new ByteArrayOutputStream();
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            retained.write(buffer, 0, read);
+            if (retained.size() > maxBytes) {
+                byte[] tail = retained.toByteArray();
+                retained.reset();
+                retained.write(tail, tail.length - maxBytes, maxBytes);
+            }
+        }
+        return retained.toString(StandardCharsets.UTF_8);
+    }
+
+    private static String awaitOutput(CompletableFuture<String> output) {
+        try {
+            // The process has already exited here, so the reader is at EOF; the bound is only a
+            // guard against ever blocking a request thread on it.
+            return output.get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "";
+        } catch (ExecutionException | TimeoutException e) {
+            return "";
+        }
     }
 
     private Optional<String> fetchProfilePicUrlFromWebProfileApi(String safeHandle) throws IOException, InterruptedException {
