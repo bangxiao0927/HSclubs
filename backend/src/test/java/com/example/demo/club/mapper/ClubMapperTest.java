@@ -211,15 +211,29 @@ class ClubMapperTest {
 
     @Test
     void findPopularOrdersByMemberCountAndLimitsInSql() {
-        insertClub(10, "Quiet Club", "STEM & Innovation");
-        insertClub(11, "Busy Club", "STEM & Innovation");
+        // Names chosen so alphabetical order disagrees with popularity, and stale member_count
+        // values written the wrong way round: clubs still has a real member_count column, so a
+        // query that sorted by it (or by an alias shadowing it) instead of the live count would
+        // return "Alpha Club" here and pass on nothing but the tie-break.
+        insertClub(10, "Alpha Club", "STEM & Innovation", 99);
+        insertClub(11, "Zebra Club", "STEM & Innovation", 0);
         insertMembers(11, 100, 3);
         insertMembers(10, 200, 1);
 
         List<Club> popular = clubMapper.findPopular(1);
 
-        assertThat(popular).extracting(Club::getName).containsExactly("Busy Club");
+        assertThat(popular).extracting(Club::getName).containsExactly("Zebra Club");
         assertThat(popular.get(0).getMemberCount()).isEqualTo(3);
+    }
+
+    @Test
+    void findSummaryProjectionsReportsTheLiveMemberCountNotTheStaleColumn() {
+        insertClub(10, "Robotics", "STEM & Innovation", 99);
+        insertMembers(10, 400, 2);
+
+        assertThat(clubMapper.findSummaryProjections())
+            .singleElement()
+            .satisfies(projection -> assertThat(projection.getMemberCount()).isEqualTo(2));
     }
 
     @Test
@@ -285,8 +299,13 @@ class ClubMapperTest {
     }
 
     private void insertClub(long id, String name, String category) {
+        insertClub(id, name, category, 0);
+    }
+
+    private void insertClub(long id, String name, String category, int staleMemberCount) {
         jdbcTemplate.update(
-            "INSERT INTO clubs (id, name, category, status) VALUES (?, ?, ?, 'active')", id, name, category);
+            "INSERT INTO clubs (id, name, category, member_count, status) VALUES (?, ?, ?, ?, 'active')",
+            id, name, category, staleMemberCount);
     }
 
     private void insertMembers(long clubId, long firstUserId, int count) {

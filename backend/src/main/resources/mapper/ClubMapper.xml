@@ -46,10 +46,10 @@
         status = 'active'
     </sql>
 
-    <!-- Everything the calendar and the recommendation list actually render. Deliberately not
-         BaseColumnList: that one carries description and the achievements CLOB, which no
-         caller of these two endpoints ever reads, on every row of the table. -->
-    <sql id="SummaryColumnList">
+    <!-- Everything the calendar response renders. Deliberately not BaseColumnList: that one
+         also carries description and the achievements CLOB, which the calendar never reads,
+         for every club in the table. -->
+    <sql id="CalendarColumnList">
         id, name, slug, alias_name, category, meeting_schedule, schedule_note, location,
         contact_email, advisor, image_url,
         (SELECT link_url
@@ -61,19 +61,29 @@
         status, visibility, created_at, updated_at
     </sql>
 
+    <!-- Live member count, spelled out rather than referencing the member_count select alias:
+         clubs also has a real (stale, never read) member_count column, and relying on the alias
+         shadowing it in ORDER BY is exactly the kind of silent fallback that would leave this
+         sorting by the wrong number. -->
+    <sql id="LiveMemberCount">
+        (SELECT COUNT(*) FROM club_member WHERE club_id = clubs.id)
+    </sql>
+
     <!-- Popularity ordering and the row limit both live in SQL: this endpoint is public and
          returns at most 20 clubs, so reading the whole table to sort and truncate it in Java
-         made the work unbounded in table size for a constant-size answer. -->
+         made the work unbounded in table size for a constant-size answer. The full column list
+         is deliberate here, unlike the calendar: these rows are serialized to the client as
+         ordinary Club objects, and dropping columns would quietly change that payload. -->
     <select id="findPopular" resultMap="ClubResultMap">
-        SELECT <include refid="SummaryColumnList" />
+        SELECT <include refid="BaseColumnList" />
         FROM clubs
         WHERE <include refid="ActiveClause" />
-        ORDER BY member_count DESC, name ASC
+        ORDER BY <include refid="LiveMemberCount" /> DESC, name ASC
         LIMIT #{limit}
     </select>
 
     <select id="findPopularInCategories" resultMap="ClubResultMap">
-        SELECT <include refid="SummaryColumnList" />
+        SELECT <include refid="BaseColumnList" />
         FROM clubs
         WHERE <include refid="ActiveClause" />
         AND category IN
@@ -86,12 +96,12 @@
                 #{clubId}
             </foreach>
         </if>
-        ORDER BY member_count DESC, name ASC
+        ORDER BY <include refid="LiveMemberCount" /> DESC, name ASC
         LIMIT #{limit}
     </select>
 
     <select id="findCalendarEntries" resultMap="ClubResultMap">
-        SELECT <include refid="SummaryColumnList" />
+        SELECT <include refid="CalendarColumnList" />
         FROM clubs
         WHERE <include refid="ActiveClause" />
         ORDER BY name ASC
@@ -103,7 +113,7 @@
         SELECT id,
                name,
                category,
-               (SELECT COUNT(*) FROM club_member WHERE club_id = clubs.id) AS memberCount,
+               <include refid="LiveMemberCount" /> AS memberCount,
                updated_at AS updatedAt
         FROM clubs
         WHERE <include refid="ActiveClause" />

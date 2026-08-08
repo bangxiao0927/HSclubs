@@ -302,8 +302,8 @@ public class ClubController {
 
     @GetMapping("/calendar")
     public List<Map<String, Object>> calendar() {
-        // findCalendarEntries, not findAll: the response below reads eleven scalar fields, so
-        // there is no reason to select description, schedule_note, and the achievements CLOB
+        // findCalendarEntries, not findAll: the response below reads a fixed set of scalar
+        // fields, so there is no reason to also select description and the achievements CLOB
         // for every club on a public, unauthenticated endpoint.
         List<Club> clubs = clubService.findCalendarEntries();
         List<Map<String, Object>> events = new ArrayList<>();
