@@ -256,9 +256,19 @@ public class ClubService {
      * reach: a president must not be able to publish or hide their own club.
      */
     public Club archive(Long id) {
-        if (clubMapper.updateStatus(id, ARCHIVED_STATUS) == 0) {
+        Club existing = clubMapper.findById(id);
+        if (existing == null) {
             throw new IllegalArgumentException("Club not found");
         }
+        // Only an active (or already archived, so this stays idempotent) club can be archived.
+        // Archiving something in another state -- a pending club, say -- would overwrite the
+        // only record of that state, and restore() would then happily publish it, which is
+        // exactly what restore()'s own guard exists to prevent.
+        if (!ACTIVE_STATUS.equalsIgnoreCase(existing.getStatus())
+            && !ARCHIVED_STATUS.equalsIgnoreCase(existing.getStatus())) {
+            throw new IllegalStateException("Only an active club can be archived");
+        }
+        clubMapper.updateStatus(id, ARCHIVED_STATUS);
         return clubMapper.findById(id);
     }
 
