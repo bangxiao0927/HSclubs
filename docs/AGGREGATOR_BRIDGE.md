@@ -3,14 +3,17 @@
 How a school site (this repo) and the future guiding page (the 2nd repo) exchange data, and how
 the guiding page decides a school site is genuine.
 
-> Status: design, not built. Only the pull half exists today (`GET /api/summary`). Nothing here
-> should be implemented before the sample school workflow is stable
-> (see `docs/DEVELOPMENT_SEQUENCE.md`, Guiding Rule).
+> Status: the pull half is built on both sides. This repo publishes `GET /api/summary`; the
+> guiding-page repo loads and verifies its registry, polls every verified school conditionally,
+> stores each result independently, and serves the page. The optional ping half remains design
+> only and, per the private/single-operator decision below, should not be built without a new
+> reason to expose an inbound endpoint from that machine.
 >
 > The consuming side now exists as its own repository,
 > [`hsclubs-guiding-page`](https://github.com/bangxiao0927/hsclubs-guiding-page), which carries
-> the consumer's copy of this contract, the registry format, and its own roadmap. Nothing in
-> *this* repo has been built for it, and per the Decisions below nothing needs to be.
+> the consumer's copy of this contract, the registry format, the poller, the page, and the
+> origin-verification tooling. Nothing else in *this* repo has been built for it, and per the
+> Decisions below nothing needs to be.
 
 ## Decisions taken
 

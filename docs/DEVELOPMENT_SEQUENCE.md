@@ -165,10 +165,11 @@ Start the 2nd repo only after Phase 6 exits cleanly.
 
 The 2nd repo should consume public summary data. It should not copy the club workflow, admin workflow, or auth model unless there is a strong reason.
 
-Status: started. Phase 6 exited, and the 2nd repo is scaffolded at
-[`hsclubs-guiding-page`](https://github.com/bangxiao0927/hsclubs-guiding-page) with the contract,
-the school registry format and its own roadmap. It consumes `GET /api/summary` and nothing else,
-and this repo gains nothing for it.
+Status: complete as a decision and implemented as a minimal consumer. Phase 6 exited, and
+[`hsclubs-guiding-page`](https://github.com/bangxiao0927/hsclubs-guiding-page) now has the
+contract, the school registry, bounded/conditional polling, the private page, and origin
+verification with scheduled re-checks. It consumes `GET /api/summary` and nothing else, and this
+repo gains nothing for it.
 
 How the two sides connect -- pull vs push, verifying a school site, and the only settings this
 repo would gain -- is designed in `docs/AGGREGATOR_BRIDGE.md`. Its open questions are the
