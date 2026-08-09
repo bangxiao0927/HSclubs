@@ -99,3 +99,12 @@ The 2nd repo needs reliable data from real school sites. The 3rd repo needs a mo
 ## Current Boundary
 
 Do not create the 2nd or 3rd repo yet. Track their requirements here and in the roadmap, but keep active implementation inside this repo until the sample school workflow is dependable.
+
+## How the 2nd Repo Will Connect
+
+The data exchange between a school site and the guiding page -- what is pulled, what may be
+pushed, how a school site is verified, and what this repo would need to add -- is designed in
+`docs/AGGREGATOR_BRIDGE.md`. The short version: the guiding page pulls `GET /api/summary` and a
+school may optionally *notify* it that something changed. A school never pushes the data itself,
+so the school site stays the single source of truth and the guiding page never renders content
+that someone else's server handed it.

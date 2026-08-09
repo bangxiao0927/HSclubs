@@ -49,6 +49,10 @@ and served with its own credential-less wildcard CORS policy, so a page on anoth
 publishes, the aggregator pulls. Writing to it answers 401, and adding a push channel would
 need its own authentication design rather than an open port.
 
+That design now exists: see `docs/AGGREGATOR_BRIDGE.md`. It keeps this endpoint authoritative
+and adds, at most, an optional outbound *notification* from a school site (off by default), so
+there is still nothing for anyone to write to here.
+
 The response is assembled from a narrow projection (club id, name, category, member count,
 updated time -- never the description or the achievements CLOB) and cached for
 `app.summary.cache-ttl-ms` (60s by default, 0 disables it). The endpoint is unauthenticated, so
