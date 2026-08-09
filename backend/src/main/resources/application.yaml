@@ -96,9 +96,10 @@ app:
     short-name: ${APP_SUMMARY_SHORT_NAME:HS Clubs}
     slug: ${APP_SUMMARY_SLUG:hsclubs}
     # The zone the database writes its timestamps in, used to turn the stored wall-clock
-    # updated_at into the offset-bearing lastUpdatedAt the summary publishes. Empty means this
-    # JVM's zone, which is correct whenever the app and the database agree; set it explicitly if
-    # they do not (the MySQL URL's serverTimezone is the one that matters).
+    # updated_at into the offset-bearing lastUpdatedAt the summary publishes. Empty means "take
+    # it from the datasource URL's serverTimezone", falling back to this JVM's zone when the URL
+    # declares none -- the driver hands back that column in the database session's zone, so the
+    # URL is the better default. Set this only when neither is the truth.
     time-zone: ${APP_SUMMARY_TIME_ZONE:}
     # /api/summary is unauthenticated, so a burst of requests is the cheapest way to make the
     # site work. The assembled response is cached for this long; short enough that the future

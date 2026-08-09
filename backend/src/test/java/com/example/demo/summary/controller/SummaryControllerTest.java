@@ -62,6 +62,7 @@ class SummaryControllerTest {
         summary.setSchoolName("Example High School");
         summary.setClubCount(3);
         summary.setDataHash(DATA_HASH);
+        summary.setLastUpdatedAt(java.time.OffsetDateTime.parse("2026-02-03T04:05:00-08:00"));
         when(summaryService.buildSnapshot())
             .thenReturn(new SummaryService.Snapshot(summary, ENTITY_TAG));
     }
@@ -73,6 +74,16 @@ class SummaryControllerTest {
             .andExpect(header().string("ETag", ETAG))
             .andExpect(jsonPath("$.clubCount").value(3))
             .andExpect(jsonPath("$.dataHash").value(DATA_HASH));
+    }
+
+    // Pins the wire format of the one field an off-site consumer has to parse. Jackson could
+    // serialise a date as an array or an epoch number, or normalise the offset away, and any of
+    // those would silently change a published contract.
+    @Test
+    void publishesTheLastUpdateAsAnIso8601StringKeepingItsOffset() throws Exception {
+        mockMvc.perform(get("/api/summary"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.lastUpdatedAt").value("2026-02-03T04:05:00-08:00"));
     }
 
     @Test
