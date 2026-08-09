@@ -96,8 +96,8 @@ app:
     short-name: ${APP_SUMMARY_SHORT_NAME:HS Clubs}
     slug: ${APP_SUMMARY_SLUG:hsclubs}
     # One human-readable line for the guiding page's listing, e.g. a street address. School
-    # identity, like the name above -- never derived from club data. Empty means the field is
-    # absent from the response rather than blank.
+    # identity, like the name above -- never derived from club data. Empty publishes the field
+    # as null rather than as an empty string, so a consumer has one thing to check, not two.
     address: ${APP_SUMMARY_ADDRESS:}
     # The zone the database writes its timestamps in, used to turn the stored wall-clock
     # updated_at into the offset-bearing lastUpdatedAt the summary publishes. Empty means "take

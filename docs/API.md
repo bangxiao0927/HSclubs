@@ -39,8 +39,9 @@ that has never been updated, and the startup log states which zone was resolved.
 The `dataHash` is a SHA-256 digest of (clubId|name|category|memberCount) for all clubs. The aggregator compares this hash to detect changes without re-fetching.
 
 `schoolName`, `shortName`, `slug` and `address` are school identity: configured
-(`APP_SUMMARY_*`), never derived from club data, and `address` is absent when a deployment has
-not set one. Everything else is computed from the active clubs.
+(`APP_SUMMARY_*`), never derived from club data, and `address` is `null` when a deployment has
+not set one -- the key is always present, like every other field here. Everything else is
+computed from the active clubs.
 
 The response also carries an `ETag`, so a poller can ask the same question over HTTP instead of
 parsing a body first: send the tag back as `If-None-Match` and an unchanged summary answers

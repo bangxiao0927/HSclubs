@@ -202,7 +202,9 @@ Behaviour:
 
 1. ~~Public or private backend?~~ Private, single-operator (see Decisions above). The registry
    can therefore be the simplest thing that works -- a file the operator edits -- rather than a
-   database behind an admin UI, and no part of it needs to be reachable from the internet.
+   database behind an admin UI. Its *inbound* surface -- a ping endpoint, an admin UI, any school
+   login -- needs no public exposure at all; the page visitors read is of course still published,
+   which is what `docs/REPO_STRATEGY.md` means by a public frontend with a private backend.
 2. ~~Does the guiding page need more than the summary carries?~~ An address, now shipped as
    `APP_SUMMARY_ADDRESS`. Anything further (a region for map filtering, coordinates, a logo) is
    school identity too, so it is another `APP_SUMMARY_*` field rather than a new endpoint --
