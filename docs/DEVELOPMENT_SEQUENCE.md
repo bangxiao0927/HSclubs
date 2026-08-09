@@ -155,11 +155,20 @@ Exit check:
 - A future aggregator can fetch useful data without database access.
 - The endpoint does not expose private student or admin data.
 
+Status: done. `GET /api/summary` returns school identity, club and member counts, category
+counts, `lastUpdatedAt` and a `dataHash`, is anonymous and cross-origin readable, supports
+conditional polling (`ETag` / `304`), and carries no student or admin data.
+
 ## Phase 7 - Decide on 2nd Repo
 
 Start the 2nd repo only after Phase 6 exits cleanly.
 
 The 2nd repo should consume public summary data. It should not copy the club workflow, admin workflow, or auth model unless there is a strong reason.
+
+How the two sides connect -- pull vs push, verifying a school site, and the only settings this
+repo would gain -- is designed in `docs/AGGREGATOR_BRIDGE.md`. Its open questions are the
+decisions Phase 7 has to make; none of it is built yet, and none of it should be built before
+the phases above are stable.
 
 ## Phase 8 - Decide on 3rd Repo
 
