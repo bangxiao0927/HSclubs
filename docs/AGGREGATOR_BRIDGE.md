@@ -51,7 +51,13 @@ prove that a given URL belongs to the school it claims to be. Two checks, both c
 1. **Domain challenge.** The guiding page issues a one-time token. The school publishes it at
    `https://<school-domain>/.well-known/hsclubs-site.txt` (a static file the reverse proxy can
    serve; no backend change needed). The guiding page fetches it over HTTPS and matches. This
-   proves control of the domain, which is what "genuine" means here.
+   proves control of the domain, which is what "genuine" means here. The registry's summary URL
+   must then be `https://<school-domain>/api/summary` on that same host -- otherwise the
+   challenge proves control of a domain the data does not come from, and the whole "the pull is
+   authoritative" argument collapses. The pull follows no cross-host redirect and is bounded by
+   a short timeout and a response-size cap, so a registered site cannot redirect that
+   server-side fetch somewhere else (including inside the guiding page's own network) or hand
+   back an unbounded body.
 2. **Slug agreement.** The `slug` in the school's `/api/summary` must equal the slug the
    registry holds for that domain. This stops one verified school from claiming another's
    identity, and it is a field this repo already exposes and configures
@@ -76,9 +82,17 @@ X-HSClubs-Signature: sha256=<hex HMAC of "{timestamp}\n{slug}\n{etag}">
 
 Rules for the guiding page:
 
-- Reject an unknown slug, a bad signature, or a timestamp outside a few minutes (replay window).
+- Reject an unknown slug, a bad signature, or a timestamp outside a few minutes (replay window),
+  and reject a signature already seen inside that window. The window alone does not stop a
+  verbatim replay of a ping read in transit (a proxy, a mis-set access log, a TLS-terminating
+  middlebox), so keep a small per-slug cache of recently seen signatures.
 - Rate-limit per slug; a ping storm must never turn into a pull storm. Coalesce: at most one
-  pull per school per minute regardless of how many pings arrive.
+  pull per school per minute regardless of how many pings arrive. Note the rate-limit key comes
+  from the request, so an unauthenticated flood naming a real slug can exhaust that school's
+  ping budget -- which costs freshness only, never data, because the poll is the guarantee.
+- Nothing above is load-bearing for correctness. Every one of these rules exists to keep a bad
+  actor from making the guiding page do work, not to keep it from showing wrong numbers; the
+  numbers always come from the school's own verified URL.
 - Treat the body as a hint only. Never store a number from it. The pull decides.
 - A failing ping is not an error the school needs to see: log and drop.
 
