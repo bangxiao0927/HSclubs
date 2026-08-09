@@ -22,10 +22,16 @@ Response:
   "clubCount": 42,
   "categories": { "STEM & Innovation": 15, "Creative Arts & Media": 8 },
   "memberCount": 350,
-  "lastUpdatedAt": "2025-07-01T12:00:00",
+  "lastUpdatedAt": "2025-07-01T12:00:00-07:00",
   "dataHash": "abc123..."
 }
 ```
+
+`lastUpdatedAt` is an ISO-8601 instant **with an offset**, because this value is read off-site by
+something that may be comparing schools in other zones. The offset comes from
+`app.summary.time-zone` (`APP_SUMMARY_TIME_ZONE`), which names the zone the database writes its
+timestamps in; leave it empty when the application and the database agree, which is the usual
+case. It is `null` for a directory that has never been updated.
 
 The `dataHash` is a SHA-256 digest of (clubId|name|category|memberCount) for all clubs. The aggregator compares this hash to detect changes without re-fetching.
 

@@ -177,7 +177,9 @@ Behaviour:
 2. Does the guiding page need anything the summary does not already carry -- a contact address,
    a region for map/filtering, a logo? Those are school identity, so they would be new
    `APP_SUMMARY_*` settings here rather than a new endpoint.
-3. Should `lastUpdatedAt` become an instant with a timezone before other systems consume it? It
-   is currently a local date-time, which is ambiguous across schools in different zones.
+3. ~~Should `lastUpdatedAt` become an instant with a timezone?~~ Done: it is an ISO-8601 instant
+   with an offset, taken from `app.summary.time-zone` (the zone the database writes timestamps
+   in, defaulting to the application's own). Fixed before anything consumed it, which is the
+   cheapest moment to change a published field.
 4. How is a school removed -- deregistered by the guiding page, or by the school taking down the
    challenge file? The second is self-service and needs no support request.

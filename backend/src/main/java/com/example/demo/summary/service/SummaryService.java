@@ -5,12 +5,14 @@ import com.example.demo.summary.model.ClubSummaryProjection;
 import com.example.demo.summary.model.SummaryResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +36,7 @@ public class SummaryService {
     private final String schoolName;
     private final String shortName;
     private final String slug;
+    private final ZoneId databaseZone;
     private final Duration cacheTtl;
     private final AtomicReference<CachedSummary> cached = new AtomicReference<>();
     private final Object refreshLock = new Object();
@@ -42,11 +45,16 @@ public class SummaryService {
                           @Value("${app.summary.school-name:HS Clubs}") String schoolName,
                           @Value("${app.summary.short-name:HS Clubs}") String shortName,
                           @Value("${app.summary.slug:hsclubs}") String slug,
+                          @Value("${app.summary.time-zone:}") String timeZone,
                           @Value("${app.summary.cache-ttl-ms:60000}") long cacheTtlMillis) {
         this.clubMapper = clubMapper;
         this.schoolName = schoolName;
         this.shortName = shortName;
         this.slug = slug;
+        // The zone the stored timestamps are written in, i.e. the database session's. Defaults
+        // to this JVM's, which is right whenever the two agree; a deployment where they do not
+        // has to say so, because nothing in a bare TIMESTAMP column records which zone it meant.
+        this.databaseZone = StringUtils.hasText(timeZone) ? ZoneId.of(timeZone.trim()) : ZoneId.systemDefault();
         this.cacheTtl = Duration.ofMillis(Math.max(0, cacheTtlMillis));
     }
 
@@ -134,7 +142,7 @@ public class SummaryService {
         summary.setClubCount(clubs.size());
         summary.setCategories(categoryCounts);
         summary.setMemberCount(totalMembers);
-        summary.setLastUpdatedAt(lastUpdated);
+        summary.setLastUpdatedAt(lastUpdated == null ? null : lastUpdated.atZone(databaseZone).toOffsetDateTime());
         summary.setDataHash(computeHash(clubs));
 
         return summary;

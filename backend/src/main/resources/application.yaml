@@ -95,6 +95,11 @@ app:
     school-name: ${APP_SUMMARY_SCHOOL_NAME:HS Clubs}
     short-name: ${APP_SUMMARY_SHORT_NAME:HS Clubs}
     slug: ${APP_SUMMARY_SLUG:hsclubs}
+    # The zone the database writes its timestamps in, used to turn the stored wall-clock
+    # updated_at into the offset-bearing lastUpdatedAt the summary publishes. Empty means this
+    # JVM's zone, which is correct whenever the app and the database agree; set it explicitly if
+    # they do not (the MySQL URL's serverTimezone is the one that matters).
+    time-zone: ${APP_SUMMARY_TIME_ZONE:}
     # /api/summary is unauthenticated, so a burst of requests is the cheapest way to make the
     # site work. The assembled response is cached for this long; short enough that the future
     # aggregator still sees a change promptly, long enough that a flood collapses onto one query.
