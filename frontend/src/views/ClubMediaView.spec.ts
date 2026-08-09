@@ -773,12 +773,16 @@ describe('ClubMediaView publish form', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-preview')
   })
 
-  it('submits the title and file via publishClubPost and prepends the created post without a manual reload', async () => {
+  it('submits the title and file, then refreshes the canonical first page without a manual reload', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
-    fetchClubMediaFeedMock.mockResolvedValue(
-      buildFeed({ items: [buildPost({ id: 1, title: 'Existing post' })], total: 1 }),
-    )
+    const existing = buildPost({ id: 1, title: 'Existing post' })
     const created = buildPost({ id: 99, title: 'Meeting recap', viewerCanDelete: true })
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [existing], total: 1 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [created, existing], total: 2 }),
+    )
     publishClubPostMock.mockResolvedValue(created)
 
     const wrapper = await mountAtMediaRoute()
@@ -794,7 +798,8 @@ describe('ClubMediaView publish form', () => {
     await flushPromises()
 
     expect(publishClubPostMock).toHaveBeenCalledWith('1', 'Meeting recap', file)
-    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(1)
+    expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(2, '1', 0, 12)
     const titles = wrapper.findAll('.mv-post-title').map((node) => node.text())
     expect(titles).toEqual(['Meeting recap', 'Existing post'])
   })
@@ -820,6 +825,80 @@ describe('ClubMediaView publish form', () => {
 
     expect(wrapper.find<HTMLInputElement>('.mv-publish-title-input').element.value).toBe('')
     expect(wrapper.find('.mv-publish-preview').exists()).toBe(false)
+  })
+
+  it('refreshes a later page after publishing instead of inserting the new first-page post into it', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    const originalPage = [
+      buildPost({ id: 3, title: 'Original page item 3' }),
+      buildPost({ id: 2, title: 'Original page item 2' }),
+    ]
+    const shiftedPage = [
+      buildPost({ id: 4, title: 'Shifted page item 4' }),
+      buildPost({ id: 3, title: 'Original page item 3' }),
+    ]
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: originalPage, page: 1, size: 2, total: 4 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: shiftedPage, page: 1, size: 2, total: 5 }),
+    )
+    publishClubPostMock.mockResolvedValue(buildPost({ id: 5, title: 'New first-page post' }))
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media?page=1&size=2')
+    await flushPromises()
+
+    await wrapper.find('.mv-publish-title-input').setValue('New first-page post')
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [new File(['a'], 'photo.jpg', { type: 'image/jpeg' })],
+    })
+    await fileInput.trigger('change')
+    await wrapper.find('.mv-publish-form').trigger('submit')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(2, '1', 1, 2)
+    expect(wrapper.findAll('.mv-post-title').map((node) => node.text())).toEqual([
+      'Shifted page item 4',
+      'Original page item 3',
+    ])
+    expect(wrapper.text()).not.toContain('New first-page post')
+    expect(wrapper.find('.mv-pagination-status').text()).toBe('Page 2 of 3')
+  })
+
+  it('clears a club-scoped upload draft and drops its stale error after navigating to another club', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+    const publishDeferred = createDeferred<ClubPost>()
+    publishClubPostMock.mockReturnValueOnce(publishDeferred.promise)
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media')
+    await flushPromises()
+
+    await wrapper.find('.mv-publish-title-input').setValue('Club one draft')
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [new File(['a'], 'club-one.jpg', { type: 'image/jpeg' })],
+    })
+    await fileInput.trigger('change')
+    await wrapper.find('.mv-publish-form').trigger('submit')
+    await flushPromises()
+
+    await router.push('/clubs/2/media')
+    await flushPromises()
+
+    expect(wrapper.find<HTMLInputElement>('.mv-publish-title-input').element.value).toBe('')
+    expect(wrapper.find('.mv-publish-preview').exists()).toBe(false)
+    expect(wrapper.find('.mv-publish-submit').attributes('disabled')).toBeUndefined()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-preview')
+
+    publishDeferred.reject(new Error('Club one upload failed'))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Club one upload failed')
+    expect(wrapper.find<HTMLInputElement>('.mv-publish-title-input').element.value).toBe('')
   })
 
   it('shows a required-photo message and does not call publishClubPost when no file is selected', async () => {
@@ -1642,8 +1721,11 @@ describe('ClubMediaView pin and unpin', () => {
     const authStore = useAuthStore()
     authStore.currentUser = buildAuthUser({ isOwner: true })
     fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: false }))
-    fetchClubMediaFeedMock.mockResolvedValue(
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
       buildFeed({ items: [buildPost({ id: 1, pinnedAt: null })], total: 1 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, pinnedAt: '2024-06-01T00:00:00Z' })], total: 1 }),
     )
     pinClubPostMock.mockResolvedValue(undefined)
 
@@ -1671,8 +1753,11 @@ describe('ClubMediaView pin and unpin', () => {
 
   it('pins an unpinned post and relabels the control to Unpin', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: true }))
-    fetchClubMediaFeedMock.mockResolvedValue(
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
       buildFeed({ items: [buildPost({ id: 1, pinnedAt: null })], total: 1 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, pinnedAt: '2024-06-01T00:00:00Z' })], total: 1 }),
     )
     pinClubPostMock.mockResolvedValue(undefined)
 
@@ -1688,10 +1773,40 @@ describe('ClubMediaView pin and unpin', () => {
     expect(wrapper.find('.mv-badge-pinned').exists()).toBe(true)
   })
 
+  it('reorders the page from the authoritative feed after a post is pinned', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: true }))
+    const first = buildPost({ id: 1, title: 'Newest unpinned post', pinnedAt: null })
+    const second = buildPost({ id: 2, title: 'Post to pin', pinnedAt: null })
+    const pinnedSecond = { ...second, pinnedAt: '2024-06-01T00:00:00Z' }
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [first, second], size: 2, total: 2 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [pinnedSecond, first], size: 2, total: 2 }),
+    )
+    pinClubPostMock.mockResolvedValue(undefined)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.findAll('.mv-pin-toggle')[1]!.trigger('click')
+    await flushPromises()
+
+    expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(2, '1', 0, 2)
+    expect(wrapper.findAll('.mv-post-title').map((node) => node.text())).toEqual([
+      'Post to pin',
+      'Newest unpinned post',
+    ])
+    expect(wrapper.findAll('.mv-badge-pinned')).toHaveLength(1)
+  })
+
   it('unpins a pinned post and relabels the control to Pin', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: true }))
-    fetchClubMediaFeedMock.mockResolvedValue(
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
       buildFeed({ items: [buildPost({ id: 1, pinnedAt: '2024-06-01T00:00:00Z' })], total: 1 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, pinnedAt: null })], total: 1 }),
     )
     unpinClubPostMock.mockResolvedValue(undefined)
 
@@ -1756,6 +1871,24 @@ describe('ClubMediaView robots meta', () => {
     wrapper.unmount()
 
     expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('index, follow')
+  })
+
+  it('restores a pre-existing robots meta tag that originally had no content attribute', async () => {
+    const existing = document.createElement('meta')
+    existing.setAttribute('name', 'robots')
+    document.head.appendChild(existing)
+
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    expect(existing.getAttribute('content')).toBe('noindex')
+
+    wrapper.unmount()
+
+    expect(document.head.querySelector('meta[name="robots"]')).toBe(existing)
+    expect(existing.hasAttribute('content')).toBe(false)
   })
 })
 

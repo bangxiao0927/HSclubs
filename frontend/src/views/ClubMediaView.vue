@@ -250,6 +250,7 @@ const publishPreviewUrl = ref('')
 const publishing = ref(false)
 const publishError = ref('')
 const publishFileInput = ref<HTMLInputElement | null>(null)
+let publishAttemptGeneration = 0
 
 const revokePublishPreview = () => {
   if (publishPreviewUrl.value) {
@@ -277,9 +278,50 @@ const resetPublishForm = () => {
   }
 }
 
+const resetPublishContext = () => {
+  // The form belongs to a club, not to an individual feed page. Changing page should preserve
+  // a draft, but changing club must invalidate an in-flight attempt and discard its file,
+  // preview and errors so they cannot land on another club's form.
+  publishAttemptGeneration += 1
+  publishing.value = false
+  publishError.value = ''
+  resetPublishForm()
+}
+
+const refreshCurrentFeedAfterMutation = async (
+  session: ViewSession,
+  applyFallback: () => void,
+) => {
+  // Do not issue a request for a view the user has already left. The empty apply is only an
+  // ownership check; it deliberately changes no state.
+  if (!session.apply(() => {})) {
+    return
+  }
+
+  const attempt = session.claim(FEED_CHANNEL)
+  const requestedClubId = routeClubId.value
+  const requestedPage = page.value
+  const requestedSize = size.value
+
+  try {
+    const feed = await fetchClubMediaFeed(requestedClubId, requestedPage, requestedSize)
+    attempt.apply(() => {
+      posts.value = feed.items
+      page.value = feed.page
+      size.value = feed.size
+      total.value = feed.total
+    })
+  } catch {
+    // A successful mutation should still get useful local feedback if its follow-up GET fails.
+    // Applying through the same claim prevents an older fallback from overwriting a newer
+    // mutation's authoritative refresh.
+    attempt.apply(applyFallback)
+  }
+}
+
 // Raw fetch with FormData and no explicit Content-Type (see publishClubPost's own Javadoc-style
-// comment): the created post is prepended locally so the feed updates without a page reload or
-// a second round trip back to the server.
+// comment). After the upload, the current page is refreshed so pin priority and page boundaries
+// always come from the server's canonical feed ordering.
 const handlePublish = async () => {
   if (!club.value || publishing.value) {
     return
@@ -289,23 +331,41 @@ const handlePublish = async () => {
     return
   }
 
-  // The publish form itself (its draft, `publishing` flag and error) is not part of the feed
-  // state a session owns -- `load()` never resets it -- so those writes stay unguarded and the
-  // form can always recover. Only the feed mutation below belongs to the session.
   const session = feedSessions.current()
+  const submittedClubId = routeClubId.value
+  const attemptGeneration = ++publishAttemptGeneration
+  const isCurrentAttempt = () =>
+    attemptGeneration === publishAttemptGeneration && routeClubId.value === submittedClubId
   publishing.value = true
   publishError.value = ''
   try {
-    const created = await publishClubPost(routeClubId.value, publishTitle.value, publishFile.value)
-    session.apply(() => {
-      posts.value = [created, ...posts.value]
+    const created = await publishClubPost(submittedClubId, publishTitle.value, publishFile.value)
+    if (isCurrentAttempt()) {
+      resetPublishForm()
+    }
+
+    // A new unpinned post belongs after every pinned post, and on later pages it shifts the
+    // page boundary. Only the server can authoritatively rebuild that ordering. If the
+    // follow-up GET fails, keep page zero useful with a correctly placed optimistic item and
+    // at least keep the total accurate on later pages.
+    await refreshCurrentFeedAfterMutation(session, () => {
       total.value += 1
+      if (page.value === 0) {
+        const firstUnpinnedIndex = posts.value.findIndex((post) => !post.pinnedAt)
+        const insertionIndex = firstUnpinnedIndex === -1 ? posts.value.length : firstUnpinnedIndex
+        const nextPosts = [...posts.value]
+        nextPosts.splice(insertionIndex, 0, created)
+        posts.value = nextPosts.slice(0, size.value)
+      }
     })
-    resetPublishForm()
   } catch (err) {
-    publishError.value = err instanceof Error ? err.message : 'Failed to publish post'
+    if (isCurrentAttempt()) {
+      publishError.value = err instanceof Error ? err.message : 'Failed to publish post'
+    }
   } finally {
-    publishing.value = false
+    if (isCurrentAttempt()) {
+      publishing.value = false
+    }
   }
 }
 
@@ -506,12 +566,12 @@ const handleTogglePin = async (post: ClubPost) => {
   try {
     if (post.pinnedAt) {
       await unpinClubPost(routeClubId.value, post.id)
-      session.apply(() => {
+      await refreshCurrentFeedAfterMutation(session, () => {
         posts.value = posts.value.map((p) => (p.id === post.id ? { ...p, pinnedAt: null } : p))
       })
     } else {
       await pinClubPost(routeClubId.value, post.id)
-      session.apply(() => {
+      await refreshCurrentFeedAfterMutation(session, () => {
         posts.value = posts.value.map((p) =>
           p.id === post.id ? { ...p, pinnedAt: new Date().toISOString() } : p,
         )
@@ -632,6 +692,14 @@ onBeforeUnmount(() => {
     existing.remove()
   } else if (previousRobotsContent !== null) {
     existing.setAttribute('content', previousRobotsContent)
+  } else {
+    existing.removeAttribute('content')
+  }
+})
+
+watch(routeClubId, (nextClubId, previousClubId) => {
+  if (nextClubId !== previousClubId) {
+    resetPublishContext()
   }
 })
 
@@ -933,6 +1001,8 @@ watch(
 
 .mv-field input,
 .mv-field textarea {
+  min-width: 0;
+  max-width: 100%;
   border-radius: 12px;
   border: 1px solid var(--mv-border);
   padding: 0.5rem 0.75rem;
@@ -949,7 +1019,9 @@ watch(
 }
 
 .mv-publish-preview {
+  width: 100%;
   max-width: 240px;
+  max-height: 320px;
   border-radius: 14px;
   object-fit: cover;
 }
@@ -977,6 +1049,7 @@ watch(
 
 .mv-post-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
@@ -1053,6 +1126,7 @@ watch(
 .mv-post-title {
   margin: 0;
   font-size: 1.15rem;
+  overflow-wrap: anywhere;
 }
 
 .mv-post-author {
@@ -1118,6 +1192,7 @@ watch(
 
 .mv-comment-body {
   margin: 0.15rem 0;
+  overflow-wrap: anywhere;
 }
 
 .mv-comment-time {
