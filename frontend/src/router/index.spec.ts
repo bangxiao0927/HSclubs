@@ -91,7 +91,31 @@ describe('authentication gate', () => {
     await router.push('/clubs/3/media')
     await router.isReady()
 
-    expect(router.currentRoute.value.name).toBe('club-media')
+    expect(router.currentRoute.value.name).toBe('club-detail')
+  })
+})
+
+describe('legacy club media route redirect', () => {
+  it('redirects /clubs/:id/media to /clubs/:id with the #media hash', async () => {
+    await primeSession(null)
+
+    await router.push('/clubs/3/media')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/clubs/3')
+    expect(router.currentRoute.value.hash).toBe('#media')
+  })
+
+  it('preserves the query string from the legacy media route', async () => {
+    await primeSession(null)
+
+    await router.push('/clubs/3/media?page=2&size=6')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/clubs/3')
+    expect(router.currentRoute.value.query.page).toBe('2')
+    expect(router.currentRoute.value.query.size).toBe('6')
+    expect(router.currentRoute.value.hash).toBe('#media')
   })
 })
 

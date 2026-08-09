@@ -48,6 +48,16 @@ const router = useRouter()
 const authStore = useAuthStore()
 const { currentUser } = storeToRefs(authStore)
 
+// Embedded mode is how ClubDetailView renders this feed below the club header (see the
+// #media section there): no duplicate back control, no nested page-shell layout, headings
+// demoted below the page's own <h1>, and no noindex robots tag (the club detail page it lives
+// on stays indexable). `snapshot` lets the embedding parent hand over the club record it
+// already fetched, so the two views don't both issue a GET for the same club.
+const props = withDefaults(defineProps<{ embedded?: boolean; snapshot?: Club | null }>(), {
+  embedded: false,
+  snapshot: null,
+})
+
 const club = ref<Club | null>(null)
 const posts = ref<ClubPost[]>([])
 const page = ref(0)
@@ -154,7 +164,11 @@ const load = async () => {
 
   try {
     const [clubResponse, feed] = await Promise.all([
-      needsClub ? fetchClubById(clubIdOrSlug) : Promise.resolve(club.value),
+      needsClub
+        ? props.snapshot
+          ? Promise.resolve(props.snapshot)
+          : fetchClubById(clubIdOrSlug)
+        : Promise.resolve(club.value),
       fetchClubMediaFeed(clubIdOrSlug, requestedPage, requestedSize),
     ])
     // Dropped whole if a newer load() has since superseded this one: applying a stale response
@@ -191,7 +205,14 @@ const goToPage = (nextPage: number) => {
   if (nextPage < 0) {
     return
   }
-  void router.push({ query: { ...route.query, page: String(nextPage), size: String(size.value) } })
+  // Embedded mode always lives under the club detail page's #media section (see
+  // ClubDetailView.vue). Keeping the hash on every pagination push means a reload or a
+  // browser Back/Forward step lands the viewer back on the media section instead of at the
+  // top of the club page.
+  void router.push({
+    query: { ...route.query, page: String(nextPage), size: String(size.value) },
+    hash: props.embedded ? '#media' : route.hash,
+  })
 }
 
 const isExpanded = (postId: number) => expandedPostIds.value.has(postId)
@@ -667,6 +688,9 @@ let previousRobotsContent: string | null = null
 let createdRobotsMeta = false
 
 onMounted(() => {
+  if (props.embedded) {
+    return
+  }
   const existing = document.head.querySelector('meta[name="robots"]')
   if (existing) {
     previousRobotsContent = existing.getAttribute('content')
@@ -687,6 +711,9 @@ onBeforeUnmount(() => {
   // would push a page/size query onto whatever route the viewer has moved on to.
   feedSessions.end()
   revokePublishPreview()
+  if (props.embedded) {
+    return
+  }
   const existing = document.head.querySelector('meta[name="robots"]')
   if (!existing) {
     return
@@ -716,8 +743,8 @@ watch(
 </script>
 
 <template>
-  <section class="club-media page-shell">
-    <BackButton :fallback-to="backTarget">← Back to club</BackButton>
+  <section class="club-media" :class="{ 'page-shell': !props.embedded }">
+    <BackButton v-if="!props.embedded" :fallback-to="backTarget">← Back to club</BackButton>
 
     <div v-if="loading" class="mv-status">Loading club media…</div>
 
@@ -729,12 +756,12 @@ watch(
     <template v-else>
       <header class="mv-header">
         <p class="section-label" v-if="club">Media · {{ club.name }}</p>
-        <h1>Club media</h1>
+        <component :is="props.embedded ? 'h2' : 'h1'" class="mv-title">Club media</component>
         <p class="mv-subtitle">Activity photos and updates shared by club members.</p>
       </header>
 
       <section v-if="club?.viewerIsMember" class="mv-publish">
-        <h2 class="mv-publish-title">Share an update</h2>
+        <component :is="props.embedded ? 'h3' : 'h2'" class="mv-publish-title">Share an update</component>
         <p class="mv-publish-notice">{{ PUBLIC_VISIBILITY_NOTICE }}</p>
         <form class="mv-publish-form" @submit.prevent="handlePublish">
           <label class="mv-field">
@@ -790,7 +817,7 @@ watch(
             <span v-if="post.pinnedAt" class="mv-badge-pinned">Pinned</span>
           </div>
           <div class="mv-post-body">
-            <h2 class="mv-post-title">{{ post.title }}</h2>
+            <component :is="props.embedded ? 'h3' : 'h2'" class="mv-post-title">{{ post.title }}</component>
             <div class="mv-post-author">
               <img
                 :src="userAvatar(post.authorAvatarUrl, post.authorDisplayName)"
@@ -937,7 +964,7 @@ watch(
   margin-top: 0.5rem;
 }
 
-.mv-header h1 {
+.mv-header .mv-title {
   margin: 0.25rem 0 0.35rem;
   font-size: clamp(1.8rem, 3.5vw, 2.6rem);
 }
@@ -1253,7 +1280,7 @@ watch(
 }
 
 @media (max-width: 480px) {
-  .mv-header h1 {
+  .mv-header .mv-title {
     font-size: 1.5rem;
   }
 

@@ -128,7 +128,10 @@ const createDeferred = <T,>(): Deferred<T> => {
 
 let router: Router
 
-const mountAtMediaRoute = async (path = '/clubs/1/media') => {
+const mountAtMediaRoute = async (
+  path = '/clubs/1/media',
+  props: Record<string, unknown> = {},
+) => {
   router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -139,7 +142,7 @@ const mountAtMediaRoute = async (path = '/clubs/1/media') => {
   })
   await router.push(path)
   await router.isReady()
-  return mount(ClubMediaView, { global: { plugins: [router] } })
+  return mount(ClubMediaView, { props, global: { plugins: [router] } })
 }
 
 beforeEach(() => {
@@ -1922,6 +1925,85 @@ describe('ClubMediaView robots meta', () => {
 
     expect(document.head.querySelector('meta[name="robots"]')).toBe(existing)
     expect(existing.hasAttribute('content')).toBe(false)
+  })
+})
+
+describe('ClubMediaView embedded mode', () => {
+  it('renders without its own back-to-club control or page-shell layout, using non-top-level headings', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost()], total: 1 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media', { embedded: true })
+    await flushPromises()
+
+    expect(wrapper.find('.app-back-button').exists()).toBe(false)
+    expect(wrapper.find('.page-shell').exists()).toBe(false)
+    expect(wrapper.find('h1').exists()).toBe(false)
+    expect(wrapper.find('h2').text()).toBe('Club media')
+    expect(wrapper.find('h3.mv-post-title').text()).toBe('Weekly meeting recap')
+  })
+
+  it('does not set the page robots meta tag to noindex', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+
+    await mountAtMediaRoute('/clubs/1/media', { embedded: true })
+    await flushPromises()
+
+    expect(document.head.querySelector('meta[name="robots"]')).toBeNull()
+  })
+
+  it('uses a supplied snapshot instead of fetching the club when one is provided', async () => {
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+    const snapshot = buildClub({ name: 'Robotics Club' })
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media', { embedded: true, snapshot })
+    await flushPromises()
+
+    expect(fetchClubByIdMock).not.toHaveBeenCalled()
+    expect(wrapper.find('.section-label').text()).toBe('Media · Robotics Club')
+  })
+})
+
+describe('ClubMediaView embedded pagination hash', () => {
+  it('keeps the #media anchor in the URL when paginating, so a reload or Back lands back on the media section', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1 })], page: 0, size: 12, total: 24 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 2 })], page: 1, size: 12, total: 24 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media', { embedded: true })
+    await flushPromises()
+
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.hash).toBe('#media')
+    expect(router.currentRoute.value.query.page).toBe('1')
+  })
+
+  it('does not add a #media hash to a standalone pagination navigation', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1 })], page: 0, size: 12, total: 24 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 2 })], page: 1, size: 12, total: 24 }),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.hash).toBe('')
+    expect(router.currentRoute.value.query.page).toBe('1')
   })
 })
 

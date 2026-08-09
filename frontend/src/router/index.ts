@@ -39,7 +39,14 @@ const router = createRouter({
     {
       path: '/clubs/:id/media',
       name: 'club-media',
-      component: () => import('../views/ClubMediaView.vue'),
+      // Club media now renders embedded on the club detail page (see
+      // ClubDetailView.vue's #media section). This route is kept only so
+      // pre-existing links and bookmarks still land somewhere useful.
+      redirect: (to) => ({
+        path: `/clubs/${to.params.id}`,
+        query: to.query,
+        hash: '#media',
+      }),
     },
     {
       path: '/clubs/:id/admin',

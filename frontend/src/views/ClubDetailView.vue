@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
 import { applyToClub, cancelMembershipRequest, fetchAllClubs, fetchClubById } from '../services/clubService'
@@ -7,9 +7,11 @@ import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
 import BackButton from '../components/BackButton.vue'
+import ClubMediaView from './ClubMediaView.vue'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
+const mediaSectionRef = ref<HTMLElement | null>(null)
 const relatedClubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
@@ -44,6 +46,22 @@ const instagramHandle = (url?: string | null) => {
   return lastPart.startsWith('@') ? lastPart : `@${lastPart}`
 }
 
+// The legacy /clubs/:id/media route redirects here with a #media hash (see router/index.ts),
+// but the browser's native anchor jump fires before this section exists in the DOM -- club
+// detail loads asynchronously and the #media section is behind `v-if="club"`. So once the
+// club has loaded and Vue has flushed that DOM update, jump to it ourselves. Guarded for
+// jsdom, where elements exist but scrollIntoView is not implemented.
+const scrollToMediaSection = async () => {
+  if (route.hash !== '#media') {
+    return
+  }
+  await nextTick()
+  const target = mediaSectionRef.value
+  if (target && typeof target.scrollIntoView === 'function') {
+    target.scrollIntoView()
+  }
+}
+
 const loadClub = async (id: string) => {
   loading.value = true
   error.value = ''
@@ -59,6 +77,9 @@ const loadClub = async (id: string) => {
     relatedClubs.value = []
   } finally {
     loading.value = false
+  }
+  if (club.value) {
+    await scrollToMediaSection()
   }
 }
 
@@ -118,6 +139,18 @@ watch(
   },
   { immediate: true }
 )
+
+// A navigation that only changes the hash (e.g. pressing a "jump to media"
+// link, or a browser Back/Forward step within the same club) does not touch
+// route.params.id, so the watch above never re-runs and the club is not
+// refetched. Scroll independently whenever the hash becomes #media on a club
+// that is already loaded.
+watch(
+  () => route.hash,
+  () => {
+    void scrollToMediaSection()
+  }
+)
 </script>
 
 <template>
@@ -163,7 +196,6 @@ watch(
           </div>
         </div>
         <div class="hero-side">
-          <RouterLink :to="`/clubs/${club.id}/media`" class="media-link"> View club media </RouterLink>
           <RouterLink
             v-if="club.canManage || isOwner"
             :to="`/clubs/${club.id}/admin`"
@@ -257,6 +289,10 @@ watch(
           </li>
         </ul>
       </aside>
+    </section>
+
+    <section id="media" ref="mediaSectionRef" class="club-media-section">
+      <ClubMediaView embedded :snapshot="club" />
     </section>
   </section>
 
@@ -369,16 +405,6 @@ watch(
   color: var(--mv-gold);
   font-weight: 600;
   background: var(--mv-surface-muted);
-}
-
-.media-link {
-  border: 1px solid var(--mv-border);
-  border-radius: 999px;
-  padding: 0.4rem 1rem;
-  text-decoration: none;
-  color: var(--mv-text-soft);
-  font-weight: 600;
-  background: var(--mv-surface-card);
 }
 
 .club-hero h1 {
@@ -585,11 +611,6 @@ watch(
   .hero-side {
     width: 100%;
     align-items: flex-start;
-  }
-
-  .media-link {
-    width: 100%;
-    text-align: center;
   }
 
   .admin-link {
