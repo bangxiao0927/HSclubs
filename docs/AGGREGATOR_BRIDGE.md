@@ -7,6 +7,31 @@ the guiding page decides a school site is genuine.
 > should be implemented before the sample school workflow is stable
 > (see `docs/DEVELOPMENT_SEQUENCE.md`, Guiding Rule).
 
+## Decisions taken
+
+1. **The guiding page is private and single-operator.** One instance, run by the project owner
+   on their own machine; every school's data converges there. It is not a service other schools
+   log into.
+2. **The school publishes an address** alongside its name, so the guiding page can list where
+   each school is. Shipped: `APP_SUMMARY_ADDRESS`.
+3. **A school leaves by taking down its challenge file**, and the guiding page can also stop
+   guiding a school on its own. Either side can end it; neither needs the other's cooperation.
+
+What (1) changes about the shape below: **pull is not just authoritative, it is sufficient.** A
+private aggregator on one machine can reach out to school sites, but school sites cannot
+necessarily reach back -- that would mean exposing an inbound endpoint from a personal server,
+with a certificate, a public name, and an open port, purely to save a few minutes of latency on
+a directory that changes weekly. So:
+
+- **Build the pull.** It works from behind NAT, needs nothing published, and survives the
+  machine being asleep: a missed hour is just a later poll.
+- **Treat the ping as optional and probably unnecessary.** It stays designed below, because the
+  cost of writing it down is zero and the cost of retrofitting a protocol is not, but a
+  single-operator private page should not open an inbound port for it.
+
+The rest of this document therefore describes the full bridge; the ping half is the part to skip
+unless a reason to expose that endpoint appears.
+
 ## What exists today
 
 `GET /api/summary` on each school site: anonymous, read-only, any origin (its own
@@ -74,6 +99,10 @@ prove that a given URL belongs to the school it claims to be. Two checks, both c
 Re-verification runs on a schedule (monthly, say). A site that stops answering, or whose
 challenge file disappears, is marked unverified and hidden from the guiding page rather than
 deleted, so an outage is not a removal.
+
+That is also how a school leaves: it deletes the challenge file and the next re-verification
+stops listing it. No request to the operator, no coordination. The operator can equally drop a
+school from the registry at any time. Both directions are one-sided on purpose.
 
 ## Authenticating a ping
 
@@ -171,15 +200,25 @@ Behaviour:
 
 ## Open questions
 
-1. Is the guiding page's backend public or private? `docs/REPO_STRATEGY.md` says the backend may
-   stay private if it collects status data; that decides whether the registry is a file in a
-   repo or a database behind an admin UI.
-2. Does the guiding page need anything the summary does not already carry -- a contact address,
-   a region for map/filtering, a logo? Those are school identity, so they would be new
-   `APP_SUMMARY_*` settings here rather than a new endpoint.
+1. ~~Public or private backend?~~ Private, single-operator (see Decisions above). The registry
+   can therefore be the simplest thing that works -- a file the operator edits -- rather than a
+   database behind an admin UI. Its *inbound* surface -- a ping endpoint, an admin UI, any school
+   login -- needs no public exposure at all; the page visitors read is of course still published,
+   which is what `docs/REPO_STRATEGY.md` means by a public frontend with a private backend.
+2. ~~Does the guiding page need more than the summary carries?~~ An address, now shipped as
+   `APP_SUMMARY_ADDRESS`. Anything further (a region for map filtering, coordinates, a logo) is
+   school identity too, so it is another `APP_SUMMARY_*` field rather than a new endpoint --
+   worth adding only when the page actually renders it.
 3. ~~Should `lastUpdatedAt` become an instant with a timezone?~~ Done: it is an ISO-8601 instant
    with an offset, taken from `app.summary.time-zone` (the zone the database writes timestamps
    in, defaulting to the application's own). Fixed before anything consumed it, which is the
    cheapest moment to change a published field.
-4. How is a school removed -- deregistered by the guiding page, or by the school taking down the
-   challenge file? The second is self-service and needs no support request.
+4. ~~How is a school removed?~~ Both, independently. A school leaves by deleting its challenge
+   file: the next re-verification fails and the page stops listing it, with no message to anyone.
+   The guiding page can also stop guiding a school at any time by dropping it from the registry.
+   Neither side can force the other to keep the link, which is the right property for a page one
+   person runs and schools join voluntarily.
+
+Nothing above is blocking. The remaining question is timing: the notifier this repo would gain
+is only worth building if the ping half is built at all, and per the Decisions section a private
+single-operator page probably should not.

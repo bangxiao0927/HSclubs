@@ -86,6 +86,15 @@ class SummaryControllerTest {
             .andExpect(jsonPath("$.lastUpdatedAt").value("2026-02-03T04:05:00-08:00"));
     }
 
+    // The key is always present, even unset: a consumer checks for null, never for absence.
+    @Test
+    void keepsAnUnsetAddressInTheResponseAsNull() throws Exception {
+        mockMvc.perform(get("/api/summary"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.address").doesNotExist())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("\"address\":null")));
+    }
+
     @Test
     void answersNotModifiedWhenThePollerAlreadyHasThisVersion() throws Exception {
         mockMvc.perform(get("/api/summary").header("If-None-Match", ETAG))
