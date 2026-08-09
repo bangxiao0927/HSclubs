@@ -98,9 +98,17 @@ The 2nd repo needs reliable data from real school sites. The 3rd repo needs a mo
 
 ## Current Boundary
 
-Do not create the 2nd or 3rd repo yet. Track their requirements here and in the roadmap, but keep active implementation inside this repo until the sample school workflow is dependable.
+The 2nd repo now exists and is being scaffolded:
+[`hsclubs-guiding-page`](https://github.com/bangxiao0927/hsclubs-guiding-page). Phase 6 of
+`docs/DEVELOPMENT_SEQUENCE.md` exited first -- the summary endpoint it consumes is shipped,
+documented and tested -- which is the gate that was holding it.
 
-## How the 2nd Repo Will Connect
+The boundary that still stands: **no multi-school notion enters this repo.** A school site knows
+about itself and publishes one summary. It does not know the guiding page exists, does not depend
+on it being up, and gains no registry, no cross-school query, and no inbound endpoint for it. The
+3rd repo (mobile) is still not started; the sample school workflow comes first.
+
+## How the 2nd Repo Connects
 
 The data exchange between a school site and the guiding page -- what is pulled, what may be
 pushed, how a school site is verified, and what this repo would need to add -- is designed in
@@ -108,3 +116,8 @@ pushed, how a school site is verified, and what this repo would need to add -- i
 school may optionally *notify* it that something changed. A school never pushes the data itself,
 so the school site stays the single source of truth and the guiding page never renders content
 that someone else's server handed it.
+
+The consumer's own copy of that contract lives in the 2nd repo, in its `docs/BRIDGE_CONTRACT.md`,
+so neither side has to read the other's codebase to stay compatible. Because the guiding page is
+private and single-operator, the notification half is deliberately not being built: pull is
+sufficient, and it works from a machine with no inbound port that is free to be offline.

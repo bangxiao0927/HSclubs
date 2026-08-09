@@ -6,6 +6,11 @@ the guiding page decides a school site is genuine.
 > Status: design, not built. Only the pull half exists today (`GET /api/summary`). Nothing here
 > should be implemented before the sample school workflow is stable
 > (see `docs/DEVELOPMENT_SEQUENCE.md`, Guiding Rule).
+>
+> The consuming side now exists as its own repository,
+> [`hsclubs-guiding-page`](https://github.com/bangxiao0927/hsclubs-guiding-page), which carries
+> the consumer's copy of this contract, the registry format, and its own roadmap. Nothing in
+> *this* repo has been built for it, and per the Decisions below nothing needs to be.
 
 ## Decisions taken
 
