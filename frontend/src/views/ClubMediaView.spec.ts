@@ -827,6 +827,39 @@ describe('ClubMediaView publish form', () => {
     expect(wrapper.find('.mv-publish-preview').exists()).toBe(false)
   })
 
+  it('unlocks and clears the publish form once the upload succeeds even while the feed refresh is still pending', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(buildFeed())
+    const refreshDeferred = createDeferred<ClubPostFeedPage>()
+    fetchClubMediaFeedMock.mockReturnValueOnce(refreshDeferred.promise)
+    const created = buildPost({ id: 99, title: 'Published while refresh waits' })
+    publishClubPostMock.mockResolvedValue(created)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-publish-title-input').setValue('Published while refresh waits')
+    const fileInput = wrapper.find<HTMLInputElement>('.mv-publish-file-input')
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [new File(['a'], 'photo.jpg', { type: 'image/jpeg' })],
+    })
+    await fileInput.trigger('change')
+    await wrapper.find('.mv-publish-form').trigger('submit')
+    await flushPromises()
+
+    expect(publishClubPostMock).toHaveBeenCalledOnce()
+    expect(wrapper.find('.mv-publish-submit').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('.mv-publish-submit').text()).toBe('Publish')
+    expect(wrapper.find<HTMLInputElement>('.mv-publish-title-input').element.value).toBe('')
+    expect(wrapper.find('.mv-publish-preview').exists()).toBe(false)
+
+    refreshDeferred.resolve(buildFeed({ items: [created], total: 1 }))
+    await flushPromises()
+
+    expect(wrapper.find('.mv-post-title').text()).toBe('Published while refresh waits')
+  })
+
   it('refreshes a later page after publishing instead of inserting the new first-page post into it', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub({ viewerIsMember: true }))
     const originalPage = [

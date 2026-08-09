@@ -342,6 +342,9 @@ const handlePublish = async () => {
     const created = await publishClubPost(submittedClubId, publishTitle.value, publishFile.value)
     if (isCurrentAttempt()) {
       resetPublishForm()
+      // The upload itself is complete. A slow follow-up feed GET must not leave a successful
+      // form disabled and labelled "Publishing…" indefinitely.
+      publishing.value = false
     }
 
     // A new unpinned post belongs after every pinned post, and on later pages it shifts the
