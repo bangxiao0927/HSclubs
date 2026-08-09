@@ -48,18 +48,26 @@ school site                                   guiding page
 Registration is a human decision (a school is approved once), but the guiding page still has to
 prove that a given URL belongs to the school it claims to be. Two checks, both cheap:
 
-1. **Domain challenge.** The guiding page issues a one-time token. The school publishes it at
-   `https://<school-domain>/.well-known/hsclubs-site.txt` (a static file the reverse proxy can
-   serve; no backend change needed). The guiding page fetches it over HTTPS and matches. This
-   proves control of the domain, which is what "genuine" means here. The registry's summary URL
-   must then be `https://<school-domain>/api/summary` on that same host -- otherwise the
-   challenge proves control of a domain the data does not come from, and the whole "the pull is
-   authoritative" argument collapses. The pull follows no cross-host redirect and is bounded by
-   a short timeout and a response-size cap, so a registered site cannot redirect that
-   server-side fetch somewhere else (including inside the guiding page's own network) or hand
-   back an unbounded body.
+1. **Origin challenge.** The guiding page issues a one-time token. The school publishes it at
+   `/.well-known/hsclubs-site.txt` **on the same host that serves `/api/summary`** (a static
+   file the reverse proxy can serve; no backend change needed). The guiding page fetches it over
+   HTTPS and matches.
+
+   The host that matters is the API host, not the school's brand domain, because a challenge
+   served by a host that does not serve the data proves nothing about the data. So the registry
+   stores one URL, the challenge is fetched from that same origin, and the pull follows no
+   cross-origin redirect and is bounded by a short timeout and a response-size cap -- a
+   registered site cannot steer that server-side fetch somewhere else (including inside the
+   guiding page's own network) or hand back an unbounded body.
+
+   On the single-origin layout `docs/DEPLOYMENT.md` gives proxy config for, the static root is
+   already there and the file is genuinely a drop-in. A school that splits the API onto its own
+   host (`VITE_API_BASE_URL=https://api.school.example.org`, mentioned there as a build setting
+   with no server block of its own) has no static root on that host, so it adds one location
+   returning the token -- still proxy configuration, still no backend change, but worth saying
+   out loud rather than implying the file drops in anywhere.
 2. **Slug agreement.** The `slug` in the school's `/api/summary` must equal the slug the
-   registry holds for that domain. This stops one verified school from claiming another's
+   registry holds for that origin. This stops one verified school from claiming another's
    identity, and it is a field this repo already exposes and configures
    (`APP_SUMMARY_SLUG`).
 
@@ -87,14 +95,35 @@ Rules for the guiding page:
   verbatim replay of a ping read in transit (a proxy, a mis-set access log, a TLS-terminating
   middlebox), so keep a small per-slug cache of recently seen signatures.
 - Rate-limit per slug; a ping storm must never turn into a pull storm. Coalesce: at most one
-  pull per school per minute regardless of how many pings arrive. Note the rate-limit key comes
-  from the request, so an unauthenticated flood naming a real slug can exhaust that school's
-  ping budget -- which costs freshness only, never data, because the poll is the guarantee.
+  pull per school per minute regardless of how many pings arrive. Coalescing means **defer, not
+  drop**: the last ping inside a window still results in exactly one pull when the window ends.
+  Dropping it would lose immediacy in precisely the bursty case the ping exists for, and leave
+  that change waiting for the hourly poll. An over-limit ping is answered `429` and is still
+  recorded as the pending ping for the window, so "deferred" stays true for it too.
+- Rate-limit **after** verifying the signature, not before. The limiter is keyed on the slug,
+  which comes from the request, so limiting first would let an unauthenticated flood naming a
+  real slug consume that school's budget and get its genuine pings rejected at the door -- which
+  is a drop, not a deferral, and would quietly break the guarantee above. Verified-only budgets
+  mean a flood costs signature verification (cheap, and itself rate-limitable by source) rather
+  than a school's freshness.
 - Nothing above is load-bearing for correctness. Every one of these rules exists to keep a bad
   actor from making the guiding page do work, not to keep it from showing wrong numbers; the
   numbers always come from the school's own verified URL.
 - Treat the body as a hint only. Never store a number from it. The pull decides.
-- A failing ping is not an error the school needs to see: log and drop.
+- Answer every accepted ping the same way (`202`, no body). The school gets no signal it could
+  act on and none it could probe: only authentication failures are distinguishable, and the
+  guiding page's own state -- when it last pulled, whether the etag was new -- is never
+  reflected back.
+
+The signature covers the exact bytes of the three fields as they appear in the request: the
+timestamp header, the slug, and the etag **in its HTTP form, quotes included** (`"abc123"`, not
+`abc123`). Both sides must agree on that or every signature fails; it is called out because the
+quoting is the easy thing to get wrong.
+
+Secret lifecycle: issued once at registration over a channel that is not this bridge, rotated by
+accepting the old and new secret together for a short overlap, revoked by deregistering the
+school. It lives in the school's `.env` alongside the database password, so it must never be
+logged -- not even a prefix.
 
 Bearer tokens would be simpler, but a signature keeps the secret off the wire, which matters
 because the ping is sent from a school server that a volunteer maintains.
@@ -115,8 +144,22 @@ Behaviour:
 - One scheduled check (every few minutes) compares the current summary ETag with the last one
   sent. Different -> ping. This deliberately reuses the existing cached summary rather than
   hooking every write path, so no club/media code has to know the guiding page exists.
+- The ping is therefore never instant, and does not need to be: a change is announced at most
+  one summary cache TTL (`app.summary.cache-ttl-ms`, 60s by default) plus one check interval
+  after it happens. The announced etag is a hint about *which* change fired the ping, not a
+  value the pull is guaranteed to return: the cache TTL and the coalescing window can both
+  elapse first, so the pull may legitimately come back with a newer etag -- or with a 304
+  against one the guiding page already stored, if it pulled for an earlier ping in between.
+  Treating a mismatch as an error would therefore be wrong; the pull's answer is simply the
+  current truth.
+- The ETag is a content hash, not a random or per-process value, so a restart or a redeploy does
+  not invent a change. The first check after a restart has nothing to compare against and sends
+  one ping; that is deliberate, since it also re-announces a school whose earlier ping was lost.
 - Timeouts and failures are swallowed after a log line, with a bounded retry. **The school site
   must never fail, slow down, or leak an error to a student because a guiding page is down.**
+  Retries are for transport failures, 5xx, and the throttling statuses the guiding page itself
+  returns (`429`, `408`); any other 4xx means this school is misconfigured or deregistered, and
+  retrying that forever would just be a slow flood.
 - No student data leaves the school site. The ping carries a slug, an ETag and a timestamp.
 
 ## What stays out of this repo
