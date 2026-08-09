@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
 import {
+  approveMembershipRequest,
   fetchClubById,
   fetchClubMembers,
+  fetchMembershipRequests,
   invalidateClubCache,
+  rejectMembershipRequest,
   updateClub,
   updateClubMemberRole,
 } from '../services/clubService'
 import { searchUsers, assignPresident, removePresident } from '../services/userService'
-import type { Club, ClubMember } from '../types/club'
+import type { Club, ClubMember, ClubMembershipRequest } from '../types/club'
 import type { UserSearchResult } from '../services/userService'
 import { useAuthStore } from '../stores/auth'
 import { clubCategoryOptions } from '../utils/clubCategories'
@@ -18,10 +21,12 @@ import { buildApiUrl, notifyIfUnauthorized } from '../services/httpClient'
 import { resolveErrorMessage } from '../services/httpErrorMessage'
 import { clubImage } from '../utils/clubImages'
 import { userAvatar } from '../utils/avatarImages'
+import { createViewSessionOwner } from '../utils/viewSession'
 import BackButton from '../components/BackButton.vue'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
+const membersSectionRef = ref<HTMLElement | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const loadError = ref('')
@@ -36,6 +41,26 @@ const memberRoleOptions = [
   { value: 'member', label: 'Member' },
   { value: 'president', label: 'President' },
 ]
+
+// Pending membership requests, shown inline in the Members section next to the roster
+// (see /clubs/:id/admin/pending's redirect in router/index.ts, which now lands here with
+// a #members hash instead of rendering a separate page).
+const pendingRequests = ref<ClubMembershipRequest[]>([])
+const pendingLoading = ref(false)
+const pendingError = ref('')
+const approvalError = ref('')
+const approvingRequestId = ref<number | null>(null)
+const decliningRequestId = ref<number | null>(null)
+
+// Two overlapping loads of the same list -- a role change and an approve/decline landing
+// close together, or the loadClub-triggered fetch racing the canManageClub watcher below --
+// must let the newer response win instead of either blocking the second request outright (a
+// decided pending request would never leave the list) or letting a stale response clobber a
+// fresher one. Each list gets its own channel on one session per club, so a navigation to a
+// different club drops every in-flight roster/pending request for the club just left.
+const rosterSessions = createViewSessionOwner()
+const MEMBERS_CHANNEL = 'members'
+const PENDING_CHANNEL = 'pending'
 
 // President management state
 const presidentSearchQuery = ref('')
@@ -161,7 +186,24 @@ const { currentUser } = storeToRefs(authStore)
 const canManageClub = computed(() => Boolean(club.value?.canManage) || Boolean(currentUser.value?.isOwner))
 const presidents = computed(() => members.value.filter((m) => m.roleName?.toLowerCase() === 'president'))
 
+// The legacy /clubs/:id/admin/pending route redirects here with a #members hash (see
+// router/index.ts), but the browser's native anchor jump fires before this section exists in
+// the DOM -- the club admin page loads asynchronously and the #members section is behind
+// `v-if="club"`. So once the club has loaded and Vue has flushed that DOM update, jump to it
+// ourselves. Guarded for jsdom, where elements exist but scrollIntoView is not implemented.
+const scrollToMembersSection = async () => {
+  if (route.hash !== '#members') {
+    return
+  }
+  await nextTick()
+  const target = membersSectionRef.value
+  if (target && typeof target.scrollIntoView === 'function') {
+    target.scrollIntoView()
+  }
+}
+
 const loadClub = async (id: string) => {
+  rosterSessions.begin()
   loading.value = true
   loadError.value = ''
   formError.value = ''
@@ -172,48 +214,157 @@ const loadClub = async (id: string) => {
     hydrateForm(response)
     if (canManageClub.value) {
       void loadMembers(id)
+      void loadPendingRequests(id)
     } else {
       members.value = []
       membersError.value = ''
+      pendingRequests.value = []
+      pendingError.value = ''
+      approvalError.value = ''
     }
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : 'Failed to load club details'
     club.value = null
     members.value = []
     membersError.value = ''
+    pendingRequests.value = []
+    pendingError.value = ''
   } finally {
     loading.value = false
   }
+  if (club.value) {
+    await scrollToMembersSection()
+  }
 }
 
-const loadMembers = async (id: string) => {
+const loadMembers = async (id: string, options: { force?: boolean } = {}) => {
   if (!id || !canManageClub.value) {
     membersLoading.value = false
     members.value = []
     return
   }
   // Loading the club both calls this directly and flips canManageClub from false to true for a
-  // club president, which fires the watcher below -- two concurrent roster requests whose
-  // responses race to write members.value. One request in flight is enough.
-  if (membersLoading.value) {
+  // club president, which fires the watcher below -- two roster requests for the exact same id,
+  // back to back, with nothing having changed between them. One in flight is enough, so a plain
+  // call here still skips a second. A caller that knows the club's membership actually changed
+  // since the in-flight request started -- an approval, a role change, an explicit "Refresh
+  // roster" click -- passes force: true (see refreshMembers) so its own reload always runs; the
+  // newest claim on this channel wins regardless of which response arrives first.
+  if (!options.force && membersLoading.value) {
     return
   }
+  const attempt = rosterSessions.current().claim(MEMBERS_CHANNEL)
   membersLoading.value = true
   membersError.value = ''
   try {
-    members.value = await fetchClubMembers(id)
+    const data = await fetchClubMembers(id)
+    attempt.apply(() => {
+      members.value = data
+    })
   } catch (err) {
-    membersError.value = err instanceof Error ? err.message : 'Failed to load members'
-    members.value = []
+    attempt.apply(() => {
+      membersError.value = err instanceof Error ? err.message : 'Failed to load members'
+      members.value = []
+    })
   } finally {
-    membersLoading.value = false
+    attempt.apply(() => {
+      membersLoading.value = false
+    })
   }
 }
 
 const refreshMembers = async () => {
   if (club.value && canManageClub.value) {
-    await loadMembers(String(club.value.id))
+    await loadMembers(String(club.value.id), { force: true })
   }
+}
+
+const loadPendingRequests = async (id: string, options: { force?: boolean } = {}) => {
+  if (!id || !canManageClub.value) {
+    pendingRequests.value = []
+    pendingLoading.value = false
+    return
+  }
+  // Same shape as loadMembers above: a plain call still skips a second request for the exact
+  // same id fired back to back with nothing changed. force: true is for a caller -- an
+  // approve/decline decision, an explicit "Refresh list" click -- whose own reload must always
+  // run even if an earlier, now-stale request is still in flight; dropping it here would leave
+  // a decided request on screen and risk a stale re-decide on it later. The newest claim on
+  // this channel wins regardless of which response arrives first.
+  if (!options.force && pendingLoading.value) {
+    return
+  }
+  const attempt = rosterSessions.current().claim(PENDING_CHANNEL)
+  pendingLoading.value = true
+  pendingError.value = ''
+  approvalError.value = ''
+  try {
+    const data = await fetchMembershipRequests(id)
+    attempt.apply(() => {
+      pendingRequests.value = data
+    })
+  } catch (err) {
+    attempt.apply(() => {
+      pendingError.value = err instanceof Error ? err.message : 'Failed to load pending requests'
+      pendingRequests.value = []
+    })
+  } finally {
+    attempt.apply(() => {
+      pendingLoading.value = false
+    })
+  }
+}
+
+const refreshPendingRequests = async () => {
+  if (club.value && canManageClub.value) {
+    await loadPendingRequests(String(club.value.id), { force: true })
+  }
+}
+
+const approveRequest = async (requestId: number) => {
+  if (!club.value || !canManageClub.value || approvingRequestId.value === requestId) {
+    return
+  }
+  approvalError.value = ''
+  pendingError.value = ''
+  approvingRequestId.value = requestId
+  try {
+    await approveMembershipRequest(club.value.id, requestId)
+    // Approval both decides the request and adds a member, so the roster and the member count
+    // shown in the hero and live preview (club.value.memberCount) need to catch up too --
+    // otherwise the approved member only appears after a manual "Refresh roster" click.
+    await Promise.all([refreshPendingRequests(), refreshMembers(), refreshClubSnapshot()])
+  } catch (err) {
+    approvalError.value = err instanceof Error ? err.message : 'Failed to approve request'
+  } finally {
+    approvingRequestId.value = null
+  }
+}
+
+const rejectRequest = async (requestId: number) => {
+  if (!club.value || !canManageClub.value || decliningRequestId.value === requestId) {
+    return
+  }
+  approvalError.value = ''
+  pendingError.value = ''
+  decliningRequestId.value = requestId
+  try {
+    await rejectMembershipRequest(club.value.id, requestId)
+    // Declining does not change membership, so only the pending list needs to catch up.
+    await refreshPendingRequests()
+  } catch (err) {
+    approvalError.value = err instanceof Error ? err.message : 'Failed to decline request'
+  } finally {
+    decliningRequestId.value = null
+  }
+}
+
+const formatRequestTimestamp = (isoString: string) => {
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) {
+    return 'Requested recently'
+  }
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 const handleMemberRoleChange = async (member: ClubMember, event: Event) => {
@@ -362,9 +513,22 @@ watch(
   (allowed) => {
     if (allowed && club.value) {
       void loadMembers(String(club.value.id))
+      void loadPendingRequests(String(club.value.id))
     } else {
       members.value = []
+      pendingRequests.value = []
     }
+  }
+)
+
+// A navigation that only changes the hash (e.g. pressing a "jump to members" link, or a
+// browser Back/Forward step within the same club) does not touch route.params.id, so the
+// watch above never re-runs and the club is not refetched. Scroll independently whenever the
+// hash becomes #members on a club that is already loaded.
+watch(
+  () => route.hash,
+  () => {
+    void scrollToMembersSection()
   }
 )
 </script>
@@ -379,12 +543,6 @@ watch(
           :to="`/clubs/${club.id}`"
           class="ghost-btn"
         >View public page</RouterLink>
-        <button type="button" class="ghost-btn" @click="handleReset" :disabled="!club || saving">
-          Reset changes
-        </button>
-        <button type="button" class="primary-btn" @click="handleSave" :disabled="!club || saving">
-          {{ saving ? 'Saving…' : 'Save changes' }}
-        </button>
       </div>
     </div>
 
@@ -398,130 +556,125 @@ watch(
       <RouterLink :to="`/clubs/${club.id}`" class="ghost-btn">View the club page</RouterLink>
     </div>
     <template v-else-if="club">
-      <header class="admin-hero">
-        <div>
-          <p class="section-label">Admin · {{ club.category || 'Uncategorized' }}</p>
-          <h1>{{ club.name }}</h1>
-          <p class="hero-meta">
-            {{ club.memberCount }} members · Advisor {{ club.advisor || 'TBD' }} · {{ club.meetingSchedule }}
-          </p>
+      <section id="details" class="admin-section">
+        <header class="admin-hero">
+          <div>
+            <p class="section-label">Admin · {{ club.category || 'Uncategorized' }}</p>
+            <h1>{{ club.name }}</h1>
+            <p class="hero-meta">
+              {{ club.memberCount }} members · Advisor {{ club.advisor || 'TBD' }} · {{ club.meetingSchedule }}
+            </p>
+          </div>
+          <div class="hero-side">
+            <div class="club-avatar xlarge">
+              <img :src="clubImage(club)" :alt="`${club.name} avatar`" />
+            </div>
+            <div class="image-upload">
+              <label class="upload-btn">
+                {{ imageUploading ? 'Uploading…' : 'Change image' }}
+                <input type="file" accept="image/*" hidden @change="handleImageUpload" />
+              </label>
+              <p v-if="imageError" class="upload-error">{{ imageError }}</p>
+            </div>
+            <span class="club-id">Club ID · {{ club.id }}</span>
+          </div>
+        </header>
+
+        <div class="status-row" v-if="successMessage || formError">
+          <p v-if="successMessage" class="pill success" role="status">{{ successMessage }}</p>
+          <p v-if="formError" class="pill error" role="alert">{{ formError }}</p>
         </div>
-        <div class="hero-side">
-          <div class="club-avatar xlarge">
-            <img :src="clubImage(club)" :alt="`${club.name} avatar`" />
-          </div>
-          <div class="image-upload">
-            <label class="upload-btn">
-              {{ imageUploading ? 'Uploading…' : 'Change image' }}
-              <input type="file" accept="image/*" hidden @change="handleImageUpload" />
-            </label>
-            <p v-if="imageError" class="upload-error">{{ imageError }}</p>
-          </div>
-          <span class="club-id">Club ID · {{ club.id }}</span>
+
+        <div class="admin-grid">
+          <form class="admin-form" @submit.prevent="handleSave">
+            <div class="form-grid">
+              <label>
+                <span>Club name</span>
+                <input v-model="form.name" type="text" required />
+              </label>
+              <label>
+                <span>Alias / short name</span>
+                <input v-model="form.aliasName" type="text" placeholder="Optional" />
+              </label>
+              <label class="wide">
+                <span>Description</span>
+                <textarea v-model="form.description" rows="4" required></textarea>
+              </label>
+              <label>
+                <span>Category</span>
+                <select v-model="form.category" required>
+                  <option v-for="category in clubCategoryOptions" :key="category.title" :value="category.title">
+                    {{ category.title }}
+                  </option>
+                </select>
+              </label>
+              <label>
+                <span>Meeting schedule</span>
+                <input v-model="form.meetingSchedule" type="text" required />
+              </label>
+              <label class="wide">
+                <span>President schedule note</span>
+                <textarea
+                  v-model="form.scheduleNote"
+                  rows="3"
+                  placeholder="Add exceptions, meeting dates, room changes, or extra context for the calendar."
+                ></textarea>
+              </label>
+              <label>
+                <span>Location</span>
+                <input v-model="form.location" type="text" placeholder="Optional" />
+              </label>
+              <label>
+                <span>Advisor</span>
+                <input v-model="form.advisor" type="text" placeholder="Advisor name" />
+              </label>
+              <label>
+                <span>Contact email</span>
+                <input v-model="form.contactEmail" type="email" placeholder="club@example.com" />
+              </label>
+              <label class="wide">
+                <span>Achievements (one per line)</span>
+                <textarea v-model="form.achievementsText" rows="4" placeholder="Add each highlight on its own line"></textarea>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="ghost-btn" @click="handleReset" :disabled="saving">Discard edits</button>
+              <button type="submit" class="primary-btn" :disabled="saving">{{ saving ? 'Saving…' : 'Save changes' }}</button>
+            </div>
+          </form>
+
+          <aside class="insights-panel">
+            <h2>Live preview</h2>
+            <div class="insight-card">
+              <p class="label">Members</p>
+              <p class="value">{{ club.memberCount }}</p>
+            </div>
+            <div class="insight-card">
+              <p class="label">Contact</p>
+              <p class="value">{{ form.contactEmail || 'Not provided' }}</p>
+            </div>
+            <div class="insight-card">
+              <p class="label">President note</p>
+              <p class="value note-preview">{{ form.scheduleNote || 'No president note added' }}</p>
+            </div>
+            <div class="insight-card achievements">
+              <p class="label">Achievements</p>
+              <ul>
+                <li v-for="(item, index) in achievementPreview" :key="index">{{ item }}</li>
+                <li v-if="!achievementPreview.length">No achievements listed</li>
+              </ul>
+            </div>
+          </aside>
         </div>
-      </header>
+      </section>
 
-      <div class="status-row" v-if="successMessage || formError">
-        <p v-if="successMessage" class="pill success" role="status">{{ successMessage }}</p>
-        <p v-if="formError" class="pill error" role="alert">{{ formError }}</p>
-      </div>
-
-      <div class="admin-grid">
-        <form class="admin-form" @submit.prevent="handleSave">
-          <div class="form-grid">
-            <label>
-              <span>Club name</span>
-              <input v-model="form.name" type="text" required />
-            </label>
-            <label>
-              <span>Alias / short name</span>
-              <input v-model="form.aliasName" type="text" placeholder="Optional" />
-            </label>
-            <label class="wide">
-              <span>Description</span>
-              <textarea v-model="form.description" rows="4" required></textarea>
-            </label>
-            <label>
-              <span>Category</span>
-              <select v-model="form.category" required>
-                <option v-for="category in clubCategoryOptions" :key="category.title" :value="category.title">
-                  {{ category.title }}
-                </option>
-              </select>
-            </label>
-            <label>
-              <span>Meeting schedule</span>
-              <input v-model="form.meetingSchedule" type="text" required />
-            </label>
-            <label class="wide">
-              <span>President schedule note</span>
-              <textarea
-                v-model="form.scheduleNote"
-                rows="3"
-                placeholder="Add exceptions, meeting dates, room changes, or extra context for the calendar."
-              ></textarea>
-            </label>
-            <label>
-              <span>Location</span>
-              <input v-model="form.location" type="text" placeholder="Optional" />
-            </label>
-            <label>
-              <span>Advisor</span>
-              <input v-model="form.advisor" type="text" placeholder="Advisor name" />
-            </label>
-            <label>
-              <span>Contact email</span>
-              <input v-model="form.contactEmail" type="email" placeholder="club@example.com" />
-            </label>
-            <label class="wide">
-              <span>Achievements (one per line)</span>
-              <textarea v-model="form.achievementsText" rows="4" placeholder="Add each highlight on its own line"></textarea>
-            </label>
-          </div>
-          <div class="form-actions">
-            <button type="button" class="ghost-btn" @click="handleReset" :disabled="saving">Discard edits</button>
-            <button type="submit" class="primary-btn" :disabled="saving">{{ saving ? 'Saving…' : 'Save changes' }}</button>
-          </div>
-        </form>
-
-        <aside class="insights-panel">
-          <h2>Live preview</h2>
-          <div class="insight-card">
-            <p class="label">Members</p>
-            <p class="value">{{ club.memberCount }}</p>
-          </div>
-          <div class="insight-card">
-            <p class="label">Contact</p>
-            <p class="value">{{ form.contactEmail || 'Not provided' }}</p>
-          </div>
-          <div class="insight-card">
-            <p class="label">President note</p>
-            <p class="value note-preview">{{ form.scheduleNote || 'No president note added' }}</p>
-          </div>
-          <div class="insight-card achievements">
-            <p class="label">Achievements</p>
-            <ul>
-              <li v-for="(item, index) in achievementPreview" :key="index">{{ item }}</li>
-              <li v-if="!achievementPreview.length">No achievements listed</li>
-            </ul>
-          </div>
-        </aside>
-      </div>
-
-      <section class="member-panel">
+      <section id="members" ref="membersSectionRef" class="member-panel">
         <div class="member-panel__header">
           <div>
             <h2>Member management</h2>
             <p>Review everyone currently linked to {{ club.name }}.</p>
           </div>
           <div class="member-panel__actions">
-            <RouterLink
-              v-if="club && canManageClub"
-              :to="`/clubs/${club.id}/admin/pending`"
-              class="ghost-btn"
-            >
-              Review pending requests
-            </RouterLink>
             <button type="button" class="ghost-btn" @click="refreshMembers" :disabled="membersLoading || !canManageClub">
               {{ membersLoading ? 'Refreshing…' : 'Refresh roster' }}
             </button>
@@ -570,10 +723,74 @@ watch(
             <p v-else class="member-empty">No members have been linked yet.</p>
           </template>
         </section>
+
+        <section class="pending-panel">
+          <div class="pending-panel__header">
+            <div>
+              <h3>Pending approvals</h3>
+              <p>Applications awaiting a decision.</p>
+            </div>
+            <button
+              type="button"
+              class="ghost-btn"
+              @click="refreshPendingRequests"
+              :disabled="pendingLoading || !canManageClub"
+            >
+              {{ pendingLoading ? 'Refreshing…' : 'Refresh list' }}
+            </button>
+          </div>
+
+          <p v-if="!canManageClub" class="member-hint">
+            Only club leaders or site owners can manage membership requests.
+          </p>
+
+          <div v-else>
+            <p v-if="approvalError" class="member-hint error" role="alert">{{ approvalError }}</p>
+            <div v-if="pendingLoading" class="status-card">Loading requests…</div>
+            <div v-else-if="pendingError" class="status-card error">
+              <p>{{ pendingError }}</p>
+              <button type="button" class="ghost-btn" @click="refreshPendingRequests">Try again</button>
+            </div>
+            <ul v-else-if="pendingRequests.length" class="member-list pending-list">
+              <li v-for="request in pendingRequests" :key="request.id" class="member-entry pending-entry">
+                <div class="member-avatar">
+                  <img
+                    :src="userAvatar(request.avatarUrl, request.displayName || 'Member')"
+                    :alt="request.displayName || 'Pending member'"
+                  />
+                </div>
+                <div class="member-info">
+                  <p>{{ request.displayName || 'Pending member' }}</p>
+                  <small>{{ request.email || 'No email on file' }}</small>
+                  <small class="request-meta">Requested {{ formatRequestTimestamp(request.createdAt) }}</small>
+                </div>
+                <div class="pending-actions">
+                  <button
+                    type="button"
+                    class="ghost-btn danger"
+                    @click="rejectRequest(request.id)"
+                    :disabled="decliningRequestId === request.id"
+                  >
+                    {{ decliningRequestId === request.id ? 'Declining…' : 'Decline' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="primary-btn"
+                    @click="approveRequest(request.id)"
+                    :disabled="approvingRequestId === request.id"
+                  >
+                    {{ approvingRequestId === request.id ? 'Approving…' : 'Approve' }}
+                  </button>
+                </div>
+              </li>
+            </ul>
+            <p v-else class="member-empty">No open requests right now.</p>
+          </div>
+        </section>
       </section>
 
       <!-- President management (owner only) -->
-      <section v-if="isOwner" class="member-panel president-panel">
+      <section v-if="isOwner" id="presidents" class="member-panel president-panel">
         <div class="member-panel__header">
           <div>
             <h2>President management</h2>
@@ -996,6 +1213,52 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.admin-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.pending-panel {
+  border-top: 1px solid var(--mv-border);
+  padding-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.pending-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pending-panel__header h3 {
+  margin: 0;
+}
+
+.pending-panel__header p {
+  margin: 0.2rem 0 0;
+  color: var(--mv-text-faint);
+}
+
+.pending-entry {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.pending-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.request-meta {
+  color: var(--mv-text-dim);
+}
+
 @media (max-width: 900px) {
   .admin-grid {
     grid-template-columns: 1fr;
@@ -1076,6 +1339,11 @@ textarea {
 
   .member-role {
     width: 100%;
+  }
+
+  .pending-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 }
 

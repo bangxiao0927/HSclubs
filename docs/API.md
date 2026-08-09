@@ -241,9 +241,13 @@ also have to cover club cover images, and would give up static file serving and 
 Because those URLs are public, every `/uploads/**` response carries `X-Content-Type-Options:
 nosniff` and `X-Robots-Tag: noindex` (`WebConfig`). The `noindex` header, not the SPA's
 `robots.txt`, is what keeps uploaded photos out of search indexes: `robots.txt` is served from
-the SPA origin and has no authority over the API origin these files come from, and the
-`noindex` robots meta tag the media page sets covers only that HTML page, not a direct hit on
-the image URL.
+the SPA origin and has no authority over the API origin these files come from. The club media
+feed itself renders inline on the club detail page (`/clubs/:id`, under a `#media` section) and
+stays indexable like the rest of that page -- `/clubs/:id/media` is now only a redirect to that
+section, so `robots.txt` no longer disallows it. What actually keeps a photo's bytes out of
+search results is the `X-Robots-Tag` header above, not any noindex on the page that links to
+it -- the SPA's `robots.txt`, as already noted, has no authority over the `/uploads/**` files
+served from the API origin.
 
 `authorAvatarUrl` is not part of this boundary: it is `oauth_users.avatar_url`, populated
 from the OAuth provider's own profile picture claim (e.g. Google's `picture`) at login, and

@@ -1965,6 +1965,21 @@ describe('ClubMediaView embedded mode', () => {
     expect(fetchClubByIdMock).not.toHaveBeenCalled()
     expect(wrapper.find('.section-label').text()).toBe('Media · Robotics Club')
   })
+
+  it('follows a later snapshot update for the same club without issuing another club GET', async () => {
+    fetchClubMediaFeedMock.mockResolvedValue(buildFeed())
+    const snapshot = buildClub({ name: 'Robotics Club', viewerIsMember: false })
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media', { embedded: true, snapshot })
+    await flushPromises()
+    expect(wrapper.find('.mv-publish').exists()).toBe(false)
+
+    await wrapper.setProps({ snapshot: buildClub({ name: 'Robotics Club', viewerIsMember: true }) })
+    await flushPromises()
+
+    expect(wrapper.find('.mv-publish').exists()).toBe(true)
+    expect(fetchClubByIdMock).not.toHaveBeenCalled()
+  })
 })
 
 describe('ClubMediaView embedded pagination hash', () => {
@@ -2004,6 +2019,48 @@ describe('ClubMediaView embedded pagination hash', () => {
 
     expect(router.currentRoute.value.hash).toBe('')
     expect(router.currentRoute.value.query.page).toBe('1')
+  })
+
+  it('pages with router.replace when embedded, so paging does not stack a history entry in front of the club page', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1 })], page: 0, size: 12, total: 24 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 2 })], page: 1, size: 12, total: 24 }),
+    )
+
+    const wrapper = await mountAtMediaRoute('/clubs/1/media', { embedded: true })
+    await flushPromises()
+    const pushSpy = vi.spyOn(router, 'push')
+    const replaceSpy = vi.spyOn(router, 'replace')
+
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+
+    expect(replaceSpy).toHaveBeenCalledTimes(1)
+    expect(pushSpy).not.toHaveBeenCalled()
+  })
+
+  it('pages with router.push when standalone, preserving normal pagination history', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1 })], page: 0, size: 12, total: 24 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 2 })], page: 1, size: 12, total: 24 }),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+    const pushSpy = vi.spyOn(router, 'push')
+    const replaceSpy = vi.spyOn(router, 'replace')
+
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+
+    expect(pushSpy).toHaveBeenCalledTimes(1)
+    expect(replaceSpy).not.toHaveBeenCalled()
   })
 })
 

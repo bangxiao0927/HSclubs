@@ -57,8 +57,14 @@ const router = createRouter({
     {
       path: '/clubs/:id/admin/pending',
       name: 'club-admin-pending',
-      component: () => import('../views/ClubPendingView.vue'),
-      meta: { requiresAuth: true },
+      // Pending membership requests are now reviewed inline in the Members section of
+      // /clubs/:id/admin (see ClubAdminView.vue's #members section). This route is kept only
+      // so pre-existing links and bookmarks still land somewhere useful.
+      redirect: (to) => ({
+        path: `/clubs/${to.params.id}/admin`,
+        query: to.query,
+        hash: '#members',
+      }),
     },
     {
       path: '/admin',

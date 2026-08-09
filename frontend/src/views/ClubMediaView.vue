@@ -209,10 +209,19 @@ const goToPage = (nextPage: number) => {
   // ClubDetailView.vue). Keeping the hash on every pagination push means a reload or a
   // browser Back/Forward step lands the viewer back on the media section instead of at the
   // top of the club page.
-  void router.push({
+  // Embedded mode also swaps push() for replace(): the club detail page is the entry the
+  // viewer navigated to, and paging through its media feed should not stack a history entry
+  // in front of it, or Back would have to be pressed once per page before it left the club at
+  // all. Standalone /clubs/:id/media keeps push() so its own pagination history still works.
+  const destination = {
     query: { ...route.query, page: String(nextPage), size: String(size.value) },
     hash: props.embedded ? '#media' : route.hash,
-  })
+  }
+  if (props.embedded) {
+    void router.replace(destination)
+  } else {
+    void router.push(destination)
+  }
 }
 
 const isExpanded = (postId: number) => expandedPostIds.value.has(postId)
@@ -733,6 +742,25 @@ watch(routeClubId, (nextClubId, previousClubId) => {
   }
 })
 
+// ClubDetailView refetches its own club snapshot after an apply/cancel-request action and
+// hands the updated record down through `snapshot` -- e.g. so `viewerHasPendingRequest`
+// reflects here right away. `load()` only reads `props.snapshot` once, at the moment it
+// fetches, so without this watcher a later snapshot update would sit unused in the prop while
+// this view kept showing the club record from the original load. Applying it here instead of
+// re-running load() keeps that in sync without an extra GET for a club record the parent
+// already has fresher than we could fetch ourselves.
+watch(
+  () => props.snapshot,
+  (snapshot) => {
+    if (!snapshot || loadedClubId !== routeClubId.value) {
+      return
+    }
+    feedSessions.current().apply(() => {
+      club.value = snapshot
+    })
+  },
+)
+
 watch(
   () => [routeClubId.value, route.query.page, route.query.size],
   () => {
@@ -743,7 +771,7 @@ watch(
 </script>
 
 <template>
-  <section class="club-media" :class="{ 'page-shell': !props.embedded }">
+  <section class="club-media" :class="{ 'page-shell': !props.embedded, 'club-media--standalone': !props.embedded }">
     <BackButton v-if="!props.embedded" :fallback-to="backTarget">← Back to club</BackButton>
 
     <div v-if="loading" class="mv-status">Loading club media…</div>
@@ -938,6 +966,9 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.club-media--standalone {
   padding-block: clamp(2rem, 5vw, 3.5rem);
 }
 
