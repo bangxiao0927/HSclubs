@@ -12,6 +12,13 @@ public class SummaryResponse {
     private String schoolName;
     private String shortName;
     private String slug;
+    /**
+     * Where the school is, as one human-readable line, for the guiding page's listing.
+     *
+     * <p>Free text and configured (`app.summary.address`), not derived from any club row: it is
+     * school identity, the same as the name. Null when a deployment has not set one.
+     */
+    private String address;
     private String status;
     private int clubCount;
     private Map<String, Integer> categories;
@@ -34,6 +41,9 @@ public class SummaryResponse {
 
     public String getSlug() { return slug; }
     public void setSlug(String slug) { this.slug = slug; }
+
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

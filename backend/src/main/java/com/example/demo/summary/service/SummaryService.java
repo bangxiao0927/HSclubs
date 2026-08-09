@@ -46,6 +46,7 @@ public class SummaryService {
     private final String schoolName;
     private final String shortName;
     private final String slug;
+    private final String address;
     private final ZoneId databaseZone;
     private final Duration cacheTtl;
     private final AtomicReference<CachedSummary> cached = new AtomicReference<>();
@@ -55,6 +56,7 @@ public class SummaryService {
                           @Value("${app.summary.school-name:HS Clubs}") String schoolName,
                           @Value("${app.summary.short-name:HS Clubs}") String shortName,
                           @Value("${app.summary.slug:hsclubs}") String slug,
+                          @Value("${app.summary.address:}") String address,
                           @Value("${app.summary.time-zone:}") String timeZone,
                           @Value("${spring.datasource.url:}") String datasourceUrl,
                           @Value("${app.summary.cache-ttl-ms:60000}") long cacheTtlMillis) {
@@ -62,6 +64,7 @@ public class SummaryService {
         this.schoolName = schoolName;
         this.shortName = shortName;
         this.slug = slug;
+        this.address = StringUtils.hasText(address) ? address.trim() : null;
         this.databaseZone = resolveDatabaseZone(timeZone, datasourceUrl);
         LOGGER.info("Summary lastUpdatedAt will be published with the offset of zone {}", databaseZone);
         this.cacheTtl = Duration.ofMillis(Math.max(0, cacheTtlMillis));
@@ -149,6 +152,7 @@ public class SummaryService {
             String.valueOf(summary.getSchoolName()),
             String.valueOf(summary.getShortName()),
             String.valueOf(summary.getSlug()),
+            String.valueOf(summary.getAddress()),
             String.valueOf(summary.getStatus()),
             String.valueOf(summary.getClubCount()),
             String.valueOf(summary.getMemberCount()),
@@ -183,6 +187,7 @@ public class SummaryService {
         summary.setSchoolName(schoolName);
         summary.setShortName(shortName);
         summary.setSlug(slug);
+        summary.setAddress(address);
         summary.setStatus("active");
         summary.setClubCount(clubs.size());
         summary.setCategories(categoryCounts);

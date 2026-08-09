@@ -40,7 +40,7 @@ class SummaryServiceTest {
     private static SummaryService service(ClubMapper clubMapper, long cacheTtlMillis) {
         // A fixed zone, so the published instant is deterministic rather than whatever zone the
         // machine running the tests happens to keep.
-        return new SummaryService(clubMapper, "Example High School", "EHS", "ehs", "UTC", "", cacheTtlMillis);
+        return new SummaryService(clubMapper, "Example High School", "EHS", "ehs", "1 Example Way, Springfield", "UTC", "", cacheTtlMillis);
     }
 
     @Test
@@ -51,6 +51,7 @@ class SummaryServiceTest {
         SummaryResponse summary = service(clubMapper, 0).buildSummary();
 
         assertThat(summary.getSchoolName()).isEqualTo("Example High School");
+        assertThat(summary.getAddress()).isEqualTo("1 Example Way, Springfield");
         assertThat(summary.getClubCount()).isEqualTo(3);
         assertThat(summary.getMemberCount()).isEqualTo(50);
         assertThat(summary.getCategories())
@@ -106,6 +107,36 @@ class SummaryServiceTest {
         verify(clubMapper, times(2)).findSummaryProjections();
     }
 
+    // School identity, like the name: configured, never derived from a club row, and absent
+    // rather than blank when a deployment has not set one.
+    @Test
+    void omitsTheAddressWhenNoneIsConfigured() {
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findSummaryProjections()).thenReturn(directory());
+
+        SummaryService unaddressed = new SummaryService(
+            clubMapper, "Example High School", "EHS", "ehs", "   ", "UTC", "", 0);
+
+        assertThat(unaddressed.buildSummary().getAddress()).isNull();
+    }
+
+    // The tag validates the whole representation, so changing the school's address has to
+    // invalidate a poller's cached copy even though no club changed.
+    @Test
+    void theEntityTagCoversTheAddress() {
+        ClubMapper first = mock(ClubMapper.class);
+        when(first.findSummaryProjections()).thenReturn(directory());
+        ClubMapper second = mock(ClubMapper.class);
+        when(second.findSummaryProjections()).thenReturn(directory());
+
+        String before = service(first, 0).buildSnapshot().entityTag();
+        String after = new SummaryService(
+            second, "Example High School", "EHS", "ehs", "2 Other Road, Springfield", "UTC", "", 0)
+            .buildSnapshot().entityTag();
+
+        assertThat(after).isNotEqualTo(before);
+    }
+
     // The stored timestamp is a bare wall clock; what leaves the building has to say which zone
     // it meant, or a page comparing schools in different zones is comparing nothing.
     @Test
@@ -114,7 +145,7 @@ class SummaryServiceTest {
         when(clubMapper.findSummaryProjections()).thenReturn(directory());
 
         SummaryService tokyo = new SummaryService(
-            clubMapper, "Example High School", "EHS", "ehs", "Asia/Tokyo", "", 0);
+            clubMapper, "Example High School", "EHS", "ehs", "", "Asia/Tokyo", "", 0);
 
         assertThat(tokyo.buildSummary().getLastUpdatedAt())
             .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5).atZone(ZoneId.of("Asia/Tokyo")).toOffsetDateTime());
@@ -126,7 +157,7 @@ class SummaryServiceTest {
         when(clubMapper.findSummaryProjections()).thenReturn(directory());
 
         SummaryService unconfigured = new SummaryService(
-            clubMapper, "Example High School", "EHS", "ehs", "  ", "", 0);
+            clubMapper, "Example High School", "EHS", "ehs", "", "  ", "", 0);
 
         assertThat(unconfigured.buildSummary().getLastUpdatedAt())
             .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5).atZone(ZoneId.systemDefault()).toOffsetDateTime());
@@ -143,7 +174,7 @@ class SummaryServiceTest {
         String url = "jdbc:mysql://localhost:3306/mydb?useUnicode=true&serverTimezone=Asia/Shanghai&useSSL=false";
 
         SummaryService service = new SummaryService(
-            clubMapper, "Example High School", "EHS", "ehs", "", url, 0);
+            clubMapper, "Example High School", "EHS", "ehs", "", "", url, 0);
 
         assertThat(service.buildSummary().getLastUpdatedAt())
             .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5).atZone(ZoneId.of("Asia/Shanghai")).toOffsetDateTime());
@@ -156,7 +187,7 @@ class SummaryServiceTest {
         String url = "jdbc:mysql://localhost:3306/mydb?serverTimezone=Asia/Shanghai";
 
         SummaryService service = new SummaryService(
-            clubMapper, "Example High School", "EHS", "ehs", "America/Los_Angeles", url, 0);
+            clubMapper, "Example High School", "EHS", "ehs", "", "America/Los_Angeles", url, 0);
 
         assertThat(service.buildSummary().getLastUpdatedAt())
             .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5)
@@ -170,7 +201,7 @@ class SummaryServiceTest {
         String url = "jdbc:mysql://localhost:3306/mydb?serverTimezone=Not%2FAZone";
 
         SummaryService service = new SummaryService(
-            clubMapper, "Example High School", "EHS", "ehs", "", url, 0);
+            clubMapper, "Example High School", "EHS", "ehs", "", "", url, 0);
 
         assertThat(service.buildSummary().getLastUpdatedAt())
             .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5).atZone(ZoneId.systemDefault()).toOffsetDateTime());
