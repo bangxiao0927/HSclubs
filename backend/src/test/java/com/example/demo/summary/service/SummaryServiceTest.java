@@ -7,6 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -36,7 +38,9 @@ class SummaryServiceTest {
     }
 
     private static SummaryService service(ClubMapper clubMapper, long cacheTtlMillis) {
-        return new SummaryService(clubMapper, "Example High School", "EHS", "ehs", cacheTtlMillis);
+        // A fixed zone, so the published instant is deterministic rather than whatever zone the
+        // machine running the tests happens to keep.
+        return new SummaryService(clubMapper, "Example High School", "EHS", "ehs", "UTC", "", cacheTtlMillis);
     }
 
     @Test
@@ -52,7 +56,8 @@ class SummaryServiceTest {
         assertThat(summary.getCategories())
             .containsEntry("Competition & Strategy", 2)
             .containsEntry("STEM & Innovation", 1);
-        assertThat(summary.getLastUpdatedAt()).isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5));
+        assertThat(summary.getLastUpdatedAt())
+            .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5).atOffset(ZoneOffset.UTC));
         assertThat(summary.getDataHash()).isNotBlank();
     }
 
@@ -101,6 +106,84 @@ class SummaryServiceTest {
         verify(clubMapper, times(2)).findSummaryProjections();
     }
 
+    // The stored timestamp is a bare wall clock; what leaves the building has to say which zone
+    // it meant, or a page comparing schools in different zones is comparing nothing.
+    @Test
+    void publishesTheLastUpdateAsAnInstantInTheConfiguredZone() {
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findSummaryProjections()).thenReturn(directory());
+
+        SummaryService tokyo = new SummaryService(
+            clubMapper, "Example High School", "EHS", "ehs", "Asia/Tokyo", "", 0);
+
+        assertThat(tokyo.buildSummary().getLastUpdatedAt())
+            .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5).atZone(ZoneId.of("Asia/Tokyo")).toOffsetDateTime());
+    }
+
+    @Test
+    void fallsBackToThisMachinesZoneWhenNoneIsConfigured() {
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findSummaryProjections()).thenReturn(directory());
+
+        SummaryService unconfigured = new SummaryService(
+            clubMapper, "Example High School", "EHS", "ehs", "  ", "", 0);
+
+        assertThat(unconfigured.buildSummary().getLastUpdatedAt())
+            .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5).atZone(ZoneId.systemDefault()).toOffsetDateTime());
+    }
+
+    // The projection reads updated_at into a LocalDateTime, so the driver hands back the
+    // *database session's* wall clock, not this JVM's. Defaulting to the JVM zone would stamp a
+    // false offset onto it whenever the two differ -- and the URL this repo ships declares
+    // Asia/Shanghai, so they usually would.
+    @Test
+    void defaultsToTheZoneTheDatasourceUrlDeclares() {
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findSummaryProjections()).thenReturn(directory());
+        String url = "jdbc:mysql://localhost:3306/mydb?useUnicode=true&serverTimezone=Asia/Shanghai&useSSL=false";
+
+        SummaryService service = new SummaryService(
+            clubMapper, "Example High School", "EHS", "ehs", "", url, 0);
+
+        assertThat(service.buildSummary().getLastUpdatedAt())
+            .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5).atZone(ZoneId.of("Asia/Shanghai")).toOffsetDateTime());
+    }
+
+    @Test
+    void anExplicitZoneWinsOverTheDatasourceUrl() {
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findSummaryProjections()).thenReturn(directory());
+        String url = "jdbc:mysql://localhost:3306/mydb?serverTimezone=Asia/Shanghai";
+
+        SummaryService service = new SummaryService(
+            clubMapper, "Example High School", "EHS", "ehs", "America/Los_Angeles", url, 0);
+
+        assertThat(service.buildSummary().getLastUpdatedAt())
+            .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5)
+                .atZone(ZoneId.of("America/Los_Angeles")).toOffsetDateTime());
+    }
+
+    @Test
+    void anUnparseableServerTimezoneFallsBackInsteadOfFailingStartup() {
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findSummaryProjections()).thenReturn(directory());
+        String url = "jdbc:mysql://localhost:3306/mydb?serverTimezone=Not%2FAZone";
+
+        SummaryService service = new SummaryService(
+            clubMapper, "Example High School", "EHS", "ehs", "", url, 0);
+
+        assertThat(service.buildSummary().getLastUpdatedAt())
+            .isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5).atZone(ZoneId.systemDefault()).toOffsetDateTime());
+    }
+
+    @Test
+    void aDirectoryThatWasNeverUpdatedHasNoLastUpdate() {
+        ClubMapper clubMapper = mock(ClubMapper.class);
+        when(clubMapper.findSummaryProjections())
+            .thenReturn(List.of(club(1L, "Chess Club", "Competition & Strategy", 12, null)));
+
+        assertThat(service(clubMapper, 0).buildSummary().getLastUpdatedAt()).isNull();
+    }
     // The entity tag validates the whole response, so it must move even when dataHash cannot:
     // editing a club's description bumps updated_at, and therefore lastUpdatedAt, without
     // touching any of the four fields dataHash digests. Reusing dataHash as the ETag would

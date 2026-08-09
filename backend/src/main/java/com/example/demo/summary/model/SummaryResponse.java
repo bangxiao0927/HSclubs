@@ -1,6 +1,6 @@
 package com.example.demo.summary.model;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Map;
 
 /**
@@ -16,7 +16,14 @@ public class SummaryResponse {
     private int clubCount;
     private Map<String, Integer> categories;
     private int memberCount;
-    private LocalDateTime lastUpdatedAt;
+    /**
+     * When this school's directory last changed, as an ISO-8601 instant with an offset.
+     *
+     * <p>Offset-bearing on purpose: this field leaves the building. A wall-clock time with no
+     * zone is only interpretable by someone who knows which zone this server keeps, and the
+     * consumer is a page comparing schools that need not share one.
+     */
+    private OffsetDateTime lastUpdatedAt;
     private String dataHash;
 
     public String getSchoolName() { return schoolName; }
@@ -40,8 +47,8 @@ public class SummaryResponse {
     public int getMemberCount() { return memberCount; }
     public void setMemberCount(int memberCount) { this.memberCount = memberCount; }
 
-    public LocalDateTime getLastUpdatedAt() { return lastUpdatedAt; }
-    public void setLastUpdatedAt(LocalDateTime lastUpdatedAt) { this.lastUpdatedAt = lastUpdatedAt; }
+    public OffsetDateTime getLastUpdatedAt() { return lastUpdatedAt; }
+    public void setLastUpdatedAt(OffsetDateTime lastUpdatedAt) { this.lastUpdatedAt = lastUpdatedAt; }
 
     public String getDataHash() { return dataHash; }
     public void setDataHash(String dataHash) { this.dataHash = dataHash; }

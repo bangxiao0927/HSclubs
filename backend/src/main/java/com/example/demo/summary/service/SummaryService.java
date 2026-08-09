@@ -3,18 +3,26 @@ package com.example.demo.summary.service;
 import com.example.demo.club.mapper.ClubMapper;
 import com.example.demo.summary.model.ClubSummaryProjection;
 import com.example.demo.summary.model.SummaryResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.net.URLDecoder;
+import java.time.ZoneId;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -30,10 +38,15 @@ import java.util.stream.Collectors;
 @Service
 public class SummaryService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(SummaryService.class);
+    private static final Pattern SERVER_TIMEZONE_PARAMETER =
+        Pattern.compile("[?&]serverTimezone=([^&]+)", Pattern.CASE_INSENSITIVE);
+
     private final ClubMapper clubMapper;
     private final String schoolName;
     private final String shortName;
     private final String slug;
+    private final ZoneId databaseZone;
     private final Duration cacheTtl;
     private final AtomicReference<CachedSummary> cached = new AtomicReference<>();
     private final Object refreshLock = new Object();
@@ -42,12 +55,52 @@ public class SummaryService {
                           @Value("${app.summary.school-name:HS Clubs}") String schoolName,
                           @Value("${app.summary.short-name:HS Clubs}") String shortName,
                           @Value("${app.summary.slug:hsclubs}") String slug,
+                          @Value("${app.summary.time-zone:}") String timeZone,
+                          @Value("${spring.datasource.url:}") String datasourceUrl,
                           @Value("${app.summary.cache-ttl-ms:60000}") long cacheTtlMillis) {
         this.clubMapper = clubMapper;
         this.schoolName = schoolName;
         this.shortName = shortName;
         this.slug = slug;
+        this.databaseZone = resolveDatabaseZone(timeZone, datasourceUrl);
+        LOGGER.info("Summary lastUpdatedAt will be published with the offset of zone {}", databaseZone);
         this.cacheTtl = Duration.ofMillis(Math.max(0, cacheTtlMillis));
+    }
+
+    /**
+     * The zone the stored timestamps are written in -- which is the database session's, not this
+     * JVM's: the projection reads {@code updated_at} into a {@code LocalDateTime}, and the JDBC
+     * driver hands back that column's wall clock in the session's zone without converting it.
+     *
+     * <p>So the default is taken from the datasource URL when it declares one (MySQL's
+     * {@code serverTimezone}), and only falls back to this JVM's zone when it does not. Guessing
+     * the JVM zone unconditionally would be worse than the old behaviour: the old field simply
+     * omitted the zone, whereas a wrong offset asserts something false. {@code app.summary.time-zone}
+     * overrides both, for a deployment where neither is the truth.
+     */
+    private static ZoneId resolveDatabaseZone(String configuredZone, String datasourceUrl) {
+        if (StringUtils.hasText(configuredZone)) {
+            return ZoneId.of(configuredZone.trim());
+        }
+        return declaredServerTimezone(datasourceUrl).orElseGet(ZoneId::systemDefault);
+    }
+
+    private static Optional<ZoneId> declaredServerTimezone(String datasourceUrl) {
+        if (!StringUtils.hasText(datasourceUrl)) {
+            return Optional.empty();
+        }
+        Matcher matcher = SERVER_TIMEZONE_PARAMETER.matcher(datasourceUrl);
+        if (!matcher.find()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(ZoneId.of(URLDecoder.decode(matcher.group(1), StandardCharsets.UTF_8)));
+        } catch (RuntimeException e) {
+            // An unparseable serverTimezone is the driver's problem to report, not a reason to
+            // fail startup here; fall back rather than take the whole site down over a log field.
+            LOGGER.warn("Ignoring unparseable serverTimezone in the datasource URL: {}", e.toString());
+            return Optional.empty();
+        }
     }
 
     public SummaryResponse buildSummary() {
@@ -134,7 +187,7 @@ public class SummaryService {
         summary.setClubCount(clubs.size());
         summary.setCategories(categoryCounts);
         summary.setMemberCount(totalMembers);
-        summary.setLastUpdatedAt(lastUpdated);
+        summary.setLastUpdatedAt(lastUpdated == null ? null : lastUpdated.atZone(databaseZone).toOffsetDateTime());
         summary.setDataHash(computeHash(clubs));
 
         return summary;
