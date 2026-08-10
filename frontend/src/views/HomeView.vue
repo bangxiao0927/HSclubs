@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import SkeletonLoader from '../components/SkeletonLoader.vue'
 import { fetchAllClubs, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
@@ -11,7 +11,6 @@ const clubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
 
-const route = useRoute()
 const schoolDisplayName = computed(() => schoolTemplate.schoolName)
 const schoolShortName = computed(() => schoolTemplate.shortName)
 const currentHeroImageIndex = ref(0)
@@ -291,6 +290,7 @@ const changeHeroImage = (offset: number) => {
 
 .hero-copy {
   max-width: 520px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -299,6 +299,7 @@ const changeHeroImage = (offset: number) => {
 .hero-copy h1 {
   font-size: clamp(2rem, 4vw, 3rem);
   margin: 0;
+  overflow-wrap: break-word;
 }
 
 .hero-copy p {
@@ -671,6 +672,13 @@ const changeHeroImage = (offset: number) => {
 
   .hero-copy {
     max-width: 100%;
+  }
+
+  .hero-visual {
+    /* .home-hero switches to a column here, where flex-basis sets height
+       rather than width; pin it back to auto so this rule only ever sizes
+       the row layout above 720px. */
+    flex-basis: auto;
   }
 
   .home-hero {

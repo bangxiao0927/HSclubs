@@ -111,6 +111,11 @@ const clearCache = () => {
   color: inherit;
 }
 
+.setting-row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .setting-row.link:hover {
   background: var(--mv-surface-accent);
 }

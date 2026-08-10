@@ -222,71 +222,83 @@ function clampPercentage(value: number) {
       <section v-if="loading" class="status-banner">Loading schedule...</section>
       <section v-else-if="error" class="status-banner error">{{ error }}</section>
 
-      <div v-else class="calendar-scroll">
-        <div class="weekly-calendar">
-          <div class="week-grid week-header">
-            <div class="time-axis-heading">
-              <span>Local time</span>
-              <strong>{{ currentTimeLabel }}</strong>
-            </div>
-            <div
-              v-for="day in calendarDays"
-              :key="day"
-              class="day-heading"
-              :class="{ today: day === todayShortLabel }"
-            >
-              <span class="day-name">{{ day }}</span>
-              <span class="day-date">{{ formatWeekDate(day) }}</span>
-            </div>
-          </div>
+      <template v-else>
+        <p id="calendar-scroll-hint" class="calendar-scroll-hint">
+          Scroll horizontally to see the full week on narrow screens.
+        </p>
 
-          <div v-for="period in meetingPeriods" :key="period.key" class="week-grid period-row">
-            <div class="period-label">
-              <strong>{{ period.label }}</strong>
-              <span>{{ period.time }}</span>
-            </div>
-
-            <section
-              v-for="day in calendarDays"
-              :key="day"
-              class="calendar-cell"
-              :class="{ 'current-day': day === todayShortLabel }"
-            >
+        <div
+          class="calendar-scroll"
+          role="region"
+          tabindex="0"
+          aria-label="Weekly meeting schedule, scrollable horizontally"
+          aria-describedby="calendar-scroll-hint"
+        >
+          <div class="weekly-calendar">
+            <div class="week-grid week-header">
+              <div class="time-axis-heading">
+                <span>Local time</span>
+                <strong>{{ currentTimeLabel }}</strong>
+              </div>
               <div
-                v-if="
-                  currentTimeMarker &&
-                  day === todayShortLabel &&
-                  period.key === currentTimeMarker.period
-                "
-                class="current-time-line"
-                :style="{ '--current-time-offset': `${currentTimeMarker.offset}%` }"
-                aria-hidden="true"
+                v-for="day in calendarDays"
+                :key="day"
+                class="day-heading"
+                :class="{ today: day === todayShortLabel }"
               >
-                <span>{{ currentTimeLabel }}</span>
+                <span class="day-name">{{ day }}</span>
+                <span class="day-date">{{ formatWeekDate(day) }}</span>
+              </div>
+            </div>
+
+            <div v-for="period in meetingPeriods" :key="period.key" class="week-grid period-row">
+              <div class="period-label">
+                <strong>{{ period.label }}</strong>
+                <span>{{ period.time }}</span>
               </div>
 
-              <div v-if="weeklySchedule[day]?.[period.key].length" class="event-stack">
-                <RouterLink
-                  v-for="event in weeklySchedule[day]?.[period.key]"
-                  :key="event.id"
-                  class="event-card"
-                  :to="`/clubs/${event.id}`"
-                  :aria-label="`${event.title}, ${event.location || 'Location TBD'}`"
+              <section
+                v-for="day in calendarDays"
+                :key="day"
+                class="calendar-cell"
+                :class="{ 'current-day': day === todayShortLabel }"
+              >
+                <div
+                  v-if="
+                    currentTimeMarker &&
+                    day === todayShortLabel &&
+                    period.key === currentTimeMarker.period
+                  "
+                  class="current-time-line"
+                  :style="{ '--current-time-offset': `${currentTimeMarker.offset}%` }"
+                  aria-hidden="true"
                 >
-                  <img
-                    class="event-avatar"
-                    :src="event.avatarUrl"
-                    :alt="`${event.title} avatar`"
-                    loading="lazy"
-                  />
-                  <p class="event-location">{{ event.location || 'Location TBD' }}</p>
-                </RouterLink>
-              </div>
-              <p v-else class="empty">No meetings</p>
-            </section>
+                  <span>{{ currentTimeLabel }}</span>
+                </div>
+
+                <div v-if="weeklySchedule[day]?.[period.key].length" class="event-stack">
+                  <RouterLink
+                    v-for="event in weeklySchedule[day]?.[period.key]"
+                    :key="event.id"
+                    class="event-card"
+                    :to="`/clubs/${event.id}`"
+                    :aria-label="`${event.title}, ${event.location || 'Location TBD'}`"
+                  >
+                    <img
+                      class="event-avatar"
+                      :src="event.avatarUrl"
+                      :alt="`${event.title} avatar`"
+                      loading="lazy"
+                    />
+                    <p class="event-location">{{ event.location || 'Location TBD' }}</p>
+                  </RouterLink>
+                </div>
+                <p v-else class="empty">No meetings</p>
+              </section>
+            </div>
           </div>
         </div>
-      </div>
+      </template>
     </section>
   </div>
 </template>
@@ -337,6 +349,20 @@ function clampPercentage(value: number) {
   font-weight: 600;
 }
 
+.calendar-scroll-hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  font-size: 0.8rem;
+  color: var(--mv-text-faint);
+}
+
 .calendar-scroll {
   overflow-x: auto;
   border: 1px solid var(--mv-border);
@@ -344,6 +370,8 @@ function clampPercentage(value: number) {
   background: var(--mv-surface-card);
   box-shadow: var(--mv-shadow-card);
   scrollbar-color: var(--mv-border-strong) transparent;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
 .weekly-calendar {
@@ -589,6 +617,16 @@ function clampPercentage(value: number) {
 }
 
 @media (max-width: 720px) {
+  .calendar-scroll-hint {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: -0.5rem 0 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+
   .calendar-heading {
     align-items: flex-start;
     flex-direction: column;
