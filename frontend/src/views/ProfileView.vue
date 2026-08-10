@@ -457,6 +457,13 @@ const handleGraduationYearSave = async () => {
   border: 1px solid var(--mv-border);
   background: var(--mv-surface-soft);
   font-size: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.request-row > span:not(.request-status):not(.request-date) {
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .request-status.pending {

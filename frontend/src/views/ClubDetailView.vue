@@ -629,11 +629,9 @@ onBeforeUnmount(() => {
 }
 
 .club-media-section {
-  border-radius: 28px;
-  border: 1px solid var(--mv-border);
+  border-top: 1px solid var(--mv-border);
   padding: clamp(1.5rem, 4vw, 2.75rem);
-  background: var(--mv-surface-card-strong);
-  box-shadow: var(--mv-shadow-card);
+  padding-inline: 0;
 }
 
 .empty-state {
@@ -705,8 +703,7 @@ onBeforeUnmount(() => {
   }
 
   .club-media-section {
-    padding: 1.25rem;
-    border-radius: 22px;
+    padding-block: 1.25rem;
   }
 }
 

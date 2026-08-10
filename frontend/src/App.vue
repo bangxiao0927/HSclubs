@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import ErrorDisplay from './components/ErrorDisplay.vue'
 import { schoolTemplate, type ColorMode } from './config/schoolTemplate'
+import { resolveInitialTheme } from './utils/themeBootstrap'
 
 const searchQuery = ref('')
 const route = useRoute()
@@ -47,6 +48,10 @@ watch(
 )
 
 const logoText = schoolTemplate.brandName
+// A bound constant (rather than a literal in the template) so Vue's asset-url
+// transform, which only rewrites relative paths, leaves this root-absolute
+// public path untouched under both Vite build and Vitest's SSR module runner.
+const logoUrl = '/android-chrome-512x512.png'
 const searchPlaceholder = 'Search clubs, advisors, categories, or keywords'
 document.title = logoText
 
@@ -59,16 +64,23 @@ const handleMobileLogout = () => {
   handleLogout()
 }
 
+// Left open after toggling so the visual change is immediately visible,
+// unlike navigation actions in this menu which close it.
+const handleMobileThemeToggle = () => {
+  toggleTheme()
+}
+
 const theme = ref<ColorMode>(schoolTemplate.defaultColorMode)
 const themeLabel = computed(() => (theme.value === 'light' ? 'Dark mode' : 'Light mode'))
 
 const applyTheme = (value: ColorMode) => {
   document.documentElement.dataset.theme = value
+  document.documentElement.style.colorScheme = value
 }
 
 const persistTheme = (value: ColorMode) => {
   try {
-    localStorage.setItem('theme', value)
+    window.localStorage.setItem('theme', value)
   } catch (error) {
     console.warn('Failed to persist theme preference.', error)
   }
@@ -81,10 +93,10 @@ const toggleTheme = () => {
 }
 
 try {
-  const storedTheme = localStorage.getItem('theme')
-  if (storedTheme === 'light' || storedTheme === 'dark') {
-    theme.value = storedTheme
-  }
+  theme.value = resolveInitialTheme(
+    window.localStorage.getItem('theme'),
+    schoolTemplate.defaultColorMode,
+  )
 } catch (error) {
   console.warn('Failed to read theme preference.', error)
 }
@@ -158,7 +170,7 @@ watch(
         <div class="header-left">
           <div class="logo">
             <RouterLink to="/" class="logo-link">
-              <img class="logo-icon" src="/android-chrome-512x512.png" :alt="`${logoText} logo`" />
+              <img class="logo-icon" :src="logoUrl" :alt="`${logoText} logo`" />
               <span class="logo-text">{{ logoText }}</span>
             </RouterLink>
           </div>
@@ -202,6 +214,7 @@ watch(
           class="mobile-menu-toggle"
           :class="{ open: mobileMenuOpen }"
           :aria-expanded="mobileMenuOpen"
+          aria-controls="mobile-navigation"
           aria-label="Toggle menu"
           @click="toggleMobileMenu"
         >
@@ -236,54 +249,62 @@ watch(
       </div>
 
       <Transition name="mobile-menu">
-        <div v-if="mobileMenuOpen" class="mobile-menu">
-          <form class="search-bar" @submit.prevent="submitSearch">
-            <input
-              v-model="searchQuery"
-              type="search"
-              :placeholder="searchPlaceholder"
-              class="search-input"
-            />
-            <button type="submit" class="search-button" aria-label="Search clubs">
-              <span class="search-icon">🔍</span>
-            </button>
-          </form>
-          <nav class="mobile-nav">
-            <RouterLink to="/" class="mobile-nav-link" @click="closeMobileMenu">Home</RouterLink>
-            <RouterLink to="/about" class="mobile-nav-link" @click="closeMobileMenu"
-              >Category</RouterLink
-            >
-            <RouterLink to="/calendar" class="mobile-nav-link" @click="closeMobileMenu"
-              >Calendar</RouterLink
-            >
-            <RouterLink
-              v-if="currentUser?.isOwner"
-              to="/admin"
-              class="mobile-nav-link"
-              @click="closeMobileMenu"
-              >Admin</RouterLink
-            >
-          </nav>
-          <div class="mobile-actions">
-            <template v-if="isAuthenticated">
-              <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu"
-                >Profile</RouterLink
-              >
-              <button type="button" class="auth-btn ghost" @click="handleMobileLogout">
-                Log out
+        <div v-if="mobileMenuOpen" id="mobile-navigation" class="mobile-menu">
+          <div class="mobile-menu-inner">
+            <form class="search-bar" @submit.prevent="submitSearch">
+              <input
+                v-model="searchQuery"
+                type="search"
+                :placeholder="searchPlaceholder"
+                class="search-input"
+              />
+              <button type="submit" class="search-button" aria-label="Search clubs">
+                <span class="search-icon">🔍</span>
               </button>
-            </template>
-            <template v-else>
-              <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
-                >Log in</RouterLink
+            </form>
+            <nav class="mobile-nav">
+              <RouterLink to="/" class="mobile-nav-link" @click="closeMobileMenu">Home</RouterLink>
+              <RouterLink to="/about" class="mobile-nav-link" @click="closeMobileMenu"
+                >Category</RouterLink
+              >
+              <RouterLink to="/calendar" class="mobile-nav-link" @click="closeMobileMenu"
+                >Calendar</RouterLink
               >
               <RouterLink
-                to="/auth?intent=register"
-                class="auth-btn primary"
+                v-if="currentUser?.isOwner"
+                to="/admin"
+                class="mobile-nav-link"
                 @click="closeMobileMenu"
-                >Register</RouterLink
+                >Admin</RouterLink
               >
-            </template>
+            </nav>
+            <button type="button" class="mobile-theme-toggle" @click="handleMobileThemeToggle">
+              <span class="theme-icon" aria-hidden="true">{{
+                theme === 'light' ? '🌙' : '☀️'
+              }}</span>
+              <span>{{ themeLabel }}</span>
+            </button>
+            <div class="mobile-actions">
+              <template v-if="isAuthenticated">
+                <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu"
+                  >Profile</RouterLink
+                >
+                <button type="button" class="auth-btn ghost" @click="handleMobileLogout">
+                  Log out
+                </button>
+              </template>
+              <template v-else>
+                <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
+                  >Log in</RouterLink
+                >
+                <RouterLink
+                  to="/auth?intent=register"
+                  class="auth-btn primary"
+                  @click="closeMobileMenu"
+                  >Register</RouterLink
+                >
+              </template>
+            </div>
           </div>
         </div>
       </Transition>
@@ -312,6 +333,10 @@ watch(
   width: 100%;
   display: flex;
   flex-direction: column;
+  background-color: var(--mv-night);
+  background-image: var(--app-body-bg);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
 }
 
 .header {
@@ -569,9 +594,17 @@ watch(
 }
 
 .mobile-menu {
-  padding: 1rem var(--page-padding-inline) 1.5rem;
   border-bottom: 1px solid var(--mv-header-border);
   background: var(--mv-header-bg);
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.mobile-menu-inner {
+  overflow: hidden;
+  min-height: 0;
+  padding: 1rem var(--page-padding-inline) 1.5rem;
 }
 
 .mobile-nav {
@@ -601,6 +634,27 @@ watch(
   color: var(--mv-nav-text-active);
 }
 
+.mobile-theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.7rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--mv-ghost-border);
+  background: transparent;
+  color: var(--mv-ghost-text);
+  font-size: 1rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mobile-theme-toggle:hover,
+.mobile-theme-toggle:active {
+  background: var(--mv-surface-accent);
+}
+
 .mobile-actions {
   display: flex;
   flex-direction: column;
@@ -617,14 +671,13 @@ watch(
 .mobile-menu-enter-active,
 .mobile-menu-leave-active {
   transition:
-    max-height 0.3s ease,
+    grid-template-rows 0.3s ease,
     opacity 0.25s ease;
-  max-height: 500px;
 }
 
 .mobile-menu-enter-from,
 .mobile-menu-leave-to {
-  max-height: 0;
+  grid-template-rows: 0fr;
   opacity: 0;
 }
 
@@ -638,6 +691,8 @@ watch(
   }
 
   .search-bar {
+    flex: 1 1 180px;
+    min-width: 0;
     max-width: 280px;
   }
 }
@@ -731,6 +786,16 @@ watch(
 
 .footer-links a:hover {
   color: var(--mv-nav-text-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-menu-enter-active,
+  .mobile-menu-leave-active,
+  .hamburger,
+  .hamburger::before,
+  .hamburger::after {
+    transition: none;
+  }
 }
 
 @media (max-width: 480px) {

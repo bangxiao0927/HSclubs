@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import { fetchClubCount, fetchAllClubs, createClub } from '../services/clubService'
 import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
 import { clubCategoryOptions } from '../utils/clubCategories'
-
-
-const route = useRoute()
 const authStore = useAuthStore()
 const { currentUser, userLoading, hasCheckedSession } = storeToRefs(authStore)
 
@@ -570,6 +567,11 @@ select {
     align-items: flex-start;
   }
 
+  .club-main,
+  .club-meta {
+    min-width: 0;
+  }
+
   .hero-actions {
     width: 100%;
     align-items: flex-start;
@@ -583,6 +585,21 @@ select {
   select {
     width: 100%;
     min-width: 0;
+  }
+}
+
+/* Row layout only: flex-basis sets width here. In the max-width:700 column
+   layout above, flex-basis would set height instead, so this range stops
+   short of that breakpoint. */
+@media (min-width: 701px) and (max-width: 900px) {
+  .club-main {
+    min-width: 0;
+    flex: 1 1 220px;
+  }
+
+  .club-meta {
+    min-width: 0;
+    flex: 1 1 200px;
   }
 }
 

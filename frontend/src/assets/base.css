@@ -1,5 +1,6 @@
 /* Platform color tokens with school-specific overrides */
 :root {
+  color-scheme: light;
   --mv-night: #eef4ff;
   --mv-ink: #f8fbff;
   --mv-graphite: #dce7f7;
@@ -11,6 +12,8 @@
   --mv-text: #0f172a;
   --mv-text-muted: #475569;
   --mv-radius: 28px;
+  /* One continuous background for the whole page (see App.vue's .app-shell):
+     no per-card gradients, so a long page reads as a single vertical strip. */
   --app-body-bg:
     radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 32%),
     radial-gradient(circle at 85% 12%, rgba(14, 165, 233, 0.14), transparent 30%),
@@ -37,12 +40,10 @@
   --mv-primary-bg: #2563eb;
   --mv-primary-text: #ffffff;
   --mv-primary-shadow: 0 12px 24px rgba(37, 99, 235, 0.24);
-  --mv-surface-hero: linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(219, 234, 254, 0.92));
-  --mv-surface-hero-strong: linear-gradient(
-    135deg,
-    rgba(219, 234, 254, 0.96),
-    rgba(191, 219, 254, 0.92)
-  );
+  /* Translucent solid surfaces, not gradients: hero cards let the page's own
+     background gradient show through instead of restarting their own patch. */
+  --mv-surface-hero: rgba(219, 234, 254, 0.55);
+  --mv-surface-hero-strong: rgba(191, 219, 254, 0.62);
   --mv-surface-card: rgba(255, 255, 255, 0.86);
   --mv-surface-card-strong: rgba(248, 251, 255, 0.96);
   --mv-surface-soft: rgba(226, 239, 255, 0.72);
@@ -69,6 +70,7 @@
 }
 
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --mv-night: #07111f;
   --mv-ink: #0b1628;
   --mv-graphite: #132238;
@@ -81,7 +83,8 @@
   --mv-text-muted: #b8c5d6;
   --app-body-bg:
     radial-gradient(circle at 15% 15%, rgba(14, 165, 233, 0.22), transparent 42%),
-    radial-gradient(circle at 80% 0%, rgba(37, 99, 235, 0.18), transparent 42%), #07111f;
+    radial-gradient(circle at 80% 0%, rgba(37, 99, 235, 0.18), transparent 42%),
+    linear-gradient(180deg, #0b1628 0%, #07111f 55%, #04090f 100%);
   --app-body-text: #f8fafc;
   --mv-header-bg: rgba(7, 17, 31, 0.9);
   --mv-header-border: rgba(125, 211, 252, 0.14);
@@ -104,12 +107,8 @@
   --mv-primary-bg: #38bdf8;
   --mv-primary-text: #082f49;
   --mv-primary-shadow: 0 10px 20px rgba(56, 189, 248, 0.26);
-  --mv-surface-hero: linear-gradient(125deg, rgba(14, 165, 233, 0.18), rgba(15, 23, 42, 0.92));
-  --mv-surface-hero-strong: linear-gradient(
-    120deg,
-    rgba(14, 165, 233, 0.24),
-    rgba(15, 23, 42, 0.96)
-  );
+  --mv-surface-hero: rgba(20, 45, 74, 0.58);
+  --mv-surface-hero-strong: rgba(23, 55, 89, 0.68);
   --mv-surface-card: rgba(15, 23, 42, 0.78);
   --mv-surface-card-strong: rgba(15, 23, 42, 0.9);
   --mv-surface-soft: rgba(30, 41, 59, 0.62);

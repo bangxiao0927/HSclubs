@@ -5,6 +5,31 @@
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title></title>
+    <script>
+      // Runs before Vue mounts (and before any stylesheet needs to be correct) so a
+      // stored dark-mode preference never flashes light for a moment. Keep this rule
+      // in sync with resolveInitialTheme (src/utils/themeBootstrap.ts).
+      // The placeholder below is replaced at build/dev time by the school-brand-title Vite
+      // plugin with the validated VITE_DEFAULT_COLOR_MODE fallback ('light' or 'dark'),
+      // matching schoolTemplate.defaultColorMode.
+      ;(function () {
+        var root = document.documentElement
+        var theme = '__DEFAULT_COLOR_MODE__'
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = 'light'
+        }
+        try {
+          var stored = window.localStorage.getItem('theme')
+          if (stored === 'light' || stored === 'dark') {
+            theme = stored
+          }
+        } catch (error) {
+          /* localStorage unavailable (e.g. private browsing); keep the fallback theme */
+        }
+        root.dataset.theme = theme
+        root.style.colorScheme = theme
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

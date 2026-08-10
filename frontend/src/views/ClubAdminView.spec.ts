@@ -197,7 +197,8 @@ describe('ClubAdminView member count', () => {
   // straight into the "you do not manage this club" notice.
   it('keeps the editor open after a successful save by a club president', async () => {
     const club = buildClub({ canManage: true })
-    const { canManage: _ignored, ...storedRowFromUpdate } = buildClub({ name: 'Chess Team' })
+    const storedRowFromUpdate = buildClub({ name: 'Chess Team' })
+    delete storedRowFromUpdate.canManage
     updateClubMock.mockResolvedValue(storedRowFromUpdate as Club)
 
     const wrapper = await mountView(club)

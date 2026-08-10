@@ -1272,6 +1272,15 @@ textarea {
   .form-actions button {
     width: 100%;
   }
+
+  .member-entry {
+    grid-template-columns: auto minmax(0, 1fr) minmax(120px, auto) auto;
+    gap: 0.5rem;
+  }
+
+  .member-role {
+    min-width: 120px;
+  }
 }
 .image-upload { margin-top: 0.5rem; }
 .upload-btn {

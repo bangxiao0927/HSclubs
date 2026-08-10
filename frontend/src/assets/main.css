@@ -10,9 +10,16 @@ body {
   height: 100%;
 }
 
+/* Solid tokenized fallback only (no gradient) so overscroll/bounce gaps never
+   flash white. The actual gradient is painted once, on .app-shell, so a long
+   page reads as a single continuous strip instead of three stacked ones. */
+html {
+  background-color: var(--mv-night);
+}
+
 body {
   margin: 0;
-  background: var(--app-body-bg);
+  background-color: var(--mv-night);
   color: var(--app-body-text);
 }
 
@@ -22,6 +29,7 @@ body {
   font-weight: normal;
   display: flex;
   color: inherit;
+  background-color: var(--mv-night);
 }
 
 .page-shell {
