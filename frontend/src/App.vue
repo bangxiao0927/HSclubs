@@ -211,6 +211,7 @@ watch(
           class="mobile-menu-toggle"
           :class="{ open: mobileMenuOpen }"
           :aria-expanded="mobileMenuOpen"
+          aria-controls="mobile-navigation"
           aria-label="Toggle menu"
           @click="toggleMobileMenu"
         >
@@ -245,7 +246,7 @@ watch(
       </div>
 
       <Transition name="mobile-menu">
-        <div v-if="mobileMenuOpen" class="mobile-menu">
+        <div v-if="mobileMenuOpen" id="mobile-navigation" class="mobile-menu">
           <div class="mobile-menu-inner">
             <form class="search-bar" @submit.prevent="submitSearch">
               <input
@@ -782,6 +783,16 @@ watch(
 
 .footer-links a:hover {
   color: var(--mv-nav-text-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-menu-enter-active,
+  .mobile-menu-leave-active,
+  .hamburger,
+  .hamburger::before,
+  .hamburger::after {
+    transition: none;
+  }
 }
 
 @media (max-width: 480px) {

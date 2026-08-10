@@ -374,6 +374,11 @@ function clampPercentage(value: number) {
   overscroll-behavior-x: contain;
 }
 
+.calendar-scroll:focus-visible {
+  outline: 2px solid var(--mv-gold);
+  outline-offset: 4px;
+}
+
 .weekly-calendar {
   min-width: 1120px;
 }
