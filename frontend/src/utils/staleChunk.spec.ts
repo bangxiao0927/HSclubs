@@ -64,7 +64,10 @@ describe('recoverFromStaleChunk', () => {
 
   it('does not reload when the marker cannot be stored, since the loop could not be broken', () => {
     const reload = vi.fn()
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    // Node 25 exposes its own global Storage, which is not jsdom's window Storage.
+    // Spy on the prototype used by the browser object the implementation actually calls.
+    const storagePrototype = Object.getPrototypeOf(window.sessionStorage) as Storage
+    const setItem = vi.spyOn(storagePrototype, 'setItem').mockImplementation(() => {
       throw new Error('storage disabled')
     })
 
