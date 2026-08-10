@@ -7,7 +7,7 @@ import {
 } from './staleChunk'
 
 beforeEach(() => {
-  sessionStorage.clear()
+  window.sessionStorage.clear()
 })
 
 describe('isStaleChunkError', () => {

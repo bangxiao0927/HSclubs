@@ -41,6 +41,11 @@ const defaultReload = (target: string) => {
  * kept, so no reload is attempted at all -- an unrecoverable page beats an
  * infinite reload loop.
  *
+ * Uses `window.sessionStorage` explicitly: in a browser it is the same
+ * object as the unqualified global, but Node 25 added its own built-in
+ * `sessionStorage` that shadows jsdom's under Vitest, so the unqualified
+ * name there resolves to Node's storage instead of the one tests spy on.
+ *
  * @returns whether a reload was triggered.
  */
 export const recoverFromStaleChunk = (
@@ -48,10 +53,10 @@ export const recoverFromStaleChunk = (
   reload: (target: string) => void = defaultReload,
 ): boolean => {
   try {
-    if (sessionStorage.getItem(RELOAD_MARKER_KEY) === target) {
+    if (window.sessionStorage.getItem(RELOAD_MARKER_KEY) === target) {
       return false
     }
-    sessionStorage.setItem(RELOAD_MARKER_KEY, target)
+    window.sessionStorage.setItem(RELOAD_MARKER_KEY, target)
   } catch {
     return false
   }
@@ -65,7 +70,7 @@ export const recoverFromStaleChunk = (
  */
 export const clearStaleChunkRecovery = () => {
   try {
-    sessionStorage.removeItem(RELOAD_MARKER_KEY)
+    window.sessionStorage.removeItem(RELOAD_MARKER_KEY)
   } catch {
     // Nothing to clean up if storage never worked.
   }

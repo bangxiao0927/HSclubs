@@ -26,12 +26,19 @@
 | -------------------- | --------------------------- | -------------------------- |
 | Java                 | 17+                         | Backend runtime            |
 | MySQL                | 8.0+                        | Database                   |
-| Node.js              | 20+                         | Frontend build             |
+| Node.js              | See `frontend/package.json`'s `engines.node` (currently `^20.19.0 \|\| >=22.12.0`) | Frontend build |
 | npm                  | 10+                         | Frontend dependencies      |
 | Python               | 3.10+ with `venv` and `pip` | Instaloader avatar cache   |
 | Caddy or nginx       | Caddy 2.7+ / nginx 1.24+    | Reverse proxy (production) |
 | Google Cloud Project | —                           | OAuth2 credentials         |
 | Domain               | —                           | HTTPS + OAuth redirect     |
+
+`deploy-main.sh` checks the active Node.js against that `engines.node` range
+before building the frontend. If the server's default Node.js does not
+satisfy it (for example an older LTS installed via the OS package manager),
+the script activates a compatible version through
+[nvm](https://github.com/nvm-sh/nvm) instead of failing outright -- see
+"Node.js runtime selection" below.
 
 ---
 
@@ -313,27 +320,41 @@ cd backend
 
 ### Run as a service (systemd)
 
-Create `/etc/systemd/system/hsclubs.service`:
+Create `/etc/systemd/system/hsclubs.service`. The sample below is byte-for-byte
+what `scripts/deploy-main.sh`'s `backend_service_unit_content` function
+generates for the documented defaults: `APP_DIR=/opt/hsclubs`,
+`BACKEND_RUN_USER=your-deploy-user`, `SYSTEMD_SCOPE=system`, and a `java`
+resolved from `PATH` at `/usr/bin/java`. `restart_or_require_admin_setup`
+compares this file byte-for-byte against the installed unit before every
+restart, so any customization -- a different `APP_DIR`, `BACKEND_RUN_USER`,
+`BACKEND_ENV_FILE`, or `java` location -- changes the exact unit the script
+expects. Run `scripts/deploy-main.sh` once with your real environment
+variables set and read the generated unit from the "Generated the desired
+unit at" message it prints instead of hand-editing this sample, if your
+deployment differs from the defaults above.
 
 ```ini
 [Unit]
 Description=HSclubs Backend
-After=network.target mysql.service
+Wants=network-online.target
+After=network-online.target mysql.service
 
 [Service]
 Type=simple
 User=your-deploy-user
 WorkingDirectory=/opt/hsclubs/backend
+EnvironmentFile=/opt/hsclubs/backend/.env
 ExecStart=/usr/bin/java -jar /opt/hsclubs/backend/target/demo-0.0.1-SNAPSHOT.jar
 Restart=on-failure
 RestartSec=5
 
-# Pass environment variables
-EnvironmentFile=/opt/hsclubs/backend/.env
-
 [Install]
 WantedBy=multi-user.target
 ```
+
+The `ExecStart` jar filename comes from your Maven build (`target/*.jar`) and
+is resolved at deploy time, so it will differ from the example above only if
+`backend/pom.xml`'s `artifactId` or `version` changes.
 
 ```bash
 sudo systemctl daemon-reload
@@ -348,7 +369,9 @@ service, checks the backend, and then publishes the frontend. Its production def
 the system service and, for a fresh installation, the non-root account that invokes the
 deploy script. If the service already exists, deployment preserves its configured `User=`
 unless `BACKEND_RUN_USER` is explicitly set. Run the script directly from the deployment
-account; it uses `sudo` internally for privileged installation steps. Set
+account. For a system-scope service that is already installed, enabled, and unchanged, the
+only privileged step it runs is the exact command granted by
+`ops/hsclubs-deploy.sudoers` -- see "Restricted sudo for system-scope deploys" below. Set
 `BACKEND_RUN_USER` only when the backend should use a different, existing account or when
 intentionally migrating an existing service:
 
@@ -382,6 +405,75 @@ system manager.
 
 The deploy script respects `APP_INSTAGRAM_AVATAR_CACHE_ENABLED=false` and skips
 Instaloader initialization when the cache is disabled.
+
+### Restricted sudo for system-scope deploys
+
+A system-scope unit is root-owned. Installing, enabling, and reloading it is a one-time
+admin task, done by hand once; routine deploys afterward must not repeat those privileged
+steps. `scripts/deploy-main.sh` enforces that split:
+
+- It generates the unit it would install into a temp file and compares it against
+  `/etc/systemd/system/$BACKEND_SERVICE`.
+- If the installed unit is identical and already enabled, it runs exactly one privileged
+  command: `sudo /usr/bin/systemctl restart hsclubs.service` (the `systemctl` path is
+  resolved and canonicalized at run time so it matches the sudoers rule below).
+- If the unit is missing, different, or not enabled, it fails immediately with the exact
+  `install`/`daemon-reload`/`enable`/`start` commands an admin needs to run once, instead of
+  attempting a broad privileged install itself.
+- When `BACKEND_RUN_USER` is the account running the deploy (for example `webowner` running
+  as `webowner`), the runtime-access checks that back it call the backend directly instead
+  of through `sudo -u`, since no privilege boundary needs crossing.
+
+One-time admin setup, after creating the unit shown under "Run as a service" above:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable hsclubs.service
+sudo systemctl start hsclubs.service
+
+# Validate the sudoers rule before installing it.
+sudo visudo -cf ops/hsclubs-deploy.sudoers
+sudo install -m 0440 ops/hsclubs-deploy.sudoers /etc/sudoers.d/hsclubs-deploy
+```
+
+`ops/hsclubs-deploy.sudoers` grants exactly one command to the deployment account, with no
+wildcard and no shell or helper script:
+
+```
+webowner ALL=(root) NOPASSWD: /usr/bin/systemctl restart hsclubs.service
+```
+
+After that one-time setup, every routine deploy needs only that single restart command as
+root; it never re-installs, re-enables, or daemon-reloads the unit.
+
+### Node.js runtime selection
+
+Before installing frontend dependencies or building, `deploy-main.sh` checks
+the Node.js on `PATH` against `frontend/package.json`'s `engines.node` range.
+
+- If it already satisfies the range, the script uses it as-is.
+- If it does not, the script sources `nvm.sh` from `$NVM_DIR/nvm.sh` (default
+  `$HOME/.nvm/nvm.sh`) and activates the highest already-installed nvm
+  version that satisfies the range.
+- Set `DEPLOY_NODE_VERSION` to force a specific nvm-managed version instead
+  (for example `DEPLOY_NODE_VERSION=22.12.0`). The script still verifies that
+  version satisfies `engines.node` before using it.
+
+The script never installs a Node.js version over the network: if no
+already-installed version (system or nvm) satisfies the requirement, or nvm
+itself is not installed at the expected path, it fails with a message naming
+the required range and, when nvm is available, the versions it found
+installed. Install a compatible version with `nvm install <version>` and
+re-run the deploy, or set `DEPLOY_NODE_VERSION` to a version you have already
+installed.
+
+```bash
+# Force a specific already-installed nvm version.
+DEPLOY_NODE_VERSION=22.12.0 ./scripts/deploy-main.sh
+
+# Use a non-default nvm installation location.
+NVM_DIR=/opt/nvm ./scripts/deploy-main.sh
+```
 
 ### Health check
 
