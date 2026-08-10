@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
 import { applyToClub, cancelMembershipRequest, fetchAllClubs, fetchClubById } from '../services/clubService'
@@ -7,9 +7,12 @@ import type { Club } from '../types/club'
 import { useAuthStore } from '../stores/auth'
 import { clubImage } from '../utils/clubImages'
 import BackButton from '../components/BackButton.vue'
+import ClubMediaView from './ClubMediaView.vue'
+import { createViewSessionOwner } from '../utils/viewSession'
 
 const route = useRoute()
 const club = ref<Club | null>(null)
+const mediaSectionRef = ref<HTMLElement | null>(null)
 const relatedClubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
@@ -17,6 +20,14 @@ const joining = ref(false)
 const joinError = ref('')
 const joinSuccess = ref('')
 const canceling = ref(false)
+
+// Related-club links in the sidebar change route.params.id without unmounting this view, so a
+// slow load for club A can still be in flight when a fast load for club B (navigated to right
+// after) resolves first. Without a guard, A's response would land last and overwrite B's data
+// while the URL still says B -- and that stale record would also be handed to the embedded
+// media view as its snapshot. One session per loadClub() call keeps only the newest load's
+// writes on screen; see viewSession.ts for the general rule this follows.
+const clubSessions = createViewSessionOwner()
 
 const canApply = computed(
   () =>
@@ -44,21 +55,53 @@ const instagramHandle = (url?: string | null) => {
   return lastPart.startsWith('@') ? lastPart : `@${lastPart}`
 }
 
+// The legacy /clubs/:id/media route redirects here with a #media hash (see router/index.ts),
+// but the browser's native anchor jump fires before this section exists in the DOM -- club
+// detail loads asynchronously and the #media section is behind `v-if="club"`. So once the
+// club has loaded and Vue has flushed that DOM update, jump to it ourselves. Guarded for
+// jsdom, where elements exist but scrollIntoView is not implemented.
+const scrollToMediaSection = async () => {
+  const session = clubSessions.current()
+  if (route.hash !== '#media') {
+    return
+  }
+  await nextTick()
+  if (!session.isCurrent) {
+    return
+  }
+  const target = mediaSectionRef.value
+  if (target && typeof target.scrollIntoView === 'function') {
+    target.scrollIntoView()
+  }
+}
+
 const loadClub = async (id: string) => {
-  loading.value = true
-  error.value = ''
-  club.value = null
-  joinError.value = ''
-  joinSuccess.value = ''
+  const session = clubSessions.begin()
+  session.apply(() => {
+    loading.value = true
+    error.value = ''
+    club.value = null
+    joinError.value = ''
+    joinSuccess.value = ''
+  })
   try {
     const [clubResponse, allClubs] = await Promise.all([fetchClubById(id), fetchAllClubs()])
-    club.value = clubResponse
-    relatedClubs.value = allClubs.filter((item) => item.id !== clubResponse.id).slice(0, 3)
+    session.apply(() => {
+      club.value = clubResponse
+      relatedClubs.value = allClubs.filter((item) => item.id !== clubResponse.id).slice(0, 3)
+    })
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load club'
-    relatedClubs.value = []
+    session.apply(() => {
+      error.value = err instanceof Error ? err.message : 'Failed to load club'
+      relatedClubs.value = []
+    })
   } finally {
-    loading.value = false
+    session.apply(() => {
+      loading.value = false
+    })
+  }
+  if (session.isCurrent && club.value) {
+    await scrollToMediaSection()
   }
 }
 
@@ -66,8 +109,13 @@ const refreshClubSnapshot = async () => {
   if (!club.value) {
     return
   }
+  const session = clubSessions.current()
+  const clubId = String(club.value.id)
   try {
-    club.value = await fetchClubById(String(club.value.id))
+    const response = await fetchClubById(clubId)
+    session.apply(() => {
+      club.value = response
+    })
   } catch (err) {
     console.error(err)
   }
@@ -118,6 +166,22 @@ watch(
   },
   { immediate: true }
 )
+
+// A navigation that only changes the hash (e.g. pressing a "jump to media"
+// link, or a browser Back/Forward step within the same club) does not touch
+// route.params.id, so the watch above never re-runs and the club is not
+// refetched. Scroll independently whenever the hash becomes #media on a club
+// that is already loaded.
+watch(
+  () => route.hash,
+  () => {
+    void scrollToMediaSection()
+  }
+)
+
+onBeforeUnmount(() => {
+  clubSessions.end()
+})
 </script>
 
 <template>
@@ -163,7 +227,6 @@ watch(
           </div>
         </div>
         <div class="hero-side">
-          <RouterLink :to="`/clubs/${club.id}/media`" class="media-link"> View club media </RouterLink>
           <RouterLink
             v-if="club.canManage || isOwner"
             :to="`/clubs/${club.id}/admin`"
@@ -257,6 +320,10 @@ watch(
           </li>
         </ul>
       </aside>
+    </section>
+
+    <section id="media" ref="mediaSectionRef" class="club-media-section">
+      <ClubMediaView embedded :snapshot="club" />
     </section>
   </section>
 
@@ -369,16 +436,6 @@ watch(
   color: var(--mv-gold);
   font-weight: 600;
   background: var(--mv-surface-muted);
-}
-
-.media-link {
-  border: 1px solid var(--mv-border);
-  border-radius: 999px;
-  padding: 0.4rem 1rem;
-  text-decoration: none;
-  color: var(--mv-text-soft);
-  font-weight: 600;
-  background: var(--mv-surface-card);
 }
 
 .club-hero h1 {
@@ -571,6 +628,14 @@ watch(
   color: var(--mv-text-dim);
 }
 
+.club-media-section {
+  border-radius: 28px;
+  border: 1px solid var(--mv-border);
+  padding: clamp(1.5rem, 4vw, 2.75rem);
+  background: var(--mv-surface-card-strong);
+  box-shadow: var(--mv-shadow-card);
+}
+
 .empty-state {
   gap: 0.75rem;
 }
@@ -585,11 +650,6 @@ watch(
   .hero-side {
     width: 100%;
     align-items: flex-start;
-  }
-
-  .media-link {
-    width: 100%;
-    text-align: center;
   }
 
   .admin-link {
@@ -642,6 +702,11 @@ watch(
   .related {
     padding: 1.25rem;
     border-radius: 20px;
+  }
+
+  .club-media-section {
+    padding: 1.25rem;
+    border-radius: 22px;
   }
 }
 

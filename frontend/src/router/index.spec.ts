@@ -91,7 +91,64 @@ describe('authentication gate', () => {
     await router.push('/clubs/3/media')
     await router.isReady()
 
-    expect(router.currentRoute.value.name).toBe('club-media')
+    expect(router.currentRoute.value.name).toBe('club-detail')
+  })
+})
+
+describe('legacy club media route redirect', () => {
+  it('redirects /clubs/:id/media to /clubs/:id with the #media hash', async () => {
+    await primeSession(null)
+
+    await router.push('/clubs/3/media')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/clubs/3')
+    expect(router.currentRoute.value.hash).toBe('#media')
+  })
+
+  it('preserves the query string from the legacy media route', async () => {
+    await primeSession(null)
+
+    await router.push('/clubs/3/media?page=2&size=6')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/clubs/3')
+    expect(router.currentRoute.value.query.page).toBe('2')
+    expect(router.currentRoute.value.query.size).toBe('6')
+    expect(router.currentRoute.value.hash).toBe('#media')
+  })
+})
+
+describe('legacy club admin pending route redirect', () => {
+  it('redirects /clubs/:id/admin/pending to /clubs/:id/admin with the #members hash', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/clubs/3/admin/pending')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/clubs/3/admin')
+    expect(router.currentRoute.value.hash).toBe('#members')
+  })
+
+  it('preserves the query string from the legacy pending route', async () => {
+    await primeSession(onboardedUser)
+
+    await router.push('/clubs/3/admin/pending?ref=email')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/clubs/3/admin')
+    expect(router.currentRoute.value.query.ref).toBe('email')
+    expect(router.currentRoute.value.hash).toBe('#members')
+  })
+
+  it('still requires authentication, since the redirect target does', async () => {
+    await primeSession(null)
+
+    await router.push('/clubs/3/admin/pending')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('auth-choice')
+    expect(router.currentRoute.value.query.redirect).toBe('/clubs/3/admin#members')
   })
 })
 
