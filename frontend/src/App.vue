@@ -80,7 +80,7 @@ const applyTheme = (value: ColorMode) => {
 
 const persistTheme = (value: ColorMode) => {
   try {
-    localStorage.setItem('theme', value)
+    window.localStorage.setItem('theme', value)
   } catch (error) {
     console.warn('Failed to persist theme preference.', error)
   }
@@ -93,7 +93,10 @@ const toggleTheme = () => {
 }
 
 try {
-  theme.value = resolveInitialTheme(localStorage.getItem('theme'), schoolTemplate.defaultColorMode)
+  theme.value = resolveInitialTheme(
+    window.localStorage.getItem('theme'),
+    schoolTemplate.defaultColorMode,
+  )
 } catch (error) {
   console.warn('Failed to read theme preference.', error)
 }

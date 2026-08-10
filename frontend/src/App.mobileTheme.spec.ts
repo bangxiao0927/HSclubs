@@ -32,7 +32,7 @@ const mountApp = async () => {
 
 beforeEach(() => {
   setActivePinia(createPinia())
-  localStorage.clear()
+  window.localStorage.clear()
   document.documentElement.removeAttribute('data-theme')
 })
 
