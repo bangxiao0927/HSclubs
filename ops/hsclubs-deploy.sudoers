@@ -1,0 +1,19 @@
+# ops/hsclubs-deploy.sudoers
+#
+# Grants the webowner deployment account permission to run exactly one root
+# command: restarting the already-installed hsclubs.service unit. No
+# wildcards, no shell, no helper script -- the deploy account can restart the
+# service and nothing else as root.
+#
+# scripts/deploy-main.sh's normal system-scope path never installs, enables,
+# or daemon-reloads the unit; that is a one-time admin task (see
+# docs/DEPLOYMENT.md). This rule is the only privilege the routine deploy
+# needs afterward.
+#
+# Validate before installing:
+#   sudo visudo -cf ops/hsclubs-deploy.sudoers
+#
+# Install with the mode sudoers requires:
+#   sudo install -m 0440 ops/hsclubs-deploy.sudoers /etc/sudoers.d/hsclubs-deploy
+
+webowner ALL=(root) NOPASSWD: /usr/bin/systemctl restart hsclubs.service

@@ -20,6 +20,18 @@ SYSTEMD_SCOPE="${SYSTEMD_SCOPE:-system}"
 RUN_BACKEND_TESTS="${RUN_BACKEND_TESTS:-0}"
 SKIP_GIT_PULL="${SKIP_GIT_PULL:-0}"
 SETUP_INSTALOADER="${SETUP_INSTALOADER:-1}"
+# Optional exact nvm version to activate when the ambient Node.js does not
+# satisfy frontend/package.json's engines.node (e.g. the server default is
+# older than the frontend's minimum). Left unset, deployment auto-selects an
+# already-installed nvm version that satisfies the requirement.
+DEPLOY_NODE_VERSION="${DEPLOY_NODE_VERSION:-}"
+NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# Canonical path to systemctl, resolved lazily by resolve_systemctl_bin so
+# the privileged restart command matches ops/hsclubs-deploy.sudoers exactly.
+SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-}"
+# Where system-scope unit files live. Overridable so tests can point at a
+# fixture directory instead of the real, root-owned /etc/systemd/system.
+SYSTEM_UNIT_DIR="${SYSTEM_UNIT_DIR:-/etc/systemd/system}"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -55,6 +67,235 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
+is_release_version() {
+  [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+version_compare() {
+  local -a left_parts right_parts
+  local index left_component right_component
+
+  is_release_version "$1" || die "Internal error: version_compare received a" \
+    "non-release version string: $1"
+  is_release_version "$2" || die "Internal error: version_compare received a" \
+    "non-release version string: $2"
+
+  IFS='.' read -r -a left_parts <<< "$1"
+  IFS='.' read -r -a right_parts <<< "$2"
+
+  for index in 0 1 2; do
+    left_component="${left_parts[index]:-0}"
+    right_component="${right_parts[index]:-0}"
+    if (( 10#$left_component > 10#$right_component )); then
+      printf '1\n'
+      return
+    fi
+    if (( 10#$left_component < 10#$right_component )); then
+      printf '\055\061\n'
+      return
+    fi
+  done
+  printf '0\n'
+}
+
+version_ge() {
+  [[ "$(version_compare "$1" "$2")" != "-1" ]]
+}
+
+version_gt() {
+  [[ "$(version_compare "$1" "$2")" == "1" ]]
+}
+
+node_version_matches_clause() {
+  local version="$1"
+  local clause="$2"
+
+  case "$clause" in
+    ^*)
+      local base="${clause#^}"
+      is_release_version "$base" || die "Unsupported frontend engines.node clause:" \
+        "'$clause' (expected ^X.Y.Z)."
+      [[ "${version%%.*}" == "${base%%.*}" ]] && version_ge "$version" "$base"
+      ;;
+    '>='*)
+      local base="${clause#>=}"
+      is_release_version "$base" || die "Unsupported frontend engines.node clause:" \
+        "'$clause' (expected >=X.Y.Z)."
+      version_ge "$version" "$base"
+      ;;
+    *)
+      is_release_version "$clause" || die "Unsupported frontend engines.node clause:" \
+        "'$clause' (expected an exact X.Y.Z version, ^X.Y.Z, or >=X.Y.Z)."
+      [[ "$version" == "$clause" ]]
+      ;;
+  esac
+}
+
+# Range syntax supported: `||`-separated clauses of `^X.Y.Z`, `>=X.Y.Z`, or an
+# exact version, which is what frontend/package.json's engines.node uses.
+node_version_satisfies_engine_range() {
+  local version="$1"
+  local range="$2"
+  local clause
+
+  is_release_version "$version" || return 1
+
+  while IFS= read -r clause; do
+    clause="${clause#"${clause%%[![:space:]]*}"}"
+    clause="${clause%"${clause##*[![:space:]]}"}"
+    [[ -z "$clause" ]] && continue
+    node_version_matches_clause "$version" "$clause" && return 0
+  done <<< "${range//||/$'\n'}"
+  return 1
+}
+
+frontend_node_engine_range() {
+  local package_json="$APP_DIR/frontend/package.json"
+
+  [[ -r "$package_json" ]] || die "Frontend package.json is missing or unreadable: $package_json"
+  awk -F'"' '
+    /"engines"[[:space:]]*:/ { in_engines = 1 }
+    in_engines {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "node") {
+          print $(i + 2)
+          exit
+        }
+      }
+    }
+    in_engines && /}/ { in_engines = 0 }
+  ' "$package_json"
+}
+
+load_nvm() {
+  local nvm_script="$NVM_DIR/nvm.sh"
+
+  [[ -r "$nvm_script" ]] || die "Current Node.js does not satisfy the frontend's" \
+    "engine requirement and nvm was not found at $nvm_script. Install a" \
+    "compatible Node.js version, install nvm, or set NVM_DIR to where nvm is installed."
+
+  # nvm.sh is not written for `set -Eeuo pipefail`: it references some
+  # unset variables, and sourcing it normally auto-activates the `default`
+  # alias, which returns non-zero (aborting this script under -e) whenever
+  # that alias points at a version that has since been uninstalled -- before
+  # the caller ever gets to scan installed versions. `--no-use` skips that
+  # auto-activation, and errexit/nounset/pipefail/ERR are relaxed only for
+  # the source itself; loading is verified afterward by checking for the
+  # `nvm` function, so a real failure to load still produces an actionable
+  # error.
+  local restore_errexit=0 restore_nounset=0 restore_pipefail=0
+  [[ $- == *e* ]] && restore_errexit=1
+  [[ $- == *u* ]] && restore_nounset=1
+  [[ ":$SHELLOPTS:" == *:pipefail:* ]] && restore_pipefail=1
+
+  set +e
+  set +u
+  set +o pipefail
+  trap - ERR
+  # shellcheck source=/dev/null
+  . "$nvm_script" --no-use
+
+  (( restore_errexit )) && set -e
+  (( restore_nounset )) && set -u
+  (( restore_pipefail )) && set -o pipefail
+  trap 'on_error $LINENO' ERR
+
+  command -v nvm >/dev/null 2>&1 || die "Sourced $nvm_script but the nvm function did not load."
+}
+
+# Activates an installed nvm Node.js version matching DEPLOY_NODE_VERSION.
+# Never installs a version; nvm reports a clear error when it is missing.
+select_requested_nvm_node() {
+  local requested_version="$1"
+  local engine_range="$2"
+  local resolved_version
+
+  load_nvm
+  nvm use "$requested_version" >/dev/null || \
+    die "DEPLOY_NODE_VERSION=$requested_version is not installed via nvm." \
+      "Install it with 'nvm install $requested_version' or unset" \
+      "DEPLOY_NODE_VERSION to auto-select an installed compatible version."
+
+  resolved_version="$(node --version)"
+  resolved_version="${resolved_version#v}"
+  node_version_satisfies_engine_range "$resolved_version" "$engine_range" || \
+    die "DEPLOY_NODE_VERSION=$requested_version resolves to Node.js" \
+      "$resolved_version, which does not satisfy frontend engines.node:" \
+      "$engine_range."
+  log "Using nvm-selected Node.js $resolved_version (DEPLOY_NODE_VERSION=$requested_version)"
+}
+
+# Picks the highest already-installed nvm Node.js version that satisfies
+# engine_range by reading nvm's on-disk version directories directly, since
+# their layout is stable across nvm releases and avoids parsing `nvm ls`
+# output. Never installs a version.
+select_compatible_nvm_node() {
+  local engine_range="$1"
+  local versions_dir
+  local candidate_dir candidate_version
+  local best_version=""
+
+  load_nvm
+  versions_dir="$NVM_DIR/versions/node"
+  [[ -d "$versions_dir" ]] || die "No nvm-managed Node.js versions found in" \
+    "$versions_dir. Install a version that satisfies frontend engines.node" \
+    "($engine_range) with nvm, or set DEPLOY_NODE_VERSION."
+
+  for candidate_dir in "$versions_dir"/v*; do
+    [[ -x "$candidate_dir/bin/node" ]] || continue
+    candidate_version="$(basename "$candidate_dir")"
+    candidate_version="${candidate_version#v}"
+    if node_version_satisfies_engine_range "$candidate_version" "$engine_range"; then
+      if [[ -z "$best_version" ]] || version_gt "$candidate_version" "$best_version"; then
+        best_version="$candidate_version"
+      fi
+    fi
+  done
+
+  if [[ -z "$best_version" ]]; then
+    local installed
+    installed="$(ls -1 "$versions_dir" 2>/dev/null | tr '\n' ' ')"
+    die "No installed nvm Node.js version satisfies frontend engines.node" \
+      "($engine_range). Installed versions: ${installed:-none}. Install a" \
+      "compatible version with nvm (for example 'nvm install 22.12.0') or set" \
+      "DEPLOY_NODE_VERSION to an installed compatible version."
+  fi
+
+  nvm use "$best_version" >/dev/null || die "Failed to activate nvm Node.js $best_version."
+  log "Using nvm-selected Node.js $best_version (satisfies frontend engines.node: $engine_range)"
+}
+
+# Ensures the Node.js on PATH for the rest of the script satisfies
+# frontend/package.json's engines.node, switching via nvm when needed. Must
+# run before any `require_cmd npm` / npm invocation, since nvm changes PATH
+# only for the current shell.
+ensure_frontend_node_runtime() {
+  local engine_range
+  local current_version
+
+  engine_range="$(frontend_node_engine_range)"
+  [[ -n "$engine_range" ]] || die "Could not read engines.node from frontend/package.json."
+
+  if [[ -n "$DEPLOY_NODE_VERSION" ]]; then
+    select_requested_nvm_node "$DEPLOY_NODE_VERSION" "$engine_range"
+    return
+  fi
+
+  if command -v node >/dev/null 2>&1; then
+    current_version="$(node --version)"
+    current_version="${current_version#v}"
+    if node_version_satisfies_engine_range "$current_version" "$engine_range"; then
+      log "Using system Node.js $current_version (satisfies frontend engines.node: $engine_range)"
+      return
+    fi
+    log "System Node.js $current_version does not satisfy frontend engines.node: $engine_range"
+  else
+    log "No Node.js found on PATH; frontend requires engines.node: $engine_range"
+  fi
+
+  select_compatible_nvm_node "$engine_range"
+}
+
 run() {
   log "$*"
   "$@"
@@ -83,7 +324,7 @@ backend_service_user() {
 }
 
 run_as_backend_user() {
-  if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
+  if [[ "$SYSTEMD_SCOPE" == "system" && "$BACKEND_RUN_USER" != "$(id -un)" ]]; then
     sudo -H -u "$BACKEND_RUN_USER" -- "$@"
   else
     "$@"
@@ -98,16 +339,34 @@ service_cmd() {
   fi
 }
 
-install_service_file() {
-  local source_file="$1"
+# Resolves the exact, canonical path to the `systemctl` binary so the
+# restart command run under sudo matches the literal path granted in
+# ops/hsclubs-deploy.sudoers -- sudo does not consult PATH the way an
+# interactive shell does, and a symlinked or non-standard location would
+# otherwise silently fail to match that rule.
+resolve_systemctl_bin() {
+  local resolved
 
-  if [[ "$SYSTEMD_SCOPE" == "user" ]]; then
-    local user_unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-    run mkdir -p "$user_unit_dir"
-    run install -m 0644 "$source_file" "$user_unit_dir/$BACKEND_SERVICE"
-  else
-    run sudo install -m 0644 "$source_file" "/etc/systemd/system/$BACKEND_SERVICE"
+  if [[ -n "$SYSTEMCTL_BIN" ]]; then
+    return
   fi
+
+  resolved="$(command -v systemctl)" || die "Missing required command: systemctl"
+  if command -v readlink >/dev/null 2>&1; then
+    resolved="$(readlink -f "$resolved" 2>/dev/null || printf '%s\n' "$resolved")"
+  fi
+  SYSTEMCTL_BIN="$resolved"
+}
+
+# User-scope units are owned by the deployment account, so the script can
+# install and enable them itself without elevation. System-scope units are
+# root-owned and installed once by an admin; see restart_or_require_admin_setup.
+install_user_service_file() {
+  local source_file="$1"
+  local user_unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+  run mkdir -p "$user_unit_dir"
+  run install -m 0644 "$source_file" "$user_unit_dir/$BACKEND_SERVICE"
 }
 
 validate_configuration() {
@@ -390,14 +649,11 @@ publish_frontend() {
   run sudo rsync -a --delete "$source_dir" "$target_dir"
 }
 
-install_and_start_backend_service() {
+backend_service_unit_content() {
   local jar_path="$1"
   local java_path
-  local service_file
 
   java_path="$(command -v java)"
-  service_file="$(mktemp)"
-
   {
     printf '%s\n' \
       '[Unit]' \
@@ -423,17 +679,78 @@ install_and_start_backend_service() {
     else
       printf 'WantedBy=default.target\n'
     fi
-  } > "$service_file"
+  }
+}
 
-  if ! install_service_file "$service_file"; then
+install_and_start_backend_service() {
+  local jar_path="$1"
+  local service_file
+
+  service_file="$(mktemp)"
+  backend_service_unit_content "$jar_path" > "$service_file"
+  chmod 0600 "$service_file"
+
+  if [[ "$SYSTEMD_SCOPE" != "user" ]]; then
+    restart_or_require_admin_setup "$service_file"
     rm -f "$service_file"
-    die "Could not install the systemd service file."
+    return
+  fi
+
+  if ! install_user_service_file "$service_file"; then
+    rm -f "$service_file"
+    die "Could not install the systemd user service file."
   fi
   rm -f "$service_file"
 
   run service_cmd daemon-reload
   run service_cmd enable "$BACKEND_SERVICE"
   run service_cmd restart "$BACKEND_SERVICE"
+}
+
+# System-scope units are root-owned and already installed by an admin;
+# routine deploys must not reinstall, daemon-reload, or re-enable them. This
+# compares the desired unit against the installed one and, if they match and
+# the unit is enabled, runs only the exact restart command granted by
+# ops/hsclubs-deploy.sudoers. Otherwise it fails with the one-time setup an
+# admin must run by hand, rather than attempting a broad privileged install.
+restart_or_require_admin_setup() {
+  local desired_file="$1"
+  local installed_unit="$SYSTEM_UNIT_DIR/$BACKEND_SERVICE"
+
+  if [[ -f "$installed_unit" ]] \
+    && diff -q "$desired_file" "$installed_unit" >/dev/null 2>&1 \
+    && systemctl is-enabled --quiet "$BACKEND_SERVICE" 2>/dev/null; then
+    run sudo "$SYSTEMCTL_BIN" restart "$BACKEND_SERVICE"
+    return
+  fi
+
+  fail_with_admin_setup_instructions "$desired_file" "$installed_unit"
+}
+
+fail_with_admin_setup_instructions() {
+  local desired_file="$1"
+  local installed_unit="$2"
+
+  {
+    printf '\nERROR: %s is missing, different from the unit this deploy\n' "$installed_unit"
+    printf 'would install, or not enabled. Routine deploys never install, enable,\n'
+    printf 'or daemon-reload a system-scope unit; that is a one-time admin task.\n\n'
+    printf 'Generated the desired unit at: %s\n' "$desired_file"
+    printf '(mode 0600, owned by this account; the path is unpredictable and not\n'
+    printf 'reused across runs, so do not copy it to a fixed location.)\n\n'
+    printf 'Run once, as an administrator, to install it:\n\n'
+    printf '  sudo install -m 0644 "%s" "%s"\n' "$desired_file" "$installed_unit"
+    printf '  sudo systemctl daemon-reload\n'
+    printf '  sudo systemctl enable "%s"\n' "$BACKEND_SERVICE"
+    printf '  sudo systemctl start "%s"\n\n' "$BACKEND_SERVICE"
+    printf 'Then grant the deploy account the restart-only sudoers rule (see\n'
+    printf 'ops/hsclubs-deploy.sudoers):\n\n'
+    printf '  sudo visudo -cf ops/hsclubs-deploy.sudoers\n'
+    printf '  sudo install -m 0440 ops/hsclubs-deploy.sudoers /etc/sudoers.d/hsclubs-deploy\n\n'
+    printf 'Re-run this deploy once the unit is installed, enabled, and matches.\n'
+    printf 'Once installed, remove the generated file: rm -f "%s"\n' "$desired_file"
+  } >&2
+  exit 1
 }
 
 wait_for_backend() {
@@ -449,7 +766,12 @@ wait_for_backend() {
     fi
   done
 
-  service_cmd status "$BACKEND_SERVICE" --no-pager || true
+  if [[ "$SYSTEMD_SCOPE" == "user" ]]; then
+    service_cmd status "$BACKEND_SERVICE" --no-pager || true
+  else
+    # Reading unit status does not require root, unlike restart/enable.
+    systemctl status "$BACKEND_SERVICE" --no-pager || true
+  fi
   die "Backend health check failed after 60 seconds: $BACKEND_HEALTH_URL"
 }
 
@@ -457,15 +779,17 @@ main() {
   validate_deployment_user
 
   require_cmd git
-  require_cmd npm
   require_cmd rsync
   require_cmd java
   require_cmd curl
   require_cmd systemctl
   require_cmd install
   require_cmd mktemp
+  require_cmd diff
+  require_cmd chmod
   if [[ "$SYSTEMD_SCOPE" == "system" ]]; then
     require_cmd sudo
+    resolve_systemctl_bin
   fi
 
   resolve_backend_run_user
@@ -477,6 +801,8 @@ main() {
 
   log "Building frontend"
   cd "$APP_DIR/frontend"
+  ensure_frontend_node_runtime
+  require_cmd npm
   run npm ci --include=dev
   run npm run build
 
@@ -503,4 +829,8 @@ main() {
   log "Deployment complete"
 }
 
-main "$@"
+# Guarded so tests can source this file to reach the individual functions
+# above without running the full deployment.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
