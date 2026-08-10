@@ -1,11 +1,27 @@
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import App from './App.vue'
 
 const stubView = { template: '<div />' }
+const originalLocalStorage = Object.getOwnPropertyDescriptor(window, 'localStorage')
+
+const installBrowserLocalStorage = () => {
+  const values = new Map<string, string>()
+  const storage: Storage = {
+    get length() {
+      return values.size
+    },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => values.delete(key),
+    setItem: (key, value) => values.set(key, String(value)),
+  }
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: storage })
+}
 
 const buildRouter = () =>
   createRouter({
@@ -32,12 +48,20 @@ const mountApp = async () => {
 
 beforeEach(() => {
   setActivePinia(createPinia())
-  window.localStorage.clear()
+  installBrowserLocalStorage()
   document.documentElement.removeAttribute('data-theme')
 })
 
 afterEach(() => {
   document.documentElement.removeAttribute('data-theme')
+})
+
+afterAll(() => {
+  if (originalLocalStorage) {
+    Object.defineProperty(window, 'localStorage', originalLocalStorage)
+  } else {
+    Reflect.deleteProperty(window, 'localStorage')
+  }
 })
 
 describe('mobile menu theme toggle', () => {
@@ -57,7 +81,7 @@ describe('mobile menu theme toggle', () => {
     await wrapper.find('.mobile-theme-toggle').trigger('click')
 
     expect(document.documentElement.dataset.theme).toBe('dark')
-    expect(localStorage.getItem('theme')).toBe('dark')
+    expect(window.localStorage.getItem('theme')).toBe('dark')
     expect(wrapper.find('.mobile-menu').exists()).toBe(true)
   })
 })
