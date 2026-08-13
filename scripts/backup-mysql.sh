@@ -164,7 +164,10 @@ dump_and_compress() {
     die "mysqldump failed for database: $database"
   fi
 
-  gzip "$raw_dump"
+  if ! gzip "$raw_dump"; then
+    rm -f "$raw_dump" "$gzipped"
+    die "gzip failed while compressing: $raw_dump"
+  fi
   if ! gzip -t "$gzipped"; then
     rm -f "$gzipped"
     die "Backup failed gzip integrity validation: $gzipped"
@@ -205,7 +208,10 @@ perform_backup() {
   destination="$BACKUP_DIR/$database-$timestamp.sql.gz"
 
   defaults_file="$(create_mysql_defaults_file "$host" "$port" "$user" "$password")"
-  trap 'rm -f "$defaults_file"' RETURN
+  # EXIT rather than RETURN: `die` (used by dump_and_compress on failure)
+  # calls `exit`, which a RETURN trap never sees, leaving the mode-0600
+  # defaults file (containing DB_PASSWORD) behind in $TMPDIR.
+  trap 'rm -f "$defaults_file"' EXIT
 
   log "Backing up database $database from $host:$port to $destination"
   dump_and_compress "$defaults_file" "$database" "$destination" "$BACKUP_DIR"

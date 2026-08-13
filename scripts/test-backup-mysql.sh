@@ -63,6 +63,7 @@ mkdir -p "$FIXTURE_ROOT/bin" "$FIXTURE_ROOT/home"
 cat > "$FIXTURE_ROOT/bin/mysqldump" <<'SH'
 #!/usr/bin/env bash
 echo "mysqldump $*" >> "$MYSQLDUMP_LOG"
+echo "ENV MYSQL_PWD=${MYSQL_PWD-<unset>}" >> "$MYSQLDUMP_LOG"
 if [[ "${MYSQLDUMP_SHOULD_FAIL:-0}" == "1" ]]; then
   echo "mysqldump: simulated failure" >&2
   exit 1
@@ -207,8 +208,39 @@ test_defaults_file_has_restrictive_permissions() {
   assert_eq "600" "$mode" "the defaults-extra-file must be mode 0600"
 }
 
-test_defaults_file_never_puts_password_on_a_command_line() {
-  ! grep -q '\-\-password=' "$BACKUP_MYSQL"
+# Verifies the actual mysqldump invocation (command line and environment)
+# recorded by the fixture never carries the password, rather than grepping
+# the script's own source for one particular spelling of the flag -- that
+# would miss -p"$pw", `--password <pw>` (space-separated), or MYSQL_PWD.
+test_dump_and_compress_never_passes_credentials_via_command_line_or_env() {
+  local backup_dir="$FIXTURE_ROOT/no-cli-password"
+  mkdir -p "$backup_dir"
+  local destination="$backup_dir/mydb-20990101T000000Z.sql.gz"
+  local log="$FIXTURE_ROOT/mysqldump-no-password.log"
+  run_isolated "$COMMON_ENV MYSQLDUMP_LOG='$log'" "
+    defaults_file=\$(create_mysql_defaults_file localhost 3306 root 'super-secret-password')
+    dump_and_compress \"\$defaults_file\" mydb '$destination' '$backup_dir'
+    rm -f \"\$defaults_file\"
+  " >/dev/null
+
+  local invocation
+  invocation="$(grep '^mysqldump ' "$log" | tail -n1)"
+  [[ -n "$invocation" ]] || { printf '  mysqldump was never invoked\n' >&2; return 1; }
+  [[ "$invocation" != *"super-secret-password"* ]] || {
+    printf '  the password must never appear on the mysqldump command line, got: %s\n' "$invocation" >&2
+    return 1
+  }
+  [[ "$invocation" != *"-p"* ]] || {
+    printf '  must never pass -p on the mysqldump command line, got: %s\n' "$invocation" >&2
+    return 1
+  }
+  [[ "$invocation" != *"--password"* ]] || {
+    printf '  must never pass --password on the mysqldump command line, got: %s\n' "$invocation" >&2
+    return 1
+  }
+  local env_line
+  env_line="$(grep '^ENV MYSQL_PWD=' "$log" | tail -n1)"
+  assert_eq "ENV MYSQL_PWD=<unset>" "$env_line" "must never set MYSQL_PWD in the mysqldump environment"
 }
 
 ### dump_and_compress: atomic, validated gzip output ##########################
@@ -252,6 +284,44 @@ test_dump_and_compress_leaves_no_destination_when_mysqldump_fails() {
   local leftovers
   leftovers="$(find "$backup_dir" -maxdepth 1 -type f | wc -l)"
   assert_eq "0" "$leftovers" "must clean up its own temp file after a failed dump"
+}
+
+test_dump_and_compress_leaves_no_files_when_gzip_fails() {
+  local backup_dir="$FIXTURE_ROOT/dump-gzip-fails"
+  mkdir -p "$backup_dir"
+  local failing_bin="$FIXTURE_ROOT/gzip-fails-bin"
+  mkdir -p "$failing_bin"
+  # A hostile `gzip` standing in for one that fails outright (for example,
+  # out of disk space), rather than producing a corrupt stream.
+  cat > "$failing_bin/gzip" <<'SH'
+#!/usr/bin/env bash
+echo "gzip: simulated failure" >&2
+exit 1
+SH
+  chmod +x "$failing_bin/gzip"
+
+  local destination="$backup_dir/mydb-20990101T000000Z.sql.gz"
+  local status=0
+  local output
+  output="$(env -i \
+    PATH="$failing_bin:$FIXTURE_ROOT/bin:/usr/bin:/bin" \
+    HOME="$FIXTURE_ROOT/home" \
+    MYSQLDUMP_LOG="$FIXTURE_ROOT/mysqldump.log" \
+    bash --noprofile --norc -c "
+      $COMMON_ENV
+      source '$BACKUP_MYSQL'
+      defaults_file=\$(create_mysql_defaults_file localhost 3306 root secret)
+      dump_and_compress \"\$defaults_file\" mydb '$destination' '$backup_dir'
+    " 2>&1)" || status=$?
+
+  [[ "$status" -ne 0 ]] || { printf '  expected a non-zero exit when gzip fails\n' >&2; return 1; }
+  [[ ! -e "$destination" ]] || {
+    printf '  must never leave a destination file behind after a failed gzip\n' >&2
+    return 1
+  }
+  local leftovers
+  leftovers="$(find "$backup_dir" -maxdepth 1 -type f | wc -l)"
+  assert_eq "0" "$leftovers" "must clean up the plaintext dump when gzip itself fails"
 }
 
 test_dump_and_compress_rejects_a_corrupt_gzip_stream() {
@@ -329,6 +399,21 @@ test_perform_backup_creates_one_file_named_after_database() {
   assert_eq "1" "$matches" "perform_backup must create exactly one backup file named after the database"
 }
 
+test_perform_backup_leaves_no_defaults_file_when_mysqldump_fails() {
+  local tmp_dir="$FIXTURE_ROOT/tmp-defaults-fail"
+  mkdir -p "$tmp_dir"
+  local backup_dir="$FIXTURE_ROOT/perform-backup-mysqldump-fails"
+  local status=0
+  run_isolated "$COMMON_ENV MYSQLDUMP_SHOULD_FAIL=1 BACKUP_DIR='$backup_dir' TMPDIR='$tmp_dir'" '
+    perform_backup
+  ' >/dev/null || status=$?
+
+  [[ "$status" -ne 0 ]] || { printf '  expected a non-zero exit when mysqldump fails\n' >&2; return 1; }
+  local leftovers
+  leftovers="$(find "$tmp_dir" -maxdepth 1 -type f | wc -l)"
+  assert_eq "0" "$leftovers" "the mode-0600 defaults file must not be left behind after a failed backup"
+}
+
 test_perform_backup_dies_without_required_env_values() {
   local incomplete_env="$FIXTURE_ROOT/incomplete.env"
   echo "SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/mydb" > "$incomplete_env"
@@ -393,12 +478,14 @@ run_test "read_env_value: reads DB_USERNAME" test_read_env_value_reads_username
 run_test "read_env_value: reads DB_PASSWORD" test_read_env_value_reads_password
 run_test "read_env_value: never sources a malicious entry" test_read_env_value_never_sources_a_malicious_entry
 run_test "defaults file: mode 0600" test_defaults_file_has_restrictive_permissions
-run_test "defaults file: password never passed as --password= on the command line" test_defaults_file_never_puts_password_on_a_command_line
+run_test "dump_and_compress: credentials never passed via command line or environment" test_dump_and_compress_never_passes_credentials_via_command_line_or_env
 run_test "dump_and_compress: valid gzip, mode 0600" test_dump_and_compress_produces_valid_gzip_with_restrictive_permissions
 run_test "dump_and_compress: no destination left behind on mysqldump failure" test_dump_and_compress_leaves_no_destination_when_mysqldump_fails
+run_test "dump_and_compress: no files left behind when gzip fails" test_dump_and_compress_leaves_no_files_when_gzip_fails
 run_test "dump_and_compress: rejects a corrupt gzip stream" test_dump_and_compress_rejects_a_corrupt_gzip_stream
 run_test "prune_old_backups: deletes only files past retention" test_prune_old_backups_deletes_only_files_past_retention
 run_test "perform_backup: creates exactly one file named after the database" test_perform_backup_creates_one_file_named_after_database
+run_test "perform_backup: leaves no defaults file when mysqldump fails" test_perform_backup_leaves_no_defaults_file_when_mysqldump_fails
 run_test "perform_backup: dies without required env values" test_perform_backup_dies_without_required_env_values
 run_test "overlap lock: a second concurrent run skips instead of colliding" test_main_skips_when_lock_is_already_held
 
