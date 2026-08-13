@@ -268,6 +268,34 @@ test_uninstall_removes_systemd_user_units_regardless_of_resolved_mode() {
   [[ ! -e "$unit_dir/hsclubs-backup.timer" ]] || { printf '  backup.timer still present\n' >&2; return 1; }
 }
 
+test_uninstall_removes_cron_entries_even_if_systemd_user_teardown_fails() {
+  reset_state
+  # Install under cron, simulating a plain SSH session without lingering:
+  # `systemctl` is present on such a host but there is no reachable user
+  # bus, so `systemctl --user daemon-reload` fails.
+  run_isolated "" '
+    install_cron_entries
+  ' >/dev/null
+
+  run_isolated '
+    systemctl() {
+      if [[ "$1" == "--user" && "$2" == "daemon-reload" ]]; then
+        return 1
+      fi
+      return 0
+    }
+  ' '
+    main --uninstall
+  ' >/dev/null
+
+  local crontab_content
+  crontab_content="$(cat "$FIXTURE_ROOT/crontab.txt" 2>/dev/null || true)"
+  [[ "$crontab_content" != *"health-check.sh"* && "$crontab_content" != *"backup-mysql.sh"* ]] || {
+    printf '  expected --uninstall to remove cron entries even though systemctl --user daemon-reload failed, got: %s\n' "$crontab_content" >&2
+    return 1
+  }
+}
+
 ### auto mode detection #########################################################
 
 test_auto_mode_selects_systemd_user_when_available() {
@@ -562,6 +590,7 @@ run_test "systemd --user: install writes units and enables timers" test_install_
 run_test "systemd --user: uninstall removes units" test_uninstall_systemd_user_removes_units
 run_test "uninstall: removes cron entries regardless of resolved mode" test_uninstall_removes_cron_entries_regardless_of_resolved_mode
 run_test "uninstall: removes systemd-user units regardless of resolved mode" test_uninstall_removes_systemd_user_units_regardless_of_resolved_mode
+run_test "uninstall: removes cron entries even if systemd --user teardown fails" test_uninstall_removes_cron_entries_even_if_systemd_user_teardown_fails
 run_test "auto mode: selects systemd-user when available" test_auto_mode_selects_systemd_user_when_available
 run_test "auto mode: falls back to cron when systemd --user is unreachable" test_auto_mode_falls_back_to_cron_when_systemd_user_unavailable
 run_test "auto mode: falls back to cron when lingering is disabled" test_auto_mode_falls_back_to_cron_without_lingering

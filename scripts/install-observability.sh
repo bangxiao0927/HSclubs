@@ -319,20 +319,40 @@ uninstall_cron_entries() {
 # install and a later uninstall. Tears down both back-ends whenever their
 # command is available; each individual teardown already tolerates units
 # or cron lines that were never installed.
+#
+# Each back-end teardown is attempted independently: uninstall_systemd_user_units
+# ends with `systemctl --user daemon-reload`, which fails on a host where
+# systemctl exists but no user bus is reachable (a plain SSH session
+# without lingering, or a container) -- exactly the hosts the cron
+# fallback exists for. A failure there must not stop uninstall_cron_entries
+# from running. Overall exit status is non-zero only when no back-end
+# teardown that was actually attempted succeeded; a partial failure (one
+# back-end torn down, the other failed) is logged but still exits zero,
+# since --uninstall's job -- removing what it can -- was still done.
 uninstall_all() {
   local torn_down_any=0
+  local attempted_any=0
 
   if command -v systemctl >/dev/null 2>&1; then
-    uninstall_systemd_user_units
-    torn_down_any=1
+    attempted_any=1
+    if uninstall_systemd_user_units; then
+      torn_down_any=1
+    else
+      log "Failed to remove systemd --user units; continuing with cron teardown"
+    fi
   fi
 
   if command -v crontab >/dev/null 2>&1; then
-    uninstall_cron_entries
-    torn_down_any=1
+    attempted_any=1
+    if uninstall_cron_entries; then
+      torn_down_any=1
+    else
+      log "Failed to remove cron entries"
+    fi
   fi
 
-  [[ "$torn_down_any" == "1" ]] || die "Neither systemctl nor crontab is available; nothing to uninstall."
+  [[ "$attempted_any" == "1" ]] || die "Neither systemctl nor crontab is available; nothing to uninstall."
+  [[ "$torn_down_any" == "1" ]] || die "Failed to remove any installed health-check/backup entries."
 }
 
 main() {
