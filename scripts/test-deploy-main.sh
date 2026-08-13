@@ -169,6 +169,38 @@ SH
 
 COMMON_ENV="export APP_DIR='$REPO_DIR' NVM_DIR='$NVM_ROOT'"
 
+# A real, minimal git repository (unlike REPO_DIR's fixture .git directory,
+# which only needs to exist for validate_configuration's directory check) so
+# deployment-history tests can assert against a real HEAD sha.
+HISTORY_REPO_DIR="$FIXTURE_ROOT/history-repo"
+mkdir -p "$HISTORY_REPO_DIR"
+git init -q "$HISTORY_REPO_DIR"
+git -C "$HISTORY_REPO_DIR" config user.email "test@example.com"
+git -C "$HISTORY_REPO_DIR" config user.name "Test"
+echo "fixture" > "$HISTORY_REPO_DIR/README.md"
+git -C "$HISTORY_REPO_DIR" add -A
+git -C "$HISTORY_REPO_DIR" commit -q -m "fixture commit"
+HISTORY_REPO_SHA="$(git -C "$HISTORY_REPO_DIR" rev-parse HEAD)"
+
+# The real git binary is not necessarily under /usr/bin (for example under
+# Git for Windows it lives under /mingw64/bin), so deployment-history tests
+# use their own PATH instead of widening run_isolated's PATH for every test.
+GIT_BIN_DIR="$(dirname "$(command -v git)")"
+
+run_isolated_with_git() {
+  local env_assignments="$1"
+  local snippet="$2"
+  env -i \
+    PATH="$FIXTURE_ROOT/bin:$GIT_BIN_DIR:/usr/bin:/bin" \
+    HOME="$FIXTURE_ROOT/home" \
+    bash --noprofile --norc -c "
+      $env_assignments
+      # shellcheck source=/dev/null
+      source '$DEPLOY_MAIN'
+      $snippet
+    " 2>&1
+}
+
 ### node_version_satisfies_engine_range: boundary versions #################
 
 test_range_lower_bound_caret_matches() {
@@ -640,6 +672,103 @@ test_run_as_backend_user_uses_sudo_for_a_different_user() {
 }
 
 ### Run everything ###########################################################
+
+### Deployment history recording #############################################
+
+test_record_deployment_history_appends_success_with_sha() {
+  local history_file="$FIXTURE_ROOT/history-success.log"
+  rm -f "$history_file"
+  run_isolated_with_git "export APP_DIR='$HISTORY_REPO_DIR' DEPLOY_HISTORY_FILE='$history_file'" '
+    record_deployment_history success
+  ' >/dev/null
+
+  local line
+  line="$(cat "$history_file")"
+  [[ "$line" == *$'\t'"success"$'\t'"$HISTORY_REPO_SHA" ]] || {
+    printf '  expected a line ending in success<TAB>%s, got: %s\n' "$HISTORY_REPO_SHA" "$line" >&2
+    return 1
+  }
+}
+
+test_record_deployment_history_appends_failure_with_sha() {
+  local history_file="$FIXTURE_ROOT/history-failure.log"
+  rm -f "$history_file"
+  run_isolated_with_git "export APP_DIR='$HISTORY_REPO_DIR' DEPLOY_HISTORY_FILE='$history_file'" '
+    record_deployment_history failure
+  ' >/dev/null
+
+  local line
+  line="$(cat "$history_file")"
+  [[ "$line" == *$'\t'"failure"$'\t'"$HISTORY_REPO_SHA" ]] || {
+    printf '  expected a line ending in failure<TAB>%s, got: %s\n' "$HISTORY_REPO_SHA" "$line" >&2
+    return 1
+  }
+}
+
+test_record_deployment_history_appends_rather_than_overwrites() {
+  local history_file="$FIXTURE_ROOT/history-append.log"
+  rm -f "$history_file"
+  run_isolated_with_git "export APP_DIR='$HISTORY_REPO_DIR' DEPLOY_HISTORY_FILE='$history_file'" '
+    record_deployment_history success
+    record_deployment_history failure
+  ' >/dev/null
+
+  local line_count
+  line_count="$(wc -l < "$history_file")"
+  assert_eq "2" "$line_count" "each recorded attempt must add a line, not replace the file"
+}
+
+test_record_deployment_history_falls_back_to_unknown_sha_without_git_repo() {
+  local history_file="$FIXTURE_ROOT/history-no-repo.log"
+  local non_repo_dir="$FIXTURE_ROOT/history-non-repo"
+  rm -f "$history_file"
+  mkdir -p "$non_repo_dir"
+  run_isolated_with_git "export APP_DIR='$non_repo_dir' DEPLOY_HISTORY_FILE='$history_file'" '
+    record_deployment_history success
+  ' >/dev/null
+
+  local line
+  line="$(cat "$history_file")"
+  [[ "$line" == *$'\t'"success"$'\t'"unknown" ]] || {
+    printf '  expected the sha field to fall back to unknown, got: %s\n' "$line" >&2
+    return 1
+  }
+}
+
+test_default_history_file_lives_under_app_dir() {
+  local output
+  output="$(run_isolated_with_git "export APP_DIR='$HISTORY_REPO_DIR'" '
+    echo "$DEPLOY_HISTORY_FILE"
+  ')"
+  assert_eq "$HISTORY_REPO_DIR/deploy-history.log" "$output" \
+    "the default deployment history file must live under APP_DIR"
+}
+
+test_exit_trap_records_failure_for_explicit_exit() {
+  local history_file="$FIXTURE_ROOT/history-exit.log"
+  rm -f "$history_file"
+  local status=0
+  run_isolated_with_git "export APP_DIR='$HISTORY_REPO_DIR' DEPLOY_HISTORY_FILE='$history_file'" '
+    DEPLOYMENT_STARTED=1
+    trap on_exit EXIT
+    exit 23
+  ' >/dev/null || status=$?
+
+  assert_eq "23" "$status" "the original failure status must be preserved" || return 1
+  local line
+  line="$(cat "$history_file")"
+  [[ "$line" == *$'\t'"failure"$'\t'"$HISTORY_REPO_SHA" ]] || {
+    printf '  expected the EXIT trap to record a failure line, got: %s\n' "$line" >&2
+    return 1
+  }
+}
+
+run_test "deployment history: records success with the current sha" test_record_deployment_history_appends_success_with_sha
+run_test "deployment history: records failure with the current sha" test_record_deployment_history_appends_failure_with_sha
+run_test "deployment history: appends rather than overwrites" test_record_deployment_history_appends_rather_than_overwrites
+run_test "deployment history: falls back to unknown sha outside a git repo" test_record_deployment_history_falls_back_to_unknown_sha_without_git_repo
+run_test "deployment history: default path lives under APP_DIR" test_default_history_file_lives_under_app_dir
+run_test "deployment history: the EXIT trap records explicit-exit failures" test_exit_trap_records_failure_for_explicit_exit
 
 run_test "engine range: caret lower bound matches" test_range_lower_bound_caret_matches
 run_test "engine range: below caret lower bound is rejected" test_range_below_lower_bound_caret_rejected

@@ -32,6 +32,12 @@ SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-}"
 # Where system-scope unit files live. Overridable so tests can point at a
 # fixture directory instead of the real, root-owned /etc/systemd/system.
 SYSTEM_UNIT_DIR="${SYSTEM_UNIT_DIR:-/etc/systemd/system}"
+# One line per deploy attempt (timestamp, status, deployed git sha), appended
+# by record_deployment_history. Never rewritten, so it doubles as an audit
+# trail; see docs/DEPLOYMENT.md for the format and rotation guidance.
+DEPLOY_HISTORY_FILE="${DEPLOY_HISTORY_FILE:-$APP_DIR/deploy-history.log}"
+DEPLOYMENT_STARTED=0
+DEPLOYMENT_COMPLETED=0
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -40,6 +46,21 @@ log() {
 die() {
   printf '\nERROR: %s\n' "$*" >&2
   exit 1
+}
+
+# Appends one tab-separated line: UTC timestamp, status ("success" or
+# "failure"), and the deployed commit sha. Best-effort by design: a missing
+# git command, a non-repository APP_DIR, or an unwritable history path must
+# never abort a deploy or the EXIT trap that records its final status.
+record_deployment_history() {
+  local status="$1"
+  local timestamp
+  local sha
+
+  timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  sha="$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null)" || sha="unknown"
+  mkdir -p "$(dirname "$DEPLOY_HISTORY_FILE")" 2>/dev/null || true
+  printf '%s\t%s\t%s\n' "$timestamp" "$status" "$sha" >> "$DEPLOY_HISTORY_FILE" 2>/dev/null || true
 }
 
 validate_deployment_user() {
@@ -61,7 +82,16 @@ on_error() {
   exit "$exit_code"
 }
 
-trap 'on_error $LINENO' ERR
+on_exit() {
+  local exit_code=$?
+
+  [[ "$DEPLOYMENT_STARTED" == "1" ]] || return
+  if [[ "$exit_code" == "0" && "$DEPLOYMENT_COMPLETED" == "1" ]]; then
+    record_deployment_history "success"
+  else
+    record_deployment_history "failure"
+  fi
+}
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
@@ -826,11 +856,15 @@ main() {
   log "Publishing frontend to $FRONTEND_DIST_TARGET"
   publish_frontend
 
+  DEPLOYMENT_COMPLETED=1
   log "Deployment complete"
 }
 
 # Guarded so tests can source this file to reach the individual functions
 # above without running the full deployment.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  DEPLOYMENT_STARTED=1
+  trap 'on_error $LINENO' ERR
+  trap on_exit EXIT
   main "$@"
 fi
