@@ -285,15 +285,23 @@ existing_crontab_without_managed_entries() {
 
 install_cron_entries() {
   local existing
+  local rendered
   # Captured fully before invoking `crontab -`, rather than piping both
   # `crontab -l` and `crontab -` together: some crontab implementations (and
   # this script's own tests) back the read and the write with the same
   # storage, and a single pipeline runs both concurrently, racing the write
   # against the read.
   existing="$(existing_crontab_without_managed_entries)"
+  # Rendered (and any die() on an untranslatable schedule triggered) before
+  # the crontab pipe below starts: die() inside `{ ...; render_cron_entries; } |
+  # crontab -` only exits the pipeline's subshell, by which point the
+  # existing lines have already been written to crontab -'s stdin, so a
+  # failed re-install would otherwise still overwrite the crontab with the
+  # existing lines and drop everything after the failure.
+  rendered="$(render_cron_entries)"
   {
     [[ -z "$existing" ]] || printf '%s\n' "$existing"
-    render_cron_entries
+    printf '%s' "$rendered"
   } | crontab -
   log "Installed cron entries for health-check.sh and backup-mysql.sh"
 }

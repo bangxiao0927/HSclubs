@@ -335,6 +335,29 @@ test_install_cron_entries_preserves_unrelated_existing_lines() {
   }
 }
 
+test_install_cron_entries_preserves_previous_entries_on_failed_reinstall() {
+  reset_state
+  run_isolated "" '
+    install_cron_entries
+  ' >/dev/null
+
+  local before
+  before="$(cat "$FIXTURE_ROOT/crontab.txt")"
+
+  local status=0
+  run_isolated "export HEALTH_CHECK_INTERVAL=90sec" '
+    install_cron_entries
+  ' >/dev/null 2>&1 || status=$?
+  [[ "$status" -ne 0 ]] || {
+    printf '  expected install_cron_entries to fail for an untranslatable interval\n' >&2
+    return 1
+  }
+
+  local after
+  after="$(cat "$FIXTURE_ROOT/crontab.txt")"
+  assert_eq "$before" "$after" "a failed re-install must not drop the previously installed managed entries"
+}
+
 test_cron_entries_load_observability_environment() {
   local output
   output="$(run_isolated "export OBSERVABILITY_ENV_FILE='$FIXTURE_ROOT/private-observability.env'" '
@@ -555,6 +578,7 @@ run_test "cron: --backup-cron-schedule override wins over translation" test_cron
 run_test "args: --health-cron-schedule sets HEALTH_CHECK_CRON_SCHEDULE" test_parse_args_sets_health_cron_schedule_override
 run_test "args: --backup-cron-schedule sets BACKUP_CRON_SCHEDULE" test_parse_args_sets_backup_cron_schedule_override
 run_test "cron: install preserves unrelated existing lines" test_install_cron_entries_preserves_unrelated_existing_lines
+run_test "cron: a failed re-install preserves the previously installed managed entries" test_install_cron_entries_preserves_previous_entries_on_failed_reinstall
 run_test "cron: install is idempotent" test_install_cron_entries_is_idempotent
 run_test "cron: uninstall removes only managed lines" test_uninstall_cron_entries_removes_only_managed_lines
 run_test "args: rejects an unsupported --mode" test_parse_args_rejects_unsupported_mode
