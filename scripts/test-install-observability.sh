@@ -220,6 +220,54 @@ test_uninstall_systemd_user_removes_units() {
   [[ ! -e "$unit_dir/hsclubs-backup.timer" ]] || { printf '  backup.timer still present\n' >&2; return 1; }
 }
 
+### uninstall tears down both backends regardless of mode resolution #########
+
+test_uninstall_removes_cron_entries_regardless_of_resolved_mode() {
+  reset_state
+  # Install under cron explicitly, simulating a prior run made while
+  # lingering was disabled.
+  run_isolated "" '
+    MODE=cron
+    install_cron_entries
+  ' >/dev/null
+
+  # Uninstall through the auto-resolving entrypoint, with lingering enabled
+  # this time so resolve_mode alone would pick systemd-user; --uninstall
+  # must still remove what was actually installed under cron.
+  run_isolated "" '
+    main --uninstall
+  ' >/dev/null
+
+  local crontab_content
+  crontab_content="$(cat "$FIXTURE_ROOT/crontab.txt" 2>/dev/null || true)"
+  [[ "$crontab_content" != *"health-check.sh"* && "$crontab_content" != *"backup-mysql.sh"* ]] || {
+    printf '  expected --uninstall to remove cron entries installed while lingering was off, got: %s\n' "$crontab_content" >&2
+    return 1
+  }
+}
+
+test_uninstall_removes_systemd_user_units_regardless_of_resolved_mode() {
+  reset_state
+  local xdg_config="$FIXTURE_ROOT/xdg-config-uninstall-regardless"
+  run_isolated "export XDG_CONFIG_HOME='$xdg_config'" '
+    MODE=systemd-user
+    install_systemd_user_units
+  ' >/dev/null
+
+  # Uninstall with lingering disabled this time, so resolve_mode alone
+  # would pick cron; --uninstall must still remove the systemd-user units
+  # that were actually installed.
+  run_isolated "export XDG_CONFIG_HOME='$xdg_config' FAKE_LINGER=no" '
+    main --uninstall
+  ' >/dev/null
+
+  local unit_dir="$xdg_config/systemd/user"
+  [[ ! -e "$unit_dir/hsclubs-health-check.service" ]] || { printf '  health-check.service still present\n' >&2; return 1; }
+  [[ ! -e "$unit_dir/hsclubs-health-check.timer" ]] || { printf '  health-check.timer still present\n' >&2; return 1; }
+  [[ ! -e "$unit_dir/hsclubs-backup.service" ]] || { printf '  backup.service still present\n' >&2; return 1; }
+  [[ ! -e "$unit_dir/hsclubs-backup.timer" ]] || { printf '  backup.timer still present\n' >&2; return 1; }
+}
+
 ### auto mode detection #########################################################
 
 test_auto_mode_selects_systemd_user_when_available() {
@@ -298,6 +346,97 @@ test_cron_entries_load_observability_environment() {
   assert_eq "2" "$occurrences" "both cron jobs must load the optional observability environment"
 }
 
+### cron mode must honor --health-interval / --backup-schedule, not the ######
+### fixed HEALTH_CHECK_CRON_SCHEDULE / BACKUP_CRON_SCHEDULE defaults #########
+
+test_cron_entries_translate_health_interval_into_cron_schedule() {
+  local output
+  output="$(run_isolated "export HEALTH_CHECK_INTERVAL=10min" '
+    render_cron_entries
+  ')"
+  [[ "$output" == "*/10 * * * *"* ]] || {
+    printf '  expected a cron line starting with */10 * * * *, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
+test_cron_entries_translate_backup_schedule_into_cron_schedule() {
+  local output
+  output="$(run_isolated "export BACKUP_SCHEDULE='*-*-* 04:30:00'" '
+    render_cron_entries
+  ')"
+  [[ "$output" == *$'\n'"30 4 * * *"* ]] || {
+    printf '  expected the backup line to start with 30 4 * * *, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
+test_cron_entries_reject_ambiguous_health_interval_with_actionable_error() {
+  local output
+  local status=0
+  output="$(run_isolated "export HEALTH_CHECK_INTERVAL=90sec" '
+    render_cron_entries
+  ')" || status=$?
+  [[ "$status" -ne 0 ]] || { printf '  expected a non-zero exit for an untranslatable interval\n' >&2; return 1; }
+  [[ "$output" == *"--health-cron-schedule"* ]] || {
+    printf '  expected the error to point at --health-cron-schedule, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
+test_cron_entries_reject_ambiguous_backup_schedule_with_actionable_error() {
+  local output
+  local status=0
+  output="$(run_isolated "export BACKUP_SCHEDULE='Mon *-*-* 03:00:00'" '
+    render_cron_entries
+  ')" || status=$?
+  [[ "$status" -ne 0 ]] || { printf '  expected a non-zero exit for an untranslatable OnCalendar schedule\n' >&2; return 1; }
+  [[ "$output" == *"--backup-cron-schedule"* ]] || {
+    printf '  expected the error to point at --backup-cron-schedule, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
+test_cron_entries_honor_explicit_health_cron_schedule_override() {
+  local output
+  output="$(run_isolated "export HEALTH_CHECK_INTERVAL=90sec HEALTH_CHECK_CRON_SCHEDULE='7 8 * * *'" '
+    render_cron_entries
+  ')"
+  [[ "$output" == "7 8 * * *"* ]] || {
+    printf '  expected the explicit --health-cron-schedule override to win, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
+test_cron_entries_honor_explicit_backup_cron_schedule_override() {
+  local output
+  output="$(run_isolated "export BACKUP_SCHEDULE='Mon *-*-* 03:00:00' BACKUP_CRON_SCHEDULE='15 2 * * 1'" '
+    render_cron_entries
+  ')"
+  [[ "$output" == *$'\n'"15 2 * * 1"* ]] || {
+    printf '  expected the explicit --backup-cron-schedule override to win, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
+test_parse_args_sets_health_cron_schedule_override() {
+  local output
+  output="$(run_isolated "" '
+    parse_args --health-cron-schedule="7 8 * * *"
+    echo "$HEALTH_CHECK_CRON_SCHEDULE"
+  ')"
+  assert_eq "7 8 * * *" "$output" "--health-cron-schedule must set HEALTH_CHECK_CRON_SCHEDULE"
+}
+
+test_parse_args_sets_backup_cron_schedule_override() {
+  local output
+  output="$(run_isolated "" '
+    parse_args --backup-cron-schedule="15 2 * * 1"
+    echo "$BACKUP_CRON_SCHEDULE"
+  ')"
+  assert_eq "15 2 * * 1" "$output" "--backup-cron-schedule must set BACKUP_CRON_SCHEDULE"
+}
+
 test_install_cron_entries_is_idempotent() {
   reset_state
   run_isolated "" '
@@ -366,11 +505,21 @@ run_test "unit content: health-check timer uses the configured interval" test_he
 run_test "unit content: backup timer uses the configured schedule" test_backup_timer_uses_configured_schedule
 run_test "systemd --user: install writes units and enables timers" test_install_systemd_user_writes_units_and_enables_timers
 run_test "systemd --user: uninstall removes units" test_uninstall_systemd_user_removes_units
+run_test "uninstall: removes cron entries regardless of resolved mode" test_uninstall_removes_cron_entries_regardless_of_resolved_mode
+run_test "uninstall: removes systemd-user units regardless of resolved mode" test_uninstall_removes_systemd_user_units_regardless_of_resolved_mode
 run_test "auto mode: selects systemd-user when available" test_auto_mode_selects_systemd_user_when_available
 run_test "auto mode: falls back to cron when systemd --user is unreachable" test_auto_mode_falls_back_to_cron_when_systemd_user_unavailable
 run_test "auto mode: falls back to cron when lingering is disabled" test_auto_mode_falls_back_to_cron_without_lingering
 run_test "cron: install adds marked lines" test_install_cron_entries_adds_marked_lines
 run_test "cron: both jobs load the observability environment" test_cron_entries_load_observability_environment
+run_test "cron: translates --health-interval into a cron schedule" test_cron_entries_translate_health_interval_into_cron_schedule
+run_test "cron: translates --backup-schedule into a cron schedule" test_cron_entries_translate_backup_schedule_into_cron_schedule
+run_test "cron: rejects an ambiguous --health-interval with an actionable error" test_cron_entries_reject_ambiguous_health_interval_with_actionable_error
+run_test "cron: rejects an ambiguous --backup-schedule with an actionable error" test_cron_entries_reject_ambiguous_backup_schedule_with_actionable_error
+run_test "cron: --health-cron-schedule override wins over translation" test_cron_entries_honor_explicit_health_cron_schedule_override
+run_test "cron: --backup-cron-schedule override wins over translation" test_cron_entries_honor_explicit_backup_cron_schedule_override
+run_test "args: --health-cron-schedule sets HEALTH_CHECK_CRON_SCHEDULE" test_parse_args_sets_health_cron_schedule_override
+run_test "args: --backup-cron-schedule sets BACKUP_CRON_SCHEDULE" test_parse_args_sets_backup_cron_schedule_override
 run_test "cron: install preserves unrelated existing lines" test_install_cron_entries_preserves_unrelated_existing_lines
 run_test "cron: install is idempotent" test_install_cron_entries_is_idempotent
 run_test "cron: uninstall removes only managed lines" test_uninstall_cron_entries_removes_only_managed_lines

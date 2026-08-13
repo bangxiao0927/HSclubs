@@ -795,6 +795,11 @@ required at all:
 # Change the schedule.
 ./scripts/install-observability.sh --health-interval=2min --backup-schedule='*-*-* 03:30:00'
 
+# For a schedule with no unambiguous cron equivalent (see below), set the
+# cron schedule directly instead.
+./scripts/install-observability.sh --mode=cron --health-cron-schedule='*/2 * * * *' \
+  --backup-cron-schedule='30 3 * * *'
+
 # Remove everything this script installed.
 ./scripts/install-observability.sh --uninstall
 ```
@@ -806,6 +811,14 @@ with a marker comment so re-running install (or `--uninstall`) only ever touches
 and never disturbs anything else already in that crontab. Cron jobs use a small `/bin/sh`
 wrapper to load the same optional environment file as the systemd services before executing
 the health check or backup script.
+
+Under cron mode, `--health-interval` and `--backup-schedule` are translated to an equivalent
+cron schedule automatically (an exact `Nmin`/`Nh` duration, and a daily `*-*-* HH:MM:SS`
+`OnCalendar` expression, respectively). A schedule with no unambiguous cron equivalent —
+seconds, days, a weekday filter, multiple times a day, and so on — makes the install fail with
+an actionable error instead of silently installing the default schedule; pass
+`--health-cron-schedule` or `--backup-cron-schedule` (standard 5-field cron syntax) directly in
+that case.
 
 Both installation modes load an optional, private environment file —
 `~/.config/hsclubs/observability.env` by default — for secrets such as
