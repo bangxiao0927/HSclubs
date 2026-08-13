@@ -187,6 +187,7 @@ install_systemd_user_units() {
 uninstall_systemd_user_units() {
   local unit_dir
   unit_dir="$(user_unit_dir)"
+  local status=0
 
   systemctl --user disable --now hsclubs-health-check.timer 2>/dev/null || true
   systemctl --user disable --now hsclubs-backup.timer 2>/dev/null || true
@@ -194,9 +195,16 @@ uninstall_systemd_user_units() {
     "$unit_dir/hsclubs-health-check.service" \
     "$unit_dir/hsclubs-health-check.timer" \
     "$unit_dir/hsclubs-backup.service" \
-    "$unit_dir/hsclubs-backup.timer"
-  systemctl --user daemon-reload
-  log "Removed hsclubs health-check and backup systemd --user units"
+    "$unit_dir/hsclubs-backup.timer" \
+    || status=1
+  systemctl --user daemon-reload || status=1
+
+  if [[ "$status" -eq 0 ]]; then
+    log "Removed hsclubs health-check and backup systemd --user units"
+  else
+    log "Failed to fully remove hsclubs health-check and backup systemd --user units"
+  fi
+  return "$status"
 }
 
 # Marks every line this script manages so re-running install (or uninstall)
@@ -308,9 +316,15 @@ install_cron_entries() {
 
 uninstall_cron_entries() {
   local existing
+  local status=0
   existing="$(existing_crontab_without_managed_entries)"
-  { [[ -z "$existing" ]] || printf '%s\n' "$existing"; } | crontab -
-  log "Removed hsclubs health-check and backup cron entries"
+  if { [[ -z "$existing" ]] || printf '%s\n' "$existing"; } | crontab -; then
+    log "Removed hsclubs health-check and backup cron entries"
+  else
+    status=1
+    log "Failed to remove cron entries"
+  fi
+  return "$status"
 }
 
 # --uninstall must remove everything this script may have installed, not

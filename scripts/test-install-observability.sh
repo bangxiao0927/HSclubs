@@ -306,6 +306,70 @@ test_uninstall_removes_cron_entries_even_if_systemd_user_teardown_fails() {
   }
 }
 
+test_uninstall_exits_zero_when_only_cron_teardown_fails() {
+  reset_state
+  run_isolated "" '
+    install_cron_entries
+  ' >/dev/null
+
+  local output
+  local status=0
+  output="$(run_isolated '
+    crontab() {
+      if [[ "$1" == "-" ]]; then
+        return 1
+      fi
+      command crontab "$@"
+    }
+  ' '
+    main --uninstall
+  ')" || status=$?
+
+  [[ "$status" -eq 0 ]] || {
+    printf '  expected exit 0 when the systemd-user teardown succeeded even though the cron teardown failed, got status %d: %s\n' "$status" "$output" >&2
+    return 1
+  }
+  [[ "$output" == *"Failed to remove cron entries"* ]] || {
+    printf '  expected the cron teardown failure to be logged, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
+test_uninstall_exits_nonzero_when_every_teardown_fails() {
+  reset_state
+  run_isolated "" '
+    install_cron_entries
+  ' >/dev/null
+
+  local output
+  local status=0
+  output="$(run_isolated '
+    systemctl() {
+      if [[ "$1" == "--user" && "$2" == "daemon-reload" ]]; then
+        return 1
+      fi
+      return 0
+    }
+    crontab() {
+      if [[ "$1" == "-" ]]; then
+        return 1
+      fi
+      command crontab "$@"
+    }
+  ' '
+    main --uninstall
+  ')" || status=$?
+
+  [[ "$status" -ne 0 ]] || {
+    printf '  expected a non-zero exit when both teardowns fail, got: %s\n' "$output" >&2
+    return 1
+  }
+  [[ "$output" == *"Failed to remove any installed"* ]] || {
+    printf '  expected the die message about failing to remove any installed entries, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
 ### auto mode detection #########################################################
 
 test_auto_mode_selects_systemd_user_when_available() {
@@ -617,6 +681,8 @@ run_test "systemd --user: uninstall removes units" test_uninstall_systemd_user_r
 run_test "uninstall: removes cron entries regardless of resolved mode" test_uninstall_removes_cron_entries_regardless_of_resolved_mode
 run_test "uninstall: removes systemd-user units regardless of resolved mode" test_uninstall_removes_systemd_user_units_regardless_of_resolved_mode
 run_test "uninstall: removes cron entries even if systemd --user teardown fails" test_uninstall_removes_cron_entries_even_if_systemd_user_teardown_fails
+run_test "uninstall: exits zero when only the cron teardown fails" test_uninstall_exits_zero_when_only_cron_teardown_fails
+run_test "uninstall: exits non-zero when every teardown fails" test_uninstall_exits_nonzero_when_every_teardown_fails
 run_test "auto mode: selects systemd-user when available" test_auto_mode_selects_systemd_user_when_available
 run_test "auto mode: falls back to cron when systemd --user is unreachable" test_auto_mode_falls_back_to_cron_when_systemd_user_unavailable
 run_test "auto mode: falls back to cron when lingering is disabled" test_auto_mode_falls_back_to_cron_without_lingering
