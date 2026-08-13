@@ -89,6 +89,9 @@ chmod +x "$FIXTURE_ROOT/bin/loginctl"
 
 # Fake crontab: `-l` prints the fixture's stored crontab (or fails if none
 # exists yet, like a real empty crontab), and `-` reads stdin into it.
+# Mirrors real (Vixie) cron: a non-empty payload not ending in a newline is
+# rejected with "missing newline before EOF, can't install" rather than
+# silently accepted or truncated.
 cat > "$FIXTURE_ROOT/bin/crontab" <<'SH'
 #!/usr/bin/env bash
 if [[ "$1" == "-l" ]]; then
@@ -97,7 +100,14 @@ if [[ "$1" == "-l" ]]; then
   exit 0
 fi
 if [[ "$1" == "-" ]]; then
-  cat > "$CRONTAB_FILE"
+  tmp="$(mktemp)"
+  cat > "$tmp"
+  if [[ -s "$tmp" && "$(tail -c1 "$tmp")" != "" ]]; then
+    echo "crontab: new crontab file is missing newline before EOF, can't install." >&2
+    rm -f "$tmp"
+    exit 1
+  fi
+  mv "$tmp" "$CRONTAB_FILE"
   exit 0
 fi
 exit 1
@@ -363,6 +373,22 @@ test_install_cron_entries_preserves_unrelated_existing_lines() {
   }
 }
 
+test_install_cron_entries_payload_ends_with_trailing_newline() {
+  reset_state
+  run_isolated "" '
+    install_cron_entries
+  ' >/dev/null
+
+  [[ -s "$FIXTURE_ROOT/crontab.txt" ]] || {
+    printf '  expected install_cron_entries to write a non-empty crontab.txt\n' >&2
+    return 1
+  }
+  [[ "$(tail -c1 "$FIXTURE_ROOT/crontab.txt")" == "" ]] || {
+    printf '  expected the payload handed to crontab - to end with a newline (Vixie cron rejects a missing final newline), got tail byte: %q\n' "$(tail -c1 "$FIXTURE_ROOT/crontab.txt")" >&2
+    return 1
+  }
+}
+
 test_install_cron_entries_preserves_previous_entries_on_failed_reinstall() {
   reset_state
   run_isolated "" '
@@ -595,6 +621,7 @@ run_test "auto mode: selects systemd-user when available" test_auto_mode_selects
 run_test "auto mode: falls back to cron when systemd --user is unreachable" test_auto_mode_falls_back_to_cron_when_systemd_user_unavailable
 run_test "auto mode: falls back to cron when lingering is disabled" test_auto_mode_falls_back_to_cron_without_lingering
 run_test "cron: install adds marked lines" test_install_cron_entries_adds_marked_lines
+run_test "cron: install payload ends with a trailing newline" test_install_cron_entries_payload_ends_with_trailing_newline
 run_test "cron: both jobs load the observability environment" test_cron_entries_load_observability_environment
 run_test "cron: translates --health-interval into a cron schedule" test_cron_entries_translate_health_interval_into_cron_schedule
 run_test "cron: translates --backup-schedule into a cron schedule" test_cron_entries_translate_backup_schedule_into_cron_schedule

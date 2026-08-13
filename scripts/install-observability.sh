@@ -301,7 +301,7 @@ install_cron_entries() {
   rendered="$(render_cron_entries)"
   {
     [[ -z "$existing" ]] || printf '%s\n' "$existing"
-    printf '%s' "$rendered"
+    printf '%s\n' "$rendered"
   } | crontab -
   log "Installed cron entries for health-check.sh and backup-mysql.sh"
 }
