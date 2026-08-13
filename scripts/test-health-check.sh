@@ -251,7 +251,7 @@ test_no_webhook_configured_does_not_invoke_curl_with_data() {
   }
 }
 
-test_first_run_from_unknown_does_not_alert() {
+test_first_run_from_unknown_alerts() {
   reset_logs
   local state_dir="$FIXTURE_ROOT/state-first-run"
   run_isolated "export HEALTH_CHECK_STATE_DIR='$state_dir' HEALTH_CHECK_WEBHOOK_URL='http://example.invalid/webhook' FAKE_CHECK_EXIT=0" '
@@ -292,7 +292,7 @@ run_test "alerts: no webhook when status is unchanged (fail)" test_no_alert_when
 run_test "alerts: webhook sent on ok -> fail transition" test_alert_sent_on_ok_to_fail_transition
 run_test "alerts: webhook sent on fail -> ok recovery" test_alert_sent_on_fail_to_ok_recovery
 run_test "alerts: no delivery attempt without a configured webhook" test_no_webhook_configured_does_not_invoke_curl_with_data
-run_test "alerts: first observed status alerts (unknown -> status)" test_first_run_from_unknown_does_not_alert
+run_test "alerts: first observed status alerts (unknown -> status)" test_first_run_from_unknown_alerts
 run_test "no hardcoded webhook URL in the script" test_health_check_script_has_no_hardcoded_webhook_url
 run_test "defaults: frontend probe targets the local production proxy" test_default_frontend_probe_targets_local_proxy
 run_test "webhook JSON: control characters are escaped" test_json_escape_handles_control_characters
