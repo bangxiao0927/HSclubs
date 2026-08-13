@@ -397,6 +397,38 @@ test_cron_entries_reject_ambiguous_backup_schedule_with_actionable_error() {
   }
 }
 
+test_cron_entries_reject_non_divisor_health_interval_with_actionable_error() {
+  local output
+  local status=0
+  output="$(run_isolated "export HEALTH_CHECK_INTERVAL=7min" '
+    render_cron_entries
+  ')" || status=$?
+  [[ "$status" -ne 0 ]] || {
+    printf '  expected a non-zero exit for a 7min interval: */7 * * * * is not a 7-minute period\n' >&2
+    return 1
+  }
+  [[ "$output" == *"--health-cron-schedule"* ]] || {
+    printf '  expected the error to point at --health-cron-schedule, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
+test_cron_entries_reject_non_divisor_backup_hour_interval_with_actionable_error() {
+  local output
+  local status=0
+  output="$(run_isolated "export HEALTH_CHECK_INTERVAL=7h" '
+    render_cron_entries
+  ')" || status=$?
+  [[ "$status" -ne 0 ]] || {
+    printf '  expected a non-zero exit for a 7h interval: 0 */7 * * * has a 3-hour wrap gap\n' >&2
+    return 1
+  }
+  [[ "$output" == *"--health-cron-schedule"* ]] || {
+    printf '  expected the error to point at --health-cron-schedule, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
 test_cron_entries_honor_explicit_health_cron_schedule_override() {
   local output
   output="$(run_isolated "export HEALTH_CHECK_INTERVAL=90sec HEALTH_CHECK_CRON_SCHEDULE='7 8 * * *'" '
@@ -516,6 +548,8 @@ run_test "cron: translates --health-interval into a cron schedule" test_cron_ent
 run_test "cron: translates --backup-schedule into a cron schedule" test_cron_entries_translate_backup_schedule_into_cron_schedule
 run_test "cron: rejects an ambiguous --health-interval with an actionable error" test_cron_entries_reject_ambiguous_health_interval_with_actionable_error
 run_test "cron: rejects an ambiguous --backup-schedule with an actionable error" test_cron_entries_reject_ambiguous_backup_schedule_with_actionable_error
+run_test "cron: rejects a non-divisor minute interval with an actionable error" test_cron_entries_reject_non_divisor_health_interval_with_actionable_error
+run_test "cron: rejects a non-divisor hour interval with an actionable error" test_cron_entries_reject_non_divisor_backup_hour_interval_with_actionable_error
 run_test "cron: --health-cron-schedule override wins over translation" test_cron_entries_honor_explicit_health_cron_schedule_override
 run_test "cron: --backup-cron-schedule override wins over translation" test_cron_entries_honor_explicit_backup_cron_schedule_override
 run_test "args: --health-cron-schedule sets HEALTH_CHECK_CRON_SCHEDULE" test_parse_args_sets_health_cron_schedule_override

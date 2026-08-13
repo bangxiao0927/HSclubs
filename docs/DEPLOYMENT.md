@@ -813,9 +813,11 @@ wrapper to load the same optional environment file as the systemd services befor
 the health check or backup script.
 
 Under cron mode, `--health-interval` and `--backup-schedule` are translated to an equivalent
-cron schedule automatically (an exact `Nmin`/`Nh` duration, and a daily `*-*-* HH:MM:SS`
+cron schedule automatically (an exact `Nmin`/`Nh` duration where `N` evenly divides 60/24
+respectively, and a daily `*-*-* HH:MM:SS`
 `OnCalendar` expression, respectively). A schedule with no unambiguous cron equivalent —
-seconds, days, a weekday filter, multiple times a day, and so on — makes the install fail with
+seconds, days, a non-divisor `N` such as `7min` or `7h`, a weekday filter, multiple times a
+day, and so on — makes the install fail with
 an actionable error instead of silently installing the default schedule; pass
 `--health-cron-schedule` or `--backup-cron-schedule` (standard 5-field cron syntax) directly in
 that case.

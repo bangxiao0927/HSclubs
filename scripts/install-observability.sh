@@ -207,21 +207,23 @@ CRON_MARKER="# managed by scripts/install-observability.sh -- do not edit by han
 # Translates a systemd OnUnitActiveSec-style duration ("Nmin" or "Nh") into
 # the equivalent cron minute/hour field. Only these two exact, evenly-spaced
 # unit forms have an unambiguous cron equivalent; anything else (seconds,
-# days, or a combined "1h30min") must be provided directly via
-# --health-cron-schedule.
+# days, a combined "1h30min", or a minute/hour count that does not evenly
+# divide 60/24, such as "7min" or "7h" -- cron's */N wraps at 60/24 and
+# would leave a short period at the wrap point) must be provided directly
+# via --health-cron-schedule.
 translate_interval_to_cron() {
   local interval="$1"
 
   if [[ "$interval" =~ ^([0-9]+)min$ ]]; then
     local minutes=$((10#${BASH_REMATCH[1]}))
-    [[ "$minutes" -ge 1 && "$minutes" -le 59 ]] || return 1
+    [[ "$minutes" -ge 1 && "$minutes" -le 59 && $((60 % minutes)) -eq 0 ]] || return 1
     printf '*/%d * * * *\n' "$minutes"
     return 0
   fi
 
   if [[ "$interval" =~ ^([0-9]+)h$ ]]; then
     local hours=$((10#${BASH_REMATCH[1]}))
-    [[ "$hours" -ge 1 && "$hours" -le 23 ]] || return 1
+    [[ "$hours" -ge 1 && "$hours" -le 23 && $((24 % hours)) -eq 0 ]] || return 1
     printf '0 */%d * * *\n' "$hours"
     return 0
   fi
