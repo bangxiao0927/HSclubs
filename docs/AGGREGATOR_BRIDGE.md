@@ -99,6 +99,13 @@ prove that a given URL belongs to the school it claims to be. Two checks, both c
    with no server block of its own) has no static root on that host, so it adds one location
    returning the token -- still proxy configuration, still no backend change, but worth saying
    out loud rather than implying the file drops in anywhere.
+
+   Put the file in `frontend/public/.well-known/` rather than dropping it into the built
+   `dist/`. Vite copies `public/` verbatim, so the token survives every rebuild; a file placed
+   in `dist/` by hand is deleted by the next deploy, and the school then silently fails its next
+   re-verification and disappears from the guiding page. The token is not a secret -- it is
+   served to anyone who asks for that URL -- so tracking it is not a leak; it only proves that
+   whoever controls this origin also controls the registry entry.
 2. **Slug agreement.** The `slug` in the school's `/api/summary` must equal the slug the
    registry holds for that origin. This stops one verified school from claiming another's
    identity, and it is a field this repo already exposes and configures
