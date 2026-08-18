@@ -27,7 +27,9 @@ const loadClubs = async () => {
 
 onMounted(loadClubs)
 
-const rawSearchQuery = computed(() => (typeof route.query.q === 'string' ? route.query.q.trim() : ''))
+const rawSearchQuery = computed(() =>
+  typeof route.query.q === 'string' ? route.query.q.trim() : '',
+)
 const normalizedSearchQuery = computed(() => normalizeClubSearchQuery(route.query.q))
 const filteredClubs = computed(() =>
   clubs.value.filter((club) => matchesClubSearch(club, normalizedSearchQuery.value)),
@@ -41,10 +43,14 @@ const filteredClubs = computed(() =>
         <p class="section-label">Search results</p>
         <h1 v-if="rawSearchQuery">Results for "{{ rawSearchQuery }}"</h1>
         <h1 v-else>Search clubs</h1>
-        <p v-if="rawSearchQuery">
-          {{ filteredClubs.length }} matching club<span v-if="filteredClubs.length !== 1">s</span> across names, advisors, locations, and descriptions.
+        <p v-if="rawSearchQuery && !loading && !error">
+          {{ filteredClubs.length }} matching club<span v-if="filteredClubs.length !== 1">s</span>
+          across all published club details.
         </p>
-        <p v-else>Enter a club name or keyword in the header search bar to browse the directory from this page.</p>
+        <p v-else-if="!rawSearchQuery">
+          Enter a club name or keyword in the header search bar to browse the directory from this
+          page.
+        </p>
       </div>
     </section>
 
@@ -53,7 +59,13 @@ const filteredClubs = computed(() =>
 
     <section class="results-section page-shell">
       <div v-if="rawSearchQuery && filteredClubs.length" class="results-list">
-        <RouterLink v-for="club in filteredClubs" :key="club.id" :to="`/clubs/${club.id}`" custom v-slot="{ navigate }">
+        <RouterLink
+          v-for="club in filteredClubs"
+          :key="club.id"
+          :to="`/clubs/${club.id}`"
+          custom
+          v-slot="{ navigate }"
+        >
           <article
             class="result-card"
             role="link"
@@ -146,7 +158,10 @@ const filteredClubs = computed(() =>
   background: var(--mv-surface-card);
   color: inherit;
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
   content-visibility: auto;
   contain-intrinsic-size: 180px;
 }
