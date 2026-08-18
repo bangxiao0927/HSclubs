@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onErrorCaptured, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onErrorCaptured, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
@@ -52,7 +52,23 @@ const logoText = schoolTemplate.brandName
 // transform, which only rewrites relative paths, leaves this root-absolute
 // public path untouched under both Vite build and Vitest's SSR module runner.
 const logoUrl = '/android-chrome-512x512.png'
-const searchPlaceholder = 'Search clubs, advisors, categories, or keywords'
+const fullSearchPlaceholder = 'Search clubs, advisors, categories, or keywords'
+// The mobile title bar keeps the brand and the search field on one row, so the
+// long placeholder would be clipped mid-word there; a short one is used instead.
+const compactViewport = ref(false)
+const compactViewportQuery =
+  typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 720px)') : null
+if (compactViewportQuery) {
+  compactViewport.value = compactViewportQuery.matches
+  const updateCompactViewport = (event: MediaQueryListEvent) => {
+    compactViewport.value = event.matches
+  }
+  compactViewportQuery.addEventListener('change', updateCompactViewport)
+  onBeforeUnmount(() => compactViewportQuery.removeEventListener('change', updateCompactViewport))
+}
+const searchPlaceholder = computed(() =>
+  compactViewport.value ? 'Search clubs' : fullSearchPlaceholder,
+)
 document.title = logoText
 
 const handleLogout = () => {
@@ -130,6 +146,15 @@ const submitSearch = () => {
   })
 }
 
+// The native clear button on an <input type="search"> emits `search` without
+// submitting its form. Keep the URL/results in sync instead of leaving stale
+// results visible behind an empty title-bar field.
+const handleNativeSearch = () => {
+  if (!searchQuery.value.trim() && route.name === 'club-search') {
+    submitSearch()
+  }
+}
+
 watch(isAuthenticated, (authenticated, previous) => {
   if (authenticated && !previous) {
     void authStore.refreshUser()
@@ -203,48 +228,12 @@ watch(
             type="search"
             :placeholder="searchPlaceholder"
             class="search-input"
+            @search="handleNativeSearch"
           />
           <button type="submit" class="search-button" aria-label="Search clubs">
             <span class="search-icon">🔍</span>
           </button>
         </form>
-
-        <div class="mobile-header-actions">
-          <button
-            type="button"
-            class="mobile-menu-toggle"
-            :class="{ open: mobileMenuOpen }"
-            :aria-expanded="mobileMenuOpen"
-            aria-controls="mobile-navigation"
-            aria-label="Toggle menu"
-            @click="toggleMobileMenu"
-          >
-            <span class="hamburger"></span>
-          </button>
-          <RouterLink
-            :to="isAuthenticated ? '/profile' : '/auth?intent=login'"
-            class="mobile-user-center"
-            aria-label="User center"
-            @click="closeMobileMenu"
-          >
-            <img
-              v-if="isAuthenticated && profileAvatarUrl"
-              class="profile-avatar"
-              :src="profileAvatarUrl"
-              alt=""
-              referrerpolicy="no-referrer"
-              @error="handleProfileAvatarError"
-            />
-            <span v-else-if="isAuthenticated" class="profile-icon" aria-hidden="true">{{
-              profileInitial
-            }}</span>
-            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"
-              />
-            </svg>
-          </RouterLink>
-        </div>
 
         <div class="header-right">
           <button type="button" class="theme-toggle" @click="toggleTheme">
@@ -272,68 +261,102 @@ watch(
           </button>
         </div>
       </div>
+    </header>
 
-      <Transition name="mobile-menu">
-        <div v-if="mobileMenuOpen" id="mobile-navigation" class="mobile-menu">
-          <div class="mobile-menu-inner">
-            <form class="search-bar" @submit.prevent="submitSearch">
-              <input
-                v-model="searchQuery"
-                type="search"
-                :placeholder="searchPlaceholder"
-                class="search-input"
-              />
-              <button type="submit" class="search-button" aria-label="Search clubs">
-                <span class="search-icon">🔍</span>
-              </button>
-            </form>
-            <nav class="mobile-nav">
-              <RouterLink to="/" class="mobile-nav-link" @click="closeMobileMenu">Home</RouterLink>
-              <RouterLink to="/about" class="mobile-nav-link" @click="closeMobileMenu"
-                >Category</RouterLink
+    <Transition name="mobile-menu">
+      <div v-if="mobileMenuOpen" id="mobile-navigation" class="mobile-menu">
+        <div class="mobile-menu-inner">
+          <div class="mobile-menu-handle" aria-hidden="true"></div>
+          <h2 class="mobile-menu-title">
+            {{ isAuthenticated ? currentUser?.displayName || 'User center' : 'Not signed in' }}
+          </h2>
+          <p class="mobile-menu-subtitle">
+            {{
+              isAuthenticated
+                ? 'Manage your profile and clubs.'
+                : 'Sign in to join clubs and save your interests.'
+            }}
+          </p>
+          <nav v-if="currentUser?.isOwner" class="mobile-nav">
+            <RouterLink to="/admin" class="mobile-nav-link" @click="closeMobileMenu"
+              >Admin</RouterLink
+            >
+          </nav>
+          <button type="button" class="mobile-theme-toggle" @click="handleMobileThemeToggle">
+            <span class="theme-icon" aria-hidden="true">{{ theme === 'light' ? '🌙' : '☀️' }}</span>
+            <span>{{ themeLabel }}</span>
+          </button>
+          <div class="mobile-actions">
+            <template v-if="isAuthenticated">
+              <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu"
+                >Profile</RouterLink
               >
-              <RouterLink to="/calendar" class="mobile-nav-link" @click="closeMobileMenu"
-                >Calendar</RouterLink
+              <button type="button" class="auth-btn ghost" @click="handleMobileLogout">
+                Log out
+              </button>
+            </template>
+            <template v-else>
+              <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
+                >Log in</RouterLink
               >
               <RouterLink
-                v-if="currentUser?.isOwner"
-                to="/admin"
-                class="mobile-nav-link"
+                to="/auth?intent=register"
+                class="auth-btn primary"
                 @click="closeMobileMenu"
-                >Admin</RouterLink
+                >Register</RouterLink
               >
-            </nav>
-            <button type="button" class="mobile-theme-toggle" @click="handleMobileThemeToggle">
-              <span class="theme-icon" aria-hidden="true">{{
-                theme === 'light' ? '🌙' : '☀️'
-              }}</span>
-              <span>{{ themeLabel }}</span>
-            </button>
-            <div class="mobile-actions">
-              <template v-if="isAuthenticated">
-                <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu"
-                  >Profile</RouterLink
-                >
-                <button type="button" class="auth-btn ghost" @click="handleMobileLogout">
-                  Log out
-                </button>
-              </template>
-              <template v-else>
-                <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
-                  >Log in</RouterLink
-                >
-                <RouterLink
-                  to="/auth?intent=register"
-                  class="auth-btn primary"
-                  @click="closeMobileMenu"
-                  >Register</RouterLink
-                >
-              </template>
-            </div>
+            </template>
           </div>
         </div>
-      </Transition>
-    </header>
+      </div>
+    </Transition>
+
+    <nav class="mobile-tab-bar" aria-label="Mobile navigation">
+      <RouterLink to="/" class="mobile-tab" :class="{ active: route.name === 'home' }">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m3 10 9-7 9 7v10h-6v-6H9v6H3V10Z" />
+        </svg>
+        <span>Home</span>
+      </RouterLink>
+      <RouterLink to="/about" class="mobile-tab" :class="{ active: route.name === 'about' }">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z" />
+        </svg>
+        <span>Category</span>
+      </RouterLink>
+      <RouterLink to="/calendar" class="mobile-tab" :class="{ active: route.name === 'calendar' }">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 2h2v2h6V2h2v2h3v18H4V4h3V2Zm11 8H6v10h12V10Z" />
+        </svg>
+        <span>Calendar</span>
+      </RouterLink>
+      <button
+        type="button"
+        class="mobile-tab mobile-user-center"
+        :class="{ active: mobileMenuOpen }"
+        :aria-expanded="mobileMenuOpen"
+        aria-controls="mobile-navigation"
+        @click="toggleMobileMenu"
+      >
+        <img
+          v-if="isAuthenticated && profileAvatarUrl"
+          class="profile-avatar"
+          :src="profileAvatarUrl"
+          alt=""
+          referrerpolicy="no-referrer"
+          @error="handleProfileAvatarError"
+        />
+        <span v-else-if="isAuthenticated" class="profile-icon" aria-hidden="true">{{
+          profileInitial
+        }}</span>
+        <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"
+          />
+        </svg>
+        <span>{{ isAuthenticated ? 'Account' : 'Sign in' }}</span>
+      </button>
+    </nav>
 
     <main class="view-container">
       <ErrorDisplay v-if="appError" :message="appError" @retry="resetError" />
@@ -582,89 +605,39 @@ watch(
 }
 
 /* Mobile */
-.mobile-header-actions {
+.mobile-tab-bar {
   display: none;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 0.25rem;
-}
-
-.mobile-menu-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.5rem;
-}
-
-.mobile-user-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--mv-profile-border);
-  border-radius: 50%;
-  color: var(--mv-profile-text);
-  box-sizing: border-box;
-}
-
-.mobile-user-center:hover,
-.mobile-user-center:active {
-  background: var(--mv-profile-hover-bg);
-  border-color: var(--mv-profile-hover-border);
-}
-
-.mobile-user-center svg {
-  width: 1.5rem;
-  height: 1.5rem;
-  fill: currentColor;
-}
-
-.hamburger {
-  display: block;
-  width: 24px;
-  height: 2px;
-  background: var(--mv-text);
-  position: relative;
-  transition: background 0.2s;
-}
-
-.hamburger::before,
-.hamburger::after {
-  content: '';
-  display: block;
-  width: 24px;
-  height: 2px;
-  background: var(--mv-text);
-  position: absolute;
-  left: 0;
-  transition: transform 0.25s;
-}
-
-.hamburger::before {
-  top: -7px;
-}
-.hamburger::after {
-  top: 7px;
 }
 
 .mobile-menu {
-  border-bottom: 1px solid var(--mv-header-border);
-  background: var(--mv-header-bg);
-  display: grid;
-  grid-template-rows: 1fr;
+  display: none;
   opacity: 1;
 }
 
 .mobile-menu-inner {
-  overflow: hidden;
+  overflow-y: auto;
   min-height: 0;
   padding: 1rem var(--page-padding-inline) 1.5rem;
+}
+
+.mobile-menu-handle {
+  width: 2.5rem;
+  height: 0.3rem;
+  margin: 0 auto 0.75rem;
+  border-radius: 999px;
+  background: var(--mv-glass-highlight);
+}
+
+.mobile-menu-title {
+  margin: 0;
+  color: var(--mv-text);
+  font-size: 1.1rem;
+}
+
+.mobile-menu-subtitle {
+  margin: 0.2rem 0 0.9rem;
+  color: var(--mv-text-muted);
+  font-size: 0.85rem;
 }
 
 .mobile-nav {
@@ -701,8 +674,8 @@ watch(
   width: 100%;
   margin-top: 0.5rem;
   padding: 0.7rem 0.5rem;
-  border-radius: 12px;
-  border: 1px solid var(--mv-ghost-border);
+  border-radius: 14px;
+  border: 1px solid var(--mv-glass-border);
   background: transparent;
   color: var(--mv-ghost-text);
   font-size: 1rem;
@@ -720,7 +693,7 @@ watch(
   flex-direction: column;
   gap: 0.25rem;
   padding-top: 0.5rem;
-  border-top: 1px solid var(--mv-header-border);
+  border-top: 1px solid var(--mv-glass-border);
 }
 
 .mobile-actions .auth-btn.primary {
@@ -731,13 +704,13 @@ watch(
 .mobile-menu-enter-active,
 .mobile-menu-leave-active {
   transition:
-    grid-template-rows 0.3s ease,
+    transform 0.3s ease,
     opacity 0.25s ease;
 }
 
 .mobile-menu-enter-from,
 .mobile-menu-leave-to {
-  grid-template-rows: 0fr;
+  transform: translateY(calc(100% + 5rem));
   opacity: 0;
 }
 
@@ -774,12 +747,17 @@ watch(
 }
 
 @media (max-width: 720px) {
+  .app-shell {
+    padding-bottom: calc(5.6rem + env(safe-area-inset-bottom));
+  }
+
   .header {
     padding-block: 0.65rem;
   }
 
   .header-inner {
     flex-wrap: nowrap;
+    gap: 0.5rem;
   }
 
   .header-left,
@@ -790,33 +768,129 @@ watch(
   }
 
   .nav,
-  .header-right,
-  .search-bar {
+  .header-right {
     display: none;
   }
 
-  .mobile-header-actions {
-    display: flex;
-  }
-
-  .mobile-menu .search-bar {
+  /* Search shares the single title-bar row with the brand: it shrinks instead
+     of wrapping, so the header stays one line tall. */
+  .search-bar {
     display: flex;
     order: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    padding: 0.32rem 0.4rem 0.32rem 0.75rem;
+  }
+
+  .mobile-tab-bar {
+    position: fixed;
+    right: 0.75rem;
+    bottom: calc(0.6rem + env(safe-area-inset-bottom));
+    left: 0.75rem;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding: 0.35rem;
+    border: 1px solid var(--mv-glass-border);
+    /* Continuous, capsule-style corners like the iOS 26 floating tab bar:
+       the radius tracks half the bar height instead of a fixed small value. */
+    border-radius: 999px;
+    background: var(--mv-glass-bg);
+    box-shadow:
+      var(--mv-glass-shadow),
+      inset 0 1px 0 var(--mv-glass-highlight);
+    backdrop-filter: var(--mv-glass-blur);
+    -webkit-backdrop-filter: var(--mv-glass-blur);
+  }
+
+  .mobile-tab {
+    display: flex;
+    min-width: 0;
+    min-height: 3.5rem;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.3rem 0.15rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--mv-nav-text);
+    font: inherit;
+    font-size: 0.68rem;
+    cursor: pointer;
+    transition:
+      background 0.2s ease,
+      color 0.2s ease;
+  }
+
+  .mobile-tab svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    fill: currentColor;
+  }
+
+  .mobile-tab .profile-avatar,
+  .mobile-tab .profile-icon {
+    width: 1.35rem;
+    height: 1.35rem;
+    flex: 0 0 1.35rem;
+  }
+
+  .mobile-tab.active,
+  .mobile-tab:active {
+    background: var(--mv-glass-active);
+    color: var(--mv-nav-text-active);
+    box-shadow: inset 0 1px 0 var(--mv-glass-highlight);
+  }
+
+  .mobile-menu {
+    position: fixed;
+    right: 0.75rem;
+    bottom: calc(5.1rem + env(safe-area-inset-bottom));
+    left: 0.75rem;
+    z-index: 19;
+    display: flex;
+    flex-direction: column;
+    max-height: min(70vh, 32rem);
+    overflow: hidden;
+    border: 1px solid var(--mv-glass-border);
+    /* Sheet corners stay squircle-like (large but not a full capsule), matching
+       the iOS 26 grouped-sheet radius. */
+    border-radius: 34px;
+    background: var(--mv-glass-bg);
+    box-shadow:
+      var(--mv-glass-shadow),
+      inset 0 1px 0 var(--mv-glass-highlight);
+    backdrop-filter: var(--mv-glass-blur);
+    -webkit-backdrop-filter: var(--mv-glass-blur);
   }
 }
 
 @media (max-width: 480px) {
   .logo-text {
-    font-size: 0.95rem;
-    max-width: 160px;
+    font-size: 0.9rem;
+    max-width: 6.5rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .logo-icon {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+  }
+
+  .logo-link {
+    gap: 0.45rem;
+  }
+
+  .search-input {
+    /* iOS Safari zooms the entire viewport when focusing inputs below 16px. */
+    font-size: 1rem;
   }
 }
 /* ---- Footer ---- */
@@ -857,10 +931,7 @@ watch(
 
 @media (prefers-reduced-motion: reduce) {
   .mobile-menu-enter-active,
-  .mobile-menu-leave-active,
-  .hamburger,
-  .hamburger::before,
-  .hamburger::after {
+  .mobile-menu-leave-active {
     transition: none;
   }
 }
