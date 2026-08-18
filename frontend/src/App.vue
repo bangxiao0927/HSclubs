@@ -209,17 +209,42 @@ watch(
           </button>
         </form>
 
-        <button
-          type="button"
-          class="mobile-menu-toggle"
-          :class="{ open: mobileMenuOpen }"
-          :aria-expanded="mobileMenuOpen"
-          aria-controls="mobile-navigation"
-          aria-label="Toggle menu"
-          @click="toggleMobileMenu"
-        >
-          <span class="hamburger"></span>
-        </button>
+        <div class="mobile-header-actions">
+          <button
+            type="button"
+            class="mobile-menu-toggle"
+            :class="{ open: mobileMenuOpen }"
+            :aria-expanded="mobileMenuOpen"
+            aria-controls="mobile-navigation"
+            aria-label="Toggle menu"
+            @click="toggleMobileMenu"
+          >
+            <span class="hamburger"></span>
+          </button>
+          <RouterLink
+            :to="isAuthenticated ? '/profile' : '/auth?intent=login'"
+            class="mobile-user-center"
+            aria-label="User center"
+            @click="closeMobileMenu"
+          >
+            <img
+              v-if="isAuthenticated && profileAvatarUrl"
+              class="profile-avatar"
+              :src="profileAvatarUrl"
+              alt=""
+              referrerpolicy="no-referrer"
+              @error="handleProfileAvatarError"
+            />
+            <span v-else-if="isAuthenticated" class="profile-icon" aria-hidden="true">{{
+              profileInitial
+            }}</span>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"
+              />
+            </svg>
+          </RouterLink>
+        </div>
 
         <div class="header-right">
           <button type="button" class="theme-toggle" @click="toggleTheme">
@@ -557,12 +582,47 @@ watch(
 }
 
 /* Mobile */
-.mobile-menu-toggle {
+.mobile-header-actions {
   display: none;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+}
+
+.mobile-menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
   background: none;
   border: none;
   cursor: pointer;
   padding: 0.5rem;
+}
+
+.mobile-user-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--mv-profile-border);
+  border-radius: 50%;
+  color: var(--mv-profile-text);
+  box-sizing: border-box;
+}
+
+.mobile-user-center:hover,
+.mobile-user-center:active {
+  background: var(--mv-profile-hover-bg);
+  border-color: var(--mv-profile-hover-border);
+}
+
+.mobile-user-center svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: currentColor;
 }
 
 .hamburger {
@@ -722,13 +782,20 @@ watch(
     flex-wrap: nowrap;
   }
 
+  .header-left,
+  .logo,
+  .logo-link,
+  .logo-text {
+    min-width: 0;
+  }
+
   .nav,
   .header-right,
   .search-bar {
     display: none;
   }
 
-  .mobile-menu-toggle {
+  .mobile-header-actions {
     display: flex;
   }
 

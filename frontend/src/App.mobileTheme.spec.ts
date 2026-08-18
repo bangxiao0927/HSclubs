@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import App from './App.vue'
+import { useAuthStore } from './stores/auth'
 
 const stubView = { template: '<div />' }
 const originalLocalStorage = Object.getOwnPropertyDescriptor(window, 'localStorage')
@@ -83,5 +84,35 @@ describe('mobile menu theme toggle', () => {
     expect(document.documentElement.dataset.theme).toBe('dark')
     expect(window.localStorage.getItem('theme')).toBe('dark')
     expect(wrapper.find('.mobile-menu').exists()).toBe(true)
+  })
+})
+
+describe('mobile header user center', () => {
+  it('places a user center shortcut after the menu toggle', async () => {
+    const wrapper = await mountApp()
+    const actions = wrapper.find('.mobile-header-actions')
+
+    expect(actions.find('.mobile-menu-toggle').exists()).toBe(true)
+    expect(actions.element.lastElementChild?.classList.contains('mobile-user-center')).toBe(true)
+    expect(actions.find('.mobile-user-center').attributes('href')).toBe('/auth?intent=login')
+    expect(actions.find('.mobile-user-center').attributes('aria-label')).toBe('User center')
+  })
+
+  it('links authenticated users to their profile and shows their initial', async () => {
+    const wrapper = await mountApp()
+    const authStore = useAuthStore()
+    authStore.currentUser = {
+      id: 'student-1',
+      email: 'alex@example.com',
+      displayName: 'Alex',
+      avatarUrl: '',
+      provider: 'google',
+      isOwner: false,
+    }
+    await wrapper.vm.$nextTick()
+
+    const shortcut = wrapper.find('.mobile-user-center')
+    expect(shortcut.attributes('href')).toBe('/profile')
+    expect(shortcut.find('.profile-icon').text()).toBe('A')
   })
 })
