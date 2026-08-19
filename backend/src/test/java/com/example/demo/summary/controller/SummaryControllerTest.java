@@ -20,6 +20,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.example.demo.auth.config.SecurityProperties;
+import com.example.demo.summary.config.SchoolIdentity;
 import com.example.demo.summary.model.SummaryResponse;
 import com.example.demo.summary.service.SummaryService;
 
@@ -47,6 +48,12 @@ class SummaryControllerTest {
         @Bean
         SecurityProperties securityProperties() {
             return new SecurityProperties();
+        }
+
+        /** A deployment that has not joined v1: the unversioned endpoint must not notice. */
+        @Bean
+        SchoolIdentity schoolIdentity() {
+            return new SchoolIdentity("", "");
         }
     }
 
@@ -118,5 +125,14 @@ class SummaryControllerTest {
 
         mockMvc.perform(get("/api/summary").header("If-None-Match", "not-a-tag"))
             .andExpect(status().isOk());
+    }
+
+    // The v1 surface is opt-in. A school that has not been issued an identity has no v1 summary
+    // to publish, and saying so is the only honest answer -- inventing one, or falling back to
+    // the unversioned body, would put an unidentified school on the app's directory.
+    @Test
+    void doesNotPublishAVersionedSummaryUntilAnIdentityIsConfigured() throws Exception {
+        mockMvc.perform(get("/api/v1/summary"))
+            .andExpect(status().isNotFound());
     }
 }

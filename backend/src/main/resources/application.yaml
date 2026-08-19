@@ -109,6 +109,19 @@ app:
     # site work. The assembled response is cached for this long; short enough that the future
     # aggregator still sees a change promptly, long enough that a flood collapses onto one query.
     cache-ttl-ms: ${APP_SUMMARY_CACHE_TTL_MS:60000}
+  school:
+    # The permanent identity the guiding page registry issued for this school (`npm run id:issue`
+    # over there). Empty is the default and a supported state: this deployment then serves
+    # /api/summary exactly as before and publishes no v1 surface at all -- /api/v1/summary and
+    # /.well-known/hsclubs-app.json answer 404. A value that is present but malformed fails
+    # startup, because publishing a wrong identity reads as this origin claiming to be another
+    # school. It never changes: a rename, a new slug or an approved new host all keep it.
+    id: ${APP_SCHOOL_ID:}
+    # The public origin visitors use, scheme and host only. Published in the manifest and compared
+    # by the registry against the origin it verified, so it is configured rather than taken from
+    # the request's Host header -- a manifest that echoed the caller would say whatever the caller
+    # wanted. Defaults to the frontend origin, which is that address on a normal deployment.
+    site-origin: ${APP_SCHOOL_SITE_ORIGIN:${app.security.frontend-origin:}}
 
 spring:
   config:

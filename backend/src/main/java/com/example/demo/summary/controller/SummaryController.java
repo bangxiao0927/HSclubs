@@ -1,6 +1,8 @@
 package com.example.demo.summary.controller;
 
 import com.example.demo.summary.model.SummaryResponse;
+import com.example.demo.summary.config.SchoolIdentity;
+import com.example.demo.summary.model.SummaryV1Response;
 import com.example.demo.summary.service.SummaryService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +20,11 @@ import org.springframework.web.context.request.WebRequest;
 public class SummaryController {
 
     private final SummaryService summaryService;
+    private final SchoolIdentity schoolIdentity;
 
-    public SummaryController(SummaryService summaryService) {
+    public SummaryController(SummaryService summaryService, SchoolIdentity schoolIdentity) {
         this.summaryService = summaryService;
+        this.schoolIdentity = schoolIdentity;
     }
 
     /**
@@ -47,5 +51,32 @@ public class SummaryController {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).build();
         }
         return ResponseEntity.ok().eTag(etag).body(snapshot.summary());
+    }
+
+    /**
+     * The same directory, with the identity and version marker the v1 contract requires.
+     *
+     * <p>Built from the same snapshot as the unversioned endpoint, so the two can never report
+     * different numbers, and answering conditional requests the same way -- with a distinct
+     * entity tag, because the two representations differ and a client must not be told its copy
+     * of one is current when it holds the other.
+     *
+     * <p>404 until this deployment has been given an identity. That is not an error state: a
+     * school joins v1 by configuring the value its registry issued, and until then the only
+     * honest answer to "what is your v1 summary" is that there is not one.
+     */
+    @GetMapping("/v1/summary")
+    public ResponseEntity<SummaryV1Response> getSummaryV1(WebRequest request) {
+        String schoolId = schoolIdentity.schoolId().orElse(null);
+        if (schoolId == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        SummaryService.Snapshot snapshot = summaryService.buildSnapshot();
+        String etag = "\"v1-" + snapshot.entityTag() + "\"";
+        if (request.checkNotModified(etag)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).build();
+        }
+        return ResponseEntity.ok().eTag(etag).body(new SummaryV1Response(schoolId, snapshot.summary()));
     }
 }
