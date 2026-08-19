@@ -85,6 +85,20 @@ class MobileAuthEndpointTest {
             .andExpect(jsonPath("$.error").value("unknown_school"));
     }
 
+    // The contract closes the parameter set, so anything unexpected is refused rather than ignored.
+    @Test
+    void startRejectsAnUnknownParameter() throws Exception {
+        mockMvc.perform(get("/api/mobile-auth/start")
+                .param("schoolId", SCHOOL_ID)
+                .param("state", STATE)
+                .param("code_challenge", CHALLENGE)
+                .param("code_challenge_method", "S256")
+                .param("redirect_uri", CALLBACK)
+                .param("prompt", "consent"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("invalid_request"));
+    }
+
     @Test
     void completeSpendsACodeAndReturnsTheContractBody() throws Exception {
         PendingMobileAuth pending = service.validateStart(SCHOOL_ID, STATE, CHALLENGE, "S256", CALLBACK, "/clubs");
@@ -122,5 +136,45 @@ class MobileAuthEndpointTest {
         mockMvc.perform(post("/api/mobile-auth/complete").contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    // A flow started without a return path still yields a contract-valid returnTo: the school root,
+    // never a null the app would reject.
+    @Test
+    void completeDefaultsReturnToWhenTheFlowHadNone() throws Exception {
+        PendingMobileAuth pending = service.validateStart(SCHOOL_ID, STATE, CHALLENGE, "S256", CALLBACK, null);
+        String code = service.issueCode(
+            pending, new TestingAuthenticationToken("alex@example.edu", "n/a", "ROLE_USER"), Instant.now());
+
+        mockMvc.perform(post("/api/mobile-auth/complete")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"schoolId\":\"" + SCHOOL_ID + "\",\"code\":\"" + code + "\",\"code_verifier\":\"" + VERIFIER + "\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.returnTo").value("/"));
+    }
+
+    // Session fixation: a session the web view already held is discarded, so its id cannot be
+    // reused as an authenticated one.
+    @Test
+    void completeReplacesAnyPreExistingSession() throws Exception {
+        PendingMobileAuth pending = service.validateStart(SCHOOL_ID, STATE, CHALLENGE, "S256", CALLBACK, null);
+        String code = service.issueCode(
+            pending, new TestingAuthenticationToken("alex@example.edu", "n/a", "ROLE_USER"), Instant.now());
+
+        var preExisting = new org.springframework.mock.web.MockHttpSession();
+        preExisting.setAttribute("pre", "value");
+
+        var result = mockMvc.perform(post("/api/mobile-auth/complete")
+                .session(preExisting)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"schoolId\":\"" + SCHOOL_ID + "\",\"code\":\"" + code + "\",\"code_verifier\":\"" + VERIFIER + "\"}"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        assertThat(preExisting.isInvalid()).isTrue();
+        var session = result.getRequest().getSession(false);
+        assertThat(session).isNotNull();
+        assertThat(session).isNotSameAs(preExisting);
+        assertThat(session.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY)).isNotNull();
     }
 }

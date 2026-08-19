@@ -4,6 +4,7 @@ import com.example.demo.summary.model.SummaryResponse;
 import com.example.demo.summary.config.SchoolIdentity;
 import com.example.demo.summary.model.SummaryV1Response;
 import com.example.demo.summary.service.SummaryService;
+import com.example.demo.summary.service.SummaryUsage;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,10 +22,12 @@ public class SummaryController {
 
     private final SummaryService summaryService;
     private final SchoolIdentity schoolIdentity;
+    private final SummaryUsage usage;
 
-    public SummaryController(SummaryService summaryService, SchoolIdentity schoolIdentity) {
+    public SummaryController(SummaryService summaryService, SchoolIdentity schoolIdentity, SummaryUsage usage) {
         this.summaryService = summaryService;
         this.schoolIdentity = schoolIdentity;
+        this.usage = usage;
     }
 
     /**
@@ -41,6 +44,8 @@ public class SummaryController {
      */
     @GetMapping("/summary")
     public ResponseEntity<SummaryResponse> getSummary(WebRequest request) {
+        // Legacy observation: count the read before anything else, whether or not it ends in a 304.
+        usage.record(SummaryUsage.LEGACY);
         SummaryService.Snapshot snapshot = summaryService.buildSnapshot();
         String etag = "\"" + snapshot.entityTag() + "\"";
 
@@ -71,6 +76,7 @@ public class SummaryController {
         if (schoolId == null) {
             return ResponseEntity.notFound().build();
         }
+        usage.record(SummaryUsage.V1);
 
         SummaryService.Snapshot snapshot = summaryService.buildSnapshot();
         String etag = "\"v1-" + snapshot.entityTag() + "\"";

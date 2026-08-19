@@ -72,6 +72,11 @@ class SchoolIdentityPublicationTest {
             return new com.example.demo.mobileauth.MobileAuthService(
                 schoolIdentity, properties, new com.example.demo.mobileauth.MobileAuthCodeStore());
         }
+
+        @Bean
+        com.example.demo.summary.service.SummaryUsage summaryUsage() {
+            return new com.example.demo.summary.service.SummaryUsage();
+        }
     }
 
     @Autowired

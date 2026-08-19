@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
+import java.util.Set;
 import org.springframework.security.web.util.UrlUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,9 @@ public class MobileAuthStartController {
 
     private static final String DEFAULT_AUTHORIZE_BASE = "/api/auth/authorize";
     private static final String REGISTRATION_ID = "google";
+    /** The only parameters the start entry accepts; the contract is additionalProperties:false. */
+    private static final Set<String> ALLOWED_PARAMETERS = Set.of(
+        "schoolId", "state", "code_challenge", "code_challenge_method", "redirect_uri", "return_to");
 
     private final MobileAuthService service;
     private final SecurityProperties securityProperties;
@@ -47,6 +51,16 @@ public class MobileAuthStartController {
         HttpServletRequest request,
         HttpServletResponse response
     ) throws IOException {
+        // The contract closes this parameter set: a request carrying anything else is malformed and
+        // refused, rather than silently ignored, so a parameter the school would have to act on can
+        // never slip through unrecognised.
+        for (String name : request.getParameterMap().keySet()) {
+            if (!ALLOWED_PARAMETERS.contains(name)) {
+                throw new MobileAuthException(
+                    MobileAuthException.Error.INVALID_REQUEST, "unexpected parameter: " + name);
+            }
+        }
+
         PendingMobileAuth pending = service.validateStart(
             schoolId, state, codeChallenge, codeChallengeMethod, redirectUri, returnTo);
 
