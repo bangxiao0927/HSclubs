@@ -12,7 +12,7 @@
       "supported": true,
       "startUrl": "https://hsclubs.net/api/mobile-auth/start",
       "completeUrl": "https://hsclubs.net/api/mobile-auth/complete",
-      "callbackUrl": "https://clubs.bangxiao.net/app/auth/callback",
+      "callbackUrl": "https://clubs.bangxiao.net/mobile-auth/callback",
       "codeChallengeMethods": ["S256"]
     }
   },

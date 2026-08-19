@@ -2,7 +2,7 @@
   "contract": "hsclubs.contracts",
   "version": 1,
   "files": {
-    "README.md": "1d1e567311e81637c249924a1b5b1860fd2e2866cff9df85cde8ea8d3337d136",
+    "README.md": "351c3c29133aa6b9605481600e3bcfd8264d3e7da7a8c797833f34c441fea5d0",
     "fixtures/app-directory/invalid-incompatible-without-reason.json": "30ea162d7cf3d8eb1555e8f8607211c15c4f1788b403c3b17e5c44615f82dc86",
     "fixtures/app-directory/invalid-missing-school-id.json": "970f29cbdddce9348c52565eb714d369ec9265b08e81975de80a46287b7a00ea",
     "fixtures/app-directory/invalid-status-value.json": "0500109567447b8ffaf7feabf283aff15e3bfd7c3df89f0f1646868f579e807f",
@@ -22,18 +22,18 @@
     "fixtures/mobile-auth-complete-response/valid.json": "8f4d150bfc366effa5078b5bb5b02c5d3fa71b5c369db7399532de0a71018db5",
     "fixtures/mobile-auth-error/invalid-unknown-code.json": "f62b603f3e1656a5a0306ca92fcdf08f80145d99f707563a3dea4e48ea9fe606",
     "fixtures/mobile-auth-error/valid.json": "0558386a438e96afa51003fc5bd068329e76e1d0d662a31d7a3eb5b039124c45",
-    "fixtures/mobile-auth-start/invalid-absolute-return-to.json": "78b27d08e551f5bde1e322f8bf1d03921bd9ef8f75b341a4b1d1faa3122b6343",
-    "fixtures/mobile-auth-start/invalid-plain-challenge-method.json": "833287fb78f0fb5436dc4f3bd013c214c56b0662830a7e91b7de479ae6670aea",
-    "fixtures/mobile-auth-start/invalid-protocol-relative-return-to.json": "c1a9b2fcadabd412d79e35fb388982f7a231f5d2377d2e4e705c1e1ed6cec85e",
-    "fixtures/mobile-auth-start/invalid-unknown-parameter.json": "950196549d2df186c430049d878d290373144e838b77255ed55a1687a5995efe",
-    "fixtures/mobile-auth-start/valid-with-return-to.json": "6f25d2be2ef5f213470b87eaaae8a145f347b13c27efdfebafc23a5b8bead8e9",
-    "fixtures/mobile-auth-start/valid.json": "91422b6ce8442335514b1133915f85e45d02cb0f7612d37c51f78f3253310703",
+    "fixtures/mobile-auth-start/invalid-absolute-return-to.json": "92eba2f0084b8588b8da23665a5b0ae7ed91cc518d24550bf6cc976cf43892c1",
+    "fixtures/mobile-auth-start/invalid-plain-challenge-method.json": "3a31e36247139c612daaa61abcbf9688bd480248ad4cf27a0fab6fb4f7fb742b",
+    "fixtures/mobile-auth-start/invalid-protocol-relative-return-to.json": "383bc9fdf60bf5ab75c1114b6685e372d3d1496a00eec8d4c81b28bf6b9f895f",
+    "fixtures/mobile-auth-start/invalid-unknown-parameter.json": "247afb1e824c89aced0da818ca64e3c873bf027175d193de135ee162419e1bc0",
+    "fixtures/mobile-auth-start/valid-with-return-to.json": "ff13b04b93046d61260a1b9d1d3919db9160baff0cf0ac31249a0eadde3cec5e",
+    "fixtures/mobile-auth-start/valid.json": "a25507e4dc74db18a61fc34e71bc4ae1f89ae9cc44bbd8f82c554059fd768732",
     "fixtures/school-manifest/invalid-mobile-auth-without-urls.json": "a3912be2082686fded1812dfd6d3b912f353081ad063d26a9a1e1c7d3fc44dec",
     "fixtures/school-manifest/invalid-origin-with-path.json": "4ef0414eb218c5f3e1be6860467681cc0175035b3607ed08392950582ce4de71",
     "fixtures/school-manifest/invalid-school-id-shape.json": "1d041cefac098045f9fb5b61a4eab50923e86696b09afc8fb3386268195d7bf1",
     "fixtures/school-manifest/valid-no-mobile-auth.json": "7afa3e34296b85f654fc3a4c83ed8365616a3fd8989ee5684b793cf34d20eca5",
-    "fixtures/school-manifest/valid-unknown-capability.json": "250dbed4db9b32525a49c62350bd2126fa408ecdaba2bf78696046bf024d476a",
-    "fixtures/school-manifest/valid.json": "f1c4eb80c177d44267b471bea70fe7ef87c1af0488f7300777eb554f5aea7bd6",
+    "fixtures/school-manifest/valid-unknown-capability.json": "9b54588479d36eb3a81afec2119318e17e53e61c2cfcb7144d4426b401e62ac6",
+    "fixtures/school-manifest/valid.json": "49d5d13fff2d6fa249af9edf9db99292ee6d3cd2f8d79aac6692882fc15f85d1",
     "fixtures/summary/invalid-club-count-type.json": "36f9001f6f8b58348e7b2ad22c770e633b83b48f11ce7f7948a6bc5c62ab7344",
     "fixtures/summary/invalid-legacy-unversioned.json": "9220f74652521b1fc5563ca5d24152e1e871a77dd36d39c58dfff4ed5a43fe7c",
     "fixtures/summary/invalid-missing-school-id.json": "a7fa5011a9e2976ced8fde095f36760e72dd110752c57f94a6e2be4da4490f6a",
@@ -49,6 +49,6 @@
     "schemas/mobile-auth-start.schema.json": "fa92ae04551a0e7129dd930d74fcdf045184014341a76e606860c062fffb39e4",
     "schemas/school-manifest.schema.json": "d014bba62b42acfd40bceb1c1d486ad423730240e2886f1b30272b16dd737b72",
     "schemas/summary.schema.json": "89d1bd649b32452a7006245f9351ba83fa579312151dff83e0f2033f8b3be393",
-    "vectors/mobile-auth.json": "697e8a4c1e00a6296c5ff06fa02d12332d388e49b30d46308d6be7f569f6d670"
+    "vectors/mobile-auth.json": "da1d0a82dd62f3b74633e6c2987dc2801d4f5955cd5c50c6b0e568c4b1ff3fc3"
   }
 }

@@ -58,6 +58,20 @@ class SchoolIdentityPublicationTest {
         SchoolIdentity schoolIdentity() {
             return new SchoolIdentity(SCHOOL_ID, ORIGIN + "/");
         }
+
+        @Bean
+        com.example.demo.mobileauth.MobileAuthProperties mobileAuthProperties() {
+            return new com.example.demo.mobileauth.MobileAuthProperties();
+        }
+
+        @Bean
+        com.example.demo.mobileauth.MobileAuthService mobileAuthService(
+            SchoolIdentity schoolIdentity,
+            com.example.demo.mobileauth.MobileAuthProperties properties
+        ) {
+            return new com.example.demo.mobileauth.MobileAuthService(
+                schoolIdentity, properties, new com.example.demo.mobileauth.MobileAuthCodeStore());
+        }
     }
 
     @Autowired
@@ -156,9 +170,14 @@ class SchoolIdentityPublicationTest {
             .andExpect(jsonPath("$.siteOrigin").value(ORIGIN))
             .andExpect(jsonPath("$.summaryUrl").value(ORIGIN + "/api/v1/summary"))
             .andExpect(jsonPath("$.capabilities").value(org.hamcrest.Matchers.hasItem("summary.v1")))
-            // Declared only when the endpoints exist; an app that believed otherwise would send
-            // somebody into a sign-in that cannot complete.
-            .andExpect(jsonPath("$.auth.mobile.supported").value(false));
+            // Mobile auth is now implemented, so a configured school advertises it -- with the
+            // endpoints the contract requires whenever supported is true.
+            .andExpect(jsonPath("$.capabilities").value(org.hamcrest.Matchers.hasItem("mobile-auth.v1")))
+            .andExpect(jsonPath("$.auth.mobile.supported").value(true))
+            .andExpect(jsonPath("$.auth.mobile.startUrl").value(ORIGIN + "/api/mobile-auth/start"))
+            .andExpect(jsonPath("$.auth.mobile.completeUrl").value(ORIGIN + "/api/mobile-auth/complete"))
+            .andExpect(jsonPath("$.auth.mobile.callbackUrl").value("https://clubs.bangxiao.net/mobile-auth/callback"))
+            .andExpect(jsonPath("$.auth.mobile.codeChallengeMethods[0]").value("S256"));
     }
 
     // The identity this school publishes has to be the same one in both documents, or the

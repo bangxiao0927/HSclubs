@@ -122,6 +122,13 @@ app:
     # the request's Host header -- a manifest that echoed the caller would say whatever the caller
     # wanted. Defaults to the frontend origin, which is that address on a normal deployment.
     site-origin: ${APP_SCHOOL_SITE_ORIGIN:${app.security.frontend-origin:}}
+  mobile-auth:
+    # The Universal Links the iOS app may name as its return channel. Only a value on this list is
+    # honoured as a redirect target, so a tampered start link cannot divert the one-time code. The
+    # default is the one official callback on the guiding page's domain.
+    callback-urls: ${APP_MOBILE_AUTH_CALLBACK_URLS:https://clubs.bangxiao.net/mobile-auth/callback}
+    # One-time code lifetime, clamped to the contract's 60-120 second window.
+    code-ttl-seconds: ${APP_MOBILE_AUTH_CODE_TTL_SECONDS:90}
 
 spring:
   config:
