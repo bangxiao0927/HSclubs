@@ -1,0 +1,11 @@
+{
+  "contract": "hsclubs.school-manifest",
+  "version": 1,
+  "schoolId": "sch_2Hn5Wq8ZcT1yE7uK4mB0",
+  "slug": "bay-meadows",
+  "schoolName": "Bay Meadows Demo School",
+  "siteOrigin": "https://demo-school.bangxiao.net",
+  "summaryUrl": "https://demo-school.bangxiao.net/api/v1/summary",
+  "capabilities": ["summary.v1"],
+  "auth": { "mobile": { "supported": false } }
+}

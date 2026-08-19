@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hsclubs.net/v1/mobile-auth-callback.schema.json",
+  "title": "HS Clubs mobile auth callback parameters, v1",
+  "description": "Query parameters on the universal link the school redirects to once the identity provider has answered, decoded into an object. Exactly one of code or error is present. No token, cookie or profile field ever appears here: the value handed back is a one-time code that is worthless without the verifier held by the app.",
+  "type": "object",
+  "required": ["schoolId", "state"],
+  "additionalProperties": false,
+  "properties": {
+    "schoolId": { "type": "string", "pattern": "^sch_[A-Za-z0-9]{16,48}$" },
+    "state": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22,128}$" },
+    "code": {
+      "description": "Single-use authorization code, base64url without padding. Valid for 60-120 seconds and accepted once.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "error": { "$ref": "https://schemas.hsclubs.net/v1/mobile-auth-error.schema.json#/$defs/code" },
+    "error_description": { "type": "string", "maxLength": 200 }
+  },
+  "oneOf": [
+    { "required": ["code"], "not": { "required": ["error"] } },
+    { "required": ["error"], "not": { "required": ["code"] } }
+  ]
+}

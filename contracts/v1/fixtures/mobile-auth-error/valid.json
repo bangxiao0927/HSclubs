@@ -1,0 +1,6 @@
+{
+  "contract": "hsclubs.mobile-auth-error",
+  "version": 1,
+  "error": "invalid_grant",
+  "error_description": "code already used"
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hsclubs.net/v1/mobile-auth-error.schema.json",
+  "title": "HS Clubs mobile auth error, v1",
+  "description": "The failure shape for every mobile auth step. The code set is closed so the app can decide between retry, restart and give up without reading prose; the description is for a human reading a log and never carries a code, verifier or token.",
+  "type": "object",
+  "required": ["contract", "version", "error"],
+  "additionalProperties": true,
+  "properties": {
+    "contract": { "const": "hsclubs.mobile-auth-error" },
+    "version": { "const": 1 },
+    "error": { "$ref": "#/$defs/code" },
+    "error_description": { "type": "string", "maxLength": 200 }
+  },
+  "$defs": {
+    "code": {
+      "description": "invalid_request: malformed or unknown parameter. unknown_school: schoolId is not this deployment. invalid_state: state did not match a pending flow. invalid_grant: code unknown, already used, or verifier mismatch. expired_code: code outlived its window. access_denied: the person cancelled. temporarily_unavailable: the identity provider or this deployment failed; retrying is reasonable.",
+      "enum": [
+        "invalid_request",
+        "unknown_school",
+        "invalid_state",
+        "invalid_grant",
+        "expired_code",
+        "access_denied",
+        "temporarily_unavailable"
+      ]
+    }
+  }
+}

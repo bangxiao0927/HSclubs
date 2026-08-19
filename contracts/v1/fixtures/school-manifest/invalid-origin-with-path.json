@@ -1,0 +1,10 @@
+{
+  "contract": "hsclubs.school-manifest",
+  "version": 1,
+  "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+  "slug": "mvhs",
+  "siteOrigin": "https://hsclubs.net/app",
+  "summaryUrl": "https://hsclubs.net/api/v1/summary",
+  "capabilities": ["summary.v1"],
+  "auth": { "mobile": { "supported": false } }
+}

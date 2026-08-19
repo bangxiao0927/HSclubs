@@ -12,6 +12,12 @@ This API serves a single-school club directory. All club endpoints live under `/
 ### GET /api/summary
 Public endpoint consumed by the 2nd-repo aggregator. Returns club directory stats.
 
+Unversioned and staying that way: this is what the guiding page reads in production today, and
+its behaviour does not change. The versioned contract that replaces it -- `/api/v1/summary`,
+`/.well-known/hsclubs-app.json` and the mobile authentication messages -- is defined once for all
+three repositories in [`../contracts/v1/README.md`](../contracts/v1/README.md), vendored from
+hsclubs-guiding-page and checked byte for byte by `ContractArtifactTest`. Edit it there, not here.
+
 Response:
 ```json
 {

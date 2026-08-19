@@ -1,0 +1,19 @@
+{
+  "contract": "hsclubs.school-manifest",
+  "version": 1,
+  "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+  "slug": "mvhs",
+  "siteOrigin": "https://hsclubs.net",
+  "summaryUrl": "https://hsclubs.net/api/v1/summary",
+  "capabilities": ["summary.v1", "mobile-auth.v1", "events.v2"],
+  "auth": {
+    "mobile": {
+      "supported": true,
+      "startUrl": "https://hsclubs.net/api/mobile-auth/start",
+      "completeUrl": "https://hsclubs.net/api/mobile-auth/complete",
+      "callbackUrl": "https://clubs.bangxiao.net/app/auth/callback",
+      "codeChallengeMethods": ["S256"],
+      "sessionMaxAgeSeconds": 1209600
+    }
+  }
+}
