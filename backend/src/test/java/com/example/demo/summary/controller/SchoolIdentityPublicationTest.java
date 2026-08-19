@@ -83,6 +83,17 @@ class SchoolIdentityPublicationTest {
         return required;
     }
 
+    private static void assertPublishesEveryRequiredMember(
+        org.springframework.test.web.servlet.ResultActions response, String schema) throws Exception {
+        JsonNode body = new ObjectMapper()
+            .readTree(response.andReturn().getResponse().getContentAsString());
+        for (String member : requiredMembersOf(schema)) {
+            org.assertj.core.api.Assertions.assertThat(body.has(member))
+                .as("%s requires %s", schema, member)
+                .isTrue();
+        }
+    }
+
     @BeforeEach
     void stubSummary() {
         SummaryResponse summary = new SummaryResponse();
@@ -102,9 +113,9 @@ class SchoolIdentityPublicationTest {
     @Test
     void publishesEveryMemberTheVersionedSummaryContractRequires() throws Exception {
         var response = mockMvc.perform(get("/api/v1/summary")).andExpect(status().isOk());
-        for (String member : requiredMembersOf("summary.schema.json")) {
-            response.andExpect(jsonPath("$." + member).exists());
-        }
+        // Presence, not truthiness: a required member whose value is null -- an address nobody
+        // configured -- is still published, so a consumer checks for null and never for absence.
+        assertPublishesEveryRequiredMember(response, "summary.schema.json");
         response
             .andExpect(jsonPath("$.contract").value("hsclubs.summary"))
             .andExpect(jsonPath("$.version").value(1))
@@ -135,9 +146,7 @@ class SchoolIdentityPublicationTest {
     @Test
     void publishesEveryMemberTheManifestContractRequires() throws Exception {
         var response = mockMvc.perform(get("/.well-known/hsclubs-app.json")).andExpect(status().isOk());
-        for (String member : requiredMembersOf("school-manifest.schema.json")) {
-            response.andExpect(jsonPath("$." + member).exists());
-        }
+        assertPublishesEveryRequiredMember(response, "school-manifest.schema.json");
         response
             .andExpect(jsonPath("$.contract").value("hsclubs.school-manifest"))
             .andExpect(jsonPath("$.version").value(1))
