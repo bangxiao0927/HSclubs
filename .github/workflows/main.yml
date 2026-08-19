@@ -43,6 +43,10 @@ jobs:
       with:
         node-version: '20'
 
+    # Cross-repo guard: the vendored contracts/v1 must match the canonical copy the guiding page
+    # publishes, so a template or aggregate field drift fails here rather than at runtime in the app.
+    - name: contract sync
+      run: node scripts/check-contract-sync.mjs
 
     # Test frountend
     - name: frontend
