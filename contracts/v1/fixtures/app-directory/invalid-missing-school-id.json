@@ -1,0 +1,15 @@
+{
+  "contract": "hsclubs.app-directory",
+  "version": 1,
+  "generatedAt": "2026-08-18T04:11:02Z",
+  "schools": [
+    {
+      "slug": "mvhs",
+      "name": "Mountain View High School",
+      "siteOrigin": "https://hsclubs.net",
+      "host": "hsclubs.net",
+      "demo": false,
+      "integrationStatus": "compatible"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hsclubs.net/v1/mobile-auth-complete-response.schema.json",
+  "title": "HS Clubs mobile auth complete response, v1",
+  "description": "Body of a successful POST /api/mobile-auth/complete. The session itself travels as a cookie on the school origin; this body only tells the app where to go and who it is now.",
+  "type": "object",
+  "required": ["contract", "version", "schoolId", "returnTo", "user"],
+  "additionalProperties": true,
+  "properties": {
+    "contract": { "const": "hsclubs.mobile-auth-complete" },
+    "version": { "const": 1 },
+    "schoolId": { "type": "string", "pattern": "^sch_[A-Za-z0-9]{16,48}$" },
+    "returnTo": {
+      "description": "Site-relative path to load next, already validated as same-origin by the school.",
+      "type": "string",
+      "pattern": "^/(?![/\\\\])[^\\s?#]*(?:\\?[^\\s#]*)?$",
+      "maxLength": 512
+    },
+    "user": {
+      "type": "object",
+      "required": ["displayName", "roles"],
+      "additionalProperties": true,
+      "properties": {
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "email": { "type": ["string", "null"], "maxLength": 254 },
+        "roles": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "type": "string", "pattern": "^[A-Z_]{1,40}$" }
+        }
+      }
+    },
+    "expiresAt": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})$"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hsclubs.net/v1/mobile-auth-complete-request.schema.json",
+  "title": "HS Clubs mobile auth complete request, v1",
+  "description": "Body of POST /api/mobile-auth/complete, sent from the school's own web view so the session cookie is set on the school origin. This is the only step that reveals the PKCE verifier.",
+  "type": "object",
+  "required": ["schoolId", "code", "code_verifier"],
+  "additionalProperties": false,
+  "properties": {
+    "schoolId": { "type": "string", "pattern": "^sch_[A-Za-z0-9]{16,48}$" },
+    "code": { "type": "string", "pattern": "^[A-Za-z0-9_-]{32,128}$" },
+    "code_verifier": {
+      "description": "RFC 7636 verifier, 43-128 characters from the unreserved set.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._~-]{43,128}$"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "contract": "hsclubs.mobile-auth-complete",
+  "version": 1,
+  "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+  "returnTo": "/clubs/robotics?tab=members",
+  "user": {
+    "displayName": "Alex Chen",
+    "email": "alex.chen@example.edu",
+    "roles": ["STUDENT", "CLUB_LEADER"]
+  },
+  "expiresAt": "2026-09-01T04:11:02Z"
+}

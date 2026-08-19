@@ -1,0 +1,48 @@
+{
+  "contract": "hsclubs.app-directory",
+  "version": 1,
+  "generatedAt": "2026-08-18T04:11:02Z",
+  "schools": [
+    {
+      "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+      "slug": "mvhs",
+      "name": "Mountain View High School",
+      "shortName": "MVHS",
+      "siteOrigin": "https://hsclubs.net",
+      "host": "hsclubs.net",
+      "demo": false,
+      "integrationStatus": "compatible",
+      "unavailableReason": null,
+      "clubCount": 106,
+      "lastUpdatedAt": "2026-08-08T21:41:31.064406-07:00",
+      "mobileAuth": true
+    },
+    {
+      "schoolId": "sch_2Hn5Wq8ZcT1yE7uK4mB0",
+      "slug": "bay-meadows",
+      "name": "Bay Meadows Demo School",
+      "shortName": null,
+      "siteOrigin": "https://demo-school.bangxiao.net",
+      "host": "demo-school.bangxiao.net",
+      "demo": true,
+      "integrationStatus": "degraded",
+      "unavailableReason": null,
+      "clubCount": null,
+      "lastUpdatedAt": null,
+      "mobileAuth": false
+    },
+    {
+      "schoolId": "sch_5Jd9Rk2XvA6nQ3zP8wC1",
+      "slug": "harborview",
+      "name": "Harborview High School",
+      "siteOrigin": "https://clubs.harborview.example",
+      "host": "clubs.harborview.example",
+      "demo": false,
+      "integrationStatus": "incompatible",
+      "unavailableReason": "summary did not match contract hsclubs.summary v1",
+      "clubCount": null,
+      "lastUpdatedAt": null,
+      "mobileAuth": false
+    }
+  ]
+}

@@ -1,2 +1,5 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+# Vendored from hsclubs-guiding-page and checksummed byte for byte. A checkout that rewrote the
+# line endings would make every digest disagree with contracts/v1/manifest.json.
+contracts/v1/** text eol=lf

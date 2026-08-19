@@ -1,0 +1,15 @@
+{
+  "contract": "hsclubs.summary",
+  "version": 1,
+  "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+  "slug": "mvhs",
+  "schoolName": "Mountain View High School",
+  "shortName": "MVHS",
+  "address": "3535 Truman Ave, Mountain View, CA 94040",
+  "status": "active",
+  "clubCount": 106,
+  "categories": { "STEM & Innovation": 15, "Service & Leadership": 60 },
+  "memberCount": 0,
+  "lastUpdatedAt": "2026-08-08T21:41:31.064406-07:00",
+  "dataHash": "5907928d4ec9881498a60cbb5c3cf5f0666e3ce949d002635c1aa35972bfb597"
+}

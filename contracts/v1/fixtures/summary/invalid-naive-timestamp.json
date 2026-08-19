@@ -1,0 +1,15 @@
+{
+  "contract": "hsclubs.summary",
+  "version": 1,
+  "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+  "slug": "mvhs",
+  "schoolName": "Mountain View High School",
+  "shortName": "MVHS",
+  "address": null,
+  "status": "active",
+  "clubCount": 106,
+  "categories": {},
+  "memberCount": 0,
+  "lastUpdatedAt": "2026-08-08T21:41:31",
+  "dataHash": null
+}

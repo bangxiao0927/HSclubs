@@ -1,0 +1,7 @@
+{
+  "contract": "hsclubs.mobile-auth-complete",
+  "version": 1,
+  "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+  "returnTo": "https://evil.example/steal",
+  "user": { "displayName": "Alex Chen", "email": null, "roles": [] }
+}

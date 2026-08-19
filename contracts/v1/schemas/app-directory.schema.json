@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hsclubs.net/v1/app-directory.schema.json",
+  "title": "HS Clubs app directory, v1",
+  "description": "Body of GET /api/v1/schools on the guiding page: the minimum an app needs to list schools and open one. Deliberately narrower than the browser payload behind /api/schools -- no history, trends or category breakdowns -- so the app is not coupled to fields it does not draw.",
+  "type": "object",
+  "required": ["contract", "version", "generatedAt", "schools"],
+  "additionalProperties": true,
+  "properties": {
+    "contract": { "const": "hsclubs.app-directory" },
+    "version": { "const": 1 },
+    "generatedAt": { "$ref": "#/$defs/instant" },
+    "schools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/school" }
+    }
+  },
+  "$defs": {
+    "school": {
+      "description": "One school. The required members are exactly those the app can still render when everything else about that school failed, which is what keeps one bad school from emptying the list.",
+      "type": "object",
+      "required": [
+        "schoolId",
+        "slug",
+        "name",
+        "siteOrigin",
+        "host",
+        "demo",
+        "integrationStatus"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "schoolId": { "type": "string", "pattern": "^sch_[A-Za-z0-9]{16,48}$" },
+        "slug": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "shortName": { "type": ["string", "null"], "maxLength": 60 },
+        "siteOrigin": { "type": "string", "pattern": "^https://[a-z0-9.-]+(?::\\d{2,5})?$" },
+        "host": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "demo": { "type": "boolean" },
+        "integrationStatus": {
+          "description": "compatible: every v1 contract this school publishes validated. degraded: listed and openable, but some optional data was dropped. incompatible: shown as unavailable and not openable.",
+          "enum": ["compatible", "degraded", "incompatible"]
+        },
+        "unavailableReason": {
+          "description": "Operator-facing, already free of anything the failing school sent verbatim.",
+          "type": ["string", "null"],
+          "maxLength": 200
+        },
+        "clubCount": { "type": ["integer", "null"], "minimum": 0 },
+        "lastUpdatedAt": { "$ref": "#/$defs/instantOrNull" },
+        "mobileAuth": {
+          "description": "Whether the app may use the mobile auth protocol against this school. Absent means false.",
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "description": "An incompatible school must say why, so the app can show something other than a blank row.",
+          "if": { "properties": { "integrationStatus": { "const": "incompatible" } } },
+          "then": {
+            "required": ["unavailableReason"],
+            "properties": { "unavailableReason": { "type": "string", "minLength": 1 } }
+          }
+        }
+      ]
+    },
+    "instant": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})$"
+    },
+    "instantOrNull": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})$"
+    }
+  }
+}
