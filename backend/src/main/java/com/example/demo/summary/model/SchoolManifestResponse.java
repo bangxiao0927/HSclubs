@@ -1,6 +1,7 @@
 package com.example.demo.summary.model;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 
 /**
@@ -25,17 +26,20 @@ public class SchoolManifestResponse {
     private final String schoolName;
     private final String siteOrigin;
     private final String summaryUrl;
+    private final Mobile mobile;
 
     public SchoolManifestResponse(String schoolId,
                                   String slug,
                                   String schoolName,
                                   String siteOrigin,
-                                  String summaryUrl) {
+                                  String summaryUrl,
+                                  Mobile mobile) {
         this.schoolId = schoolId;
         this.slug = slug;
         this.schoolName = schoolName;
         this.siteOrigin = siteOrigin;
         this.summaryUrl = summaryUrl;
+        this.mobile = mobile;
     }
 
     public String getContract() { return CONTRACT; }
@@ -52,16 +56,67 @@ public class SchoolManifestResponse {
 
     public String getSummaryUrl() { return summaryUrl; }
 
-    public List<String> getCapabilities() { return List.of("summary.v1"); }
-
-    public Auth getAuth() { return new Auth(); }
-
-    /** Mobile authentication arrives with its endpoints; declaring it earlier would be a lie. */
-    public static class Auth {
-        public Mobile getMobile() { return new Mobile(); }
+    public List<String> getCapabilities() {
+        return mobile.isSupported()
+            ? List.of("summary.v1", "mobile-auth.v1")
+            : List.of("summary.v1");
     }
 
+    public Auth getAuth() { return new Auth(mobile); }
+
+    public static class Auth {
+        private final Mobile mobile;
+
+        public Auth(Mobile mobile) {
+            this.mobile = mobile;
+        }
+
+        public Mobile getMobile() {
+            return mobile;
+        }
+    }
+
+    /**
+     * The mobile-auth capability. When unsupported only the flag is published; when supported the
+     * endpoints are named, because the contract requires an app to know where the flow starts and
+     * ends before it may claim the school supports it.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Mobile {
-        public boolean isSupported() { return false; }
+        private final boolean supported;
+        private final String startUrl;
+        private final String completeUrl;
+        private final String callbackUrl;
+        private final List<String> codeChallengeMethods;
+
+        private Mobile(boolean supported, String startUrl, String completeUrl, String callbackUrl) {
+            this.supported = supported;
+            this.startUrl = startUrl;
+            this.completeUrl = completeUrl;
+            this.callbackUrl = callbackUrl;
+            this.codeChallengeMethods = supported ? List.of("S256") : null;
+        }
+
+        public static Mobile unsupported() {
+            return new Mobile(false, null, null, null);
+        }
+
+        public static Mobile supported(String siteOrigin, String callbackUrl) {
+            return new Mobile(
+                true,
+                siteOrigin + "/api/mobile-auth/start",
+                siteOrigin + "/api/mobile-auth/complete",
+                callbackUrl);
+        }
+
+        public boolean isSupported() { return supported; }
+
+        public String getStartUrl() { return startUrl; }
+
+        public String getCompleteUrl() { return completeUrl; }
+
+        public String getCallbackUrl() { return callbackUrl; }
+
+        public List<String> getCodeChallengeMethods() { return codeChallengeMethods; }
     }
 }

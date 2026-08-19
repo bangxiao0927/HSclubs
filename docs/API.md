@@ -73,6 +73,37 @@ disagrees with what it issued.
 the request's `Host` header: a manifest that echoed the caller would say whatever the caller
 wanted. `auth.mobile.supported` stays false until the mobile authentication endpoints exist.
 
+### GET /api/mobile-auth/start
+
+The fixed entry the iOS app's web view is sent to. Validates `schoolId` (this deployment's issued
+identity), `state`, an S256 `code_challenge`, a `redirect_uri` that must be one of the registered
+Universal Link callbacks (`APP_MOBILE_AUTH_CALLBACK_URLS`), and an optional site-relative
+`return_to`. On success it stores the pending flow in the session and redirects into the existing
+Google login; the ordinary web sign-in is unchanged. Malformed input returns the mobile-auth error
+body below.
+
+### GET /.../auth/callback (Universal Link, served by the guiding page)
+
+After Google answers, the login success handler issues a **one-time authorization code** — short
+lived (60-120s, `APP_MOBILE_AUTH_CODE_TTL_SECONDS`), stored only as a SHA-256 digest, single use —
+and redirects the browser to `redirect_uri?schoolId=..&state=..&code=..`. No OAuth token or session
+ever appears in that URL. A cancelled or refused login returns `...&error=access_denied` instead.
+
+### POST /api/mobile-auth/complete
+
+Called from the school's own WKWebView with `{ schoolId, code, code_verifier }`. Validates the
+school, expiry, single-use status and PKCE verifier, establishes a session on this origin, and
+permanently invalidates the code. Returns `hsclubs.mobile-auth-complete` with `returnTo` and the
+signed-in `user`. Replay, expiry, tampered state, wrong verifier, cross-school use and cross-origin
+return paths are all rejected with:
+
+```json
+{ "contract": "hsclubs.mobile-auth-error", "version": 1, "error": "invalid_grant", "error_description": "..." }
+```
+
+See [`../contracts/v1/README.md`](../contracts/v1/README.md) for the protocol and the pinned
+vectors. The normal Google web login, registration, logout and protected pages are unaffected.
+
 Response:
 ```json
 {
