@@ -267,6 +267,7 @@ describe('beginLogin', () => {
       configurable: true,
       value: originalLocation,
     })
+    vi.unstubAllGlobals()
   })
 
   it('navigates to the authorization URL with an encoded redirect param, and still saves the pending redirect', async () => {
@@ -291,5 +292,20 @@ describe('beginLogin', () => {
 
     expect(window.location.href).toBe('http://localhost:8080/api/auth/authorize/google')
     expect(savePendingAuthRedirectMock).toHaveBeenCalledWith(null)
+  })
+
+  it('sends the login to the fixed mobile-auth entry inside the native app, not the web OAuth redirect', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider])
+    savePendingAuthRedirectMock.mockClear()
+    // The app tags the WebView UA with its name and the mobile-auth protocol marker.
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (iPhone) HSclubsApp/1 (mobile-auth/1)' })
+    const store = useAuthStore()
+    await store.ensureProvidersLoaded()
+
+    store.beginLogin('google', '/clubs/9?tab=events')
+
+    expect(window.location.href).toBe('http://localhost:8080/api/mobile-auth/start')
+    // The app supplies its own return path; the web page does not save one for the app flow.
+    expect(savePendingAuthRedirectMock).not.toHaveBeenCalled()
   })
 })

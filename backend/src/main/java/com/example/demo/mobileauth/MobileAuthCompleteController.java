@@ -49,9 +49,12 @@ public class MobileAuthCompleteController {
 
         establishSession(entry.authentication(), request);
 
+        // The contract requires a site-relative returnTo; the flow may have started without one, so
+        // fall back to the school's root rather than emit a null the app would reject.
+        String returnTo = entry.returnTo() != null ? entry.returnTo() : "/";
         return new MobileAuthCompleteResponse(
             entry.schoolId(),
-            entry.returnTo(),
+            returnTo,
             describeUser(entry.authentication()));
     }
 
@@ -59,6 +62,13 @@ public class MobileAuthCompleteController {
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
+        // Guard against session fixation: any session the web view already carried is discarded and
+        // a fresh one is minted for the authenticated context, so a pre-authentication session id
+        // can never be reused as an authenticated one.
+        HttpSession existing = request.getSession(false);
+        if (existing != null) {
+            existing.invalidate();
+        }
         // Store under the repository's well-known key so the next request on this origin is
         // authenticated. Writing the attribute directly avoids the response-wrapper contract of
         // saveContext, and creating the session here is what sets the cookie on this origin.
