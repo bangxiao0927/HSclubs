@@ -18,6 +18,61 @@ its behaviour does not change. The versioned contract that replaces it -- `/api/
 three repositories in [`../contracts/v1/README.md`](../contracts/v1/README.md), vendored from
 hsclubs-guiding-page and checked byte for byte by `ContractArtifactTest`. Edit it there, not here.
 
+### GET /api/v1/summary
+
+The same directory as `/api/summary`, plus the two things the versioned contract requires: the
+permanent `schoolId` this deployment was issued, and the `contract` / `version` markers.
+
+```json
+{
+  "contract": "hsclubs.summary",
+  "version": 1,
+  "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+  "slug": "hsclubs",
+  "schoolName": "HS Clubs",
+  "shortName": "HS Clubs",
+  "address": null,
+  "status": "active",
+  "clubCount": 106,
+  "categories": { "STEM & Innovation": 15 },
+  "memberCount": 0,
+  "lastUpdatedAt": "2026-08-08T21:41:31.064406-07:00",
+  "dataHash": "5907928d..."
+}
+```
+
+Built from the same snapshot as `/api/summary`, so the two can never report different numbers,
+and conditional the same way -- with its own ETag, because the representations differ.
+
+**404 until `APP_SCHOOL_ID` is configured.** A school joins v1 by setting the identity its
+registry issued; until then this endpoint and the manifest below do not exist, and `/api/summary`
+is unaffected.
+
+### GET /.well-known/hsclubs-app.json
+
+What this deployment claims to be: its identity, its origin, where its versioned summary lives,
+and which v1 contracts it implements. A claim, not proof -- control of the origin is proved by the
+challenge file the registry already checks, and the registry refuses the school if any field
+disagrees with what it issued.
+
+```json
+{
+  "contract": "hsclubs.school-manifest",
+  "version": 1,
+  "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+  "slug": "hsclubs",
+  "schoolName": "HS Clubs",
+  "siteOrigin": "https://hsclubs.net",
+  "summaryUrl": "https://hsclubs.net/api/v1/summary",
+  "capabilities": ["summary.v1"],
+  "auth": { "mobile": { "supported": false } }
+}
+```
+
+`siteOrigin` comes from `APP_SCHOOL_SITE_ORIGIN` (defaulting to the frontend origin), never from
+the request's `Host` header: a manifest that echoed the caller would say whatever the caller
+wanted. `auth.mobile.supported` stays false until the mobile authentication endpoints exist.
+
 Response:
 ```json
 {

@@ -89,6 +89,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/clubs/*/posts/*/comments").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/avatars/instagram/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/summary").permitAll()
+                // The versioned summary is the same public data as /api/summary, so it is
+                // readable by the same anonymous aggregator. The manifest beside it is outside
+                // /api and therefore already covered by anyRequest().permitAll() below.
+                .requestMatchers(HttpMethod.GET, "/api/v1/summary").permitAll()
                 // Everything else under /api requires authentication
                 .requestMatchers("/api/**").authenticated()
                 // Static resources, frontend routes
@@ -183,6 +187,8 @@ public class SecurityConfig {
      */
     private static final List<String> PUBLIC_READ_ONLY_CORS_PATTERNS = List.of(
         "/api/summary",
+        "/api/v1/summary",
+        "/.well-known/hsclubs-app.json",
         "/api/clubs",
         "/api/clubs/calendar",
         "/api/clubs/*",
