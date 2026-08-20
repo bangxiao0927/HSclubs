@@ -493,6 +493,24 @@ curl http://localhost:8080/api/auth/providers
 | 10–50        | 1 GB   | 2 vCPU   |
 | 50+          | 2 GB+  | 2–4 vCPU |
 
+### Deployment history
+
+Every run of `scripts/deploy-main.sh` appends one line to `deploy-history.log` in the
+repository root (override the path with `DEPLOY_HISTORY_FILE`): a UTC timestamp, `success` or
+`failure`, and the deployed commit's sha, tab-separated. An `EXIT` trap records the final result,
+so failures that do not trigger the diagnostic `ERR` trap (including an explicit `exit`) are
+still recorded. Recording itself is best-effort: a
+missing `git` command or an unwritable history path never aborts a deploy.
+
+```bash
+tail deploy-history.log
+# 2025-01-15T03:00:12Z    success    3f2c1a9b8e7d6c5b4a3928170665544332211000
+# 2025-01-16T03:00:08Z    failure    3f2c1a9b8e7d6c5b4a3928170665544332211000
+```
+
+`deploy-history.log` matches the repository's `*.log` gitignore pattern, so it is never
+committed; it is a local audit trail on each server, not shared history.
+
 ---
 
 ## Frontend Deployment
@@ -696,6 +714,139 @@ The `/api/auth/providers` endpoint auto-discovers all configured providers.
 
 ---
 
+## Production Observability
+
+Two standalone scripts, installable as either systemd `--user` timers or cron entries with no
+root privileges, cover the two things a production deployment needs watched: is it up, and is
+the database backed up.
+
+### Health monitoring (`scripts/health-check.sh`)
+
+Checks the production HTTP frontend and backend API, plus the `hsclubs`, `caddy`, and `mysql`
+systemd services, and records the result of every check:
+
+```bash
+./scripts/health-check.sh
+```
+
+| Variable                      | Default                                              | Purpose |
+| ------------------------------ | ----------------------------------------------------- | ------- |
+| `FRONTEND_HEALTH_URL`          | `http://127.0.0.1/`                                   | Local Caddy frontend endpoint to probe (its HTTPS redirect counts as healthy) |
+| `BACKEND_HEALTH_URL`           | `http://127.0.0.1:8080/api/clubs`                     | Backend API endpoint to probe |
+| `HEALTH_CHECK_SERVICES`        | `hsclubs.service caddy.service mysql.service`         | Space-separated systemd units to check |
+| `HEALTH_CHECK_SYSTEMD_SCOPE`   | `system`                                              | `system` or `user`, matching how the backend service is installed |
+| `HEALTH_CHECK_STATE_DIR`       | `$XDG_STATE_HOME/hsclubs/health-check` (or `~/.local/state/...`) | Where each check's last status is recorded |
+| `HEALTH_CHECK_WEBHOOK_URL`     | unset                                                 | Generic webhook endpoint for alerts |
+
+A webhook alert (a JSON POST) is sent only when a check's status **changes** — `ok` to `fail`,
+or `fail` back to `ok` — never on every run, so a steady outage does not spam the webhook once
+per minute. Reading the current status still works with no webhook configured at all; the
+script just logs the transition instead of delivering it anywhere. **No webhook URL is
+hardcoded or committed anywhere in this repository** — set `HEALTH_CHECK_WEBHOOK_URL` in the
+environment, or in the private, ungitignored-by-necessity file described under "Installing
+periodic checks" below.
+
+The script exits non-zero if any check currently fails (useful for cron's own failure
+notifications), independent of whether an alert was sent for that run.
+
+### MySQL backups (`scripts/backup-mysql.sh`)
+
+Reads `SPRING_DATASOURCE_URL`, `DB_USERNAME`, and `DB_PASSWORD` from `backend/.env` **without
+sourcing it** (the same technique `deploy-main.sh` uses for its own environment values), and
+writes a gzip-compressed `mysqldump` of the production database:
+
+```bash
+./scripts/backup-mysql.sh
+```
+
+| Variable                | Default                                         | Purpose |
+| ------------------------ | ------------------------------------------------ | ------- |
+| `BACKEND_ENV_FILE`       | `backend/.env`                                   | Where to read the datasource URL and credentials from |
+| `BACKUP_DIR`             | `$XDG_STATE_HOME/hsclubs/backups` (or `~/.local/state/...`) | Where backups are written |
+| `BACKUP_RETENTION_DAYS`  | `14`                                             | Backups older than this are deleted after a successful run |
+| `LOCK_FILE`              | `$BACKUP_DIR/.backup.lock`                       | Overlap lock (see below) |
+
+Safety properties:
+
+- The password is passed to `mysqldump` through a private, mode-0600 `--defaults-extra-file`,
+  never as a `--password=` command-line argument (which would be visible to other users via
+  `ps`) and never as a plain environment variable.
+- The dump is written to a temp file in `BACKUP_DIR`, gzip'd, and validated with `gzip -t`
+  before being renamed into place; a corrupt or partial backup is never left at the final path,
+  and the final `mv` is an atomic rename because the temp file and the destination share a
+  filesystem.
+- The final backup file and `BACKUP_DIR` itself are mode 0600/0700.
+- A `flock`-based lock makes an overlapping run (for example a slow backup still running when
+  the next scheduled one starts) exit immediately instead of racing the first one.
+
+### Installing periodic checks and backups (`scripts/install-observability.sh`)
+
+Installs both scripts to run periodically for the current user, with no root privileges
+required at all:
+
+```bash
+# Auto-detects persistent systemd --user (lingering enabled), otherwise uses cron.
+./scripts/install-observability.sh
+
+# Force a mode explicitly.
+./scripts/install-observability.sh --mode=systemd-user
+./scripts/install-observability.sh --mode=cron
+
+# Change the schedule.
+./scripts/install-observability.sh --health-interval=2min --backup-schedule='*-*-* 03:30:00'
+
+# For a schedule with no unambiguous cron equivalent (see below), set the
+# cron schedule directly instead.
+./scripts/install-observability.sh --mode=cron --health-cron-schedule='*/2 * * * *' \
+  --backup-cron-schedule='30 3 * * *'
+
+# Remove everything this script installed.
+./scripts/install-observability.sh --uninstall
+```
+
+Under systemd `--user`, it writes `hsclubs-health-check.timer`/`.service` and
+`hsclubs-backup.timer`/`.service` to `~/.config/systemd/user` and enables them with
+`systemctl --user`. Under cron, it adds two lines to the current user's crontab, each tagged
+with a marker comment so re-running install (or `--uninstall`) only ever touches its own lines
+and never disturbs anything else already in that crontab. Cron jobs use a small `/bin/sh`
+wrapper to load the same optional environment file as the systemd services before executing
+the health check or backup script.
+
+Under cron mode, `--health-interval` and `--backup-schedule` are translated to an equivalent
+cron schedule automatically (an exact `Nmin`/`Nh` duration where `N` evenly divides 60/24
+respectively, and a daily `*-*-* HH:MM:SS`
+`OnCalendar` expression, respectively). A schedule with no unambiguous cron equivalent —
+seconds, days, a non-divisor `N` such as `7min` or `7h`, a weekday filter, multiple times a
+day, and so on — makes the install fail with
+an actionable error instead of silently installing the default schedule; pass
+`--health-cron-schedule` or `--backup-cron-schedule` (standard 5-field cron syntax) directly in
+that case.
+
+Both installation modes load an optional, private environment file —
+`~/.config/hsclubs/observability.env` by default — for secrets such as
+`HEALTH_CHECK_WEBHOOK_URL`. Create it yourself, outside the repository, with restrictive
+permissions:
+
+```bash
+mkdir -p ~/.config/hsclubs
+cat > ~/.config/hsclubs/observability.env <<'ENV'
+HEALTH_CHECK_WEBHOOK_URL=https://your-alerting-endpoint.example/webhook
+ENV
+chmod 600 ~/.config/hsclubs/observability.env
+```
+
+Its absence is not an error: both scripts run fine with just their built-in defaults.
+
+A systemd `--user` manager only runs while a session for that user exists unless the account
+has "lingering" enabled. Auto mode therefore chooses cron when lingering is off. To use
+systemd-user timers while no one is logged in, enable lingering before installing them:
+
+```bash
+loginctl enable-linger "$(whoami)"
+```
+
+---
+
 ## Production Checklist
 
 - [ ] MySQL database created with `utf8mb4` charset
@@ -713,7 +864,10 @@ The `/api/auth/providers` endpoint auto-discovers all configured providers.
 - [ ] Backend running as systemd service
 - [ ] Firewall allows ports 80 and 443 only
 - [ ] Backend port 8080 not exposed publicly
-- [ ] Database backups configured
+- [ ] Database backups configured (`scripts/backup-mysql.sh`, installed periodically via
+      `scripts/install-observability.sh`)
+- [ ] Production health monitoring configured (`scripts/health-check.sh`, installed periodically
+      via `scripts/install-observability.sh`)
 
 ### First-run steps
 
