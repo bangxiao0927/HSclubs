@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onErrorCaptured, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onErrorCaptured, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
@@ -15,6 +15,7 @@ const authStore = useAuthStore()
 const { isAuthenticated, currentUser } = storeToRefs(authStore)
 
 const mobileMenuOpen = ref(false)
+const mobileUserCenterButton = ref<HTMLButtonElement | null>(null)
 const profileAvatarFailed = ref(false)
 
 const profileInitial = computed(() => {
@@ -37,6 +38,11 @@ const toggleMobileMenu = () => {
 
 const closeMobileMenu = () => {
   mobileMenuOpen.value = false
+}
+
+const closeMobileMenuAndRestoreFocus = () => {
+  closeMobileMenu()
+  void nextTick(() => mobileUserCenterButton.value?.focus())
 }
 
 // Close the mobile menu whenever the route changes
@@ -263,8 +269,61 @@ watch(
       </div>
     </header>
 
+    <nav class="mobile-tab-bar" aria-label="Mobile navigation">
+      <RouterLink to="/" class="mobile-tab" :class="{ active: route.name === 'home' }">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m3 10 9-7 9 7v10h-6v-6H9v6H3V10Z" />
+        </svg>
+        <span>Home</span>
+      </RouterLink>
+      <RouterLink to="/about" class="mobile-tab" :class="{ active: route.name === 'about' }">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z" />
+        </svg>
+        <span>Category</span>
+      </RouterLink>
+      <RouterLink to="/calendar" class="mobile-tab" :class="{ active: route.name === 'calendar' }">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 2h2v2h6V2h2v2h3v18H4V4h3V2Zm11 8H6v10h12V10Z" />
+        </svg>
+        <span>Calendar</span>
+      </RouterLink>
+      <button
+        ref="mobileUserCenterButton"
+        type="button"
+        class="mobile-tab mobile-user-center"
+        :class="{ active: mobileMenuOpen }"
+        :aria-expanded="mobileMenuOpen"
+        aria-controls="mobile-navigation"
+        @click="toggleMobileMenu"
+      >
+        <img
+          v-if="isAuthenticated && profileAvatarUrl"
+          class="profile-avatar"
+          :src="profileAvatarUrl"
+          alt=""
+          referrerpolicy="no-referrer"
+          @error="handleProfileAvatarError"
+        />
+        <span v-else-if="isAuthenticated" class="profile-icon" aria-hidden="true">{{
+          profileInitial
+        }}</span>
+        <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"
+          />
+        </svg>
+        <span>{{ isAuthenticated ? 'Account' : 'Sign in' }}</span>
+      </button>
+    </nav>
+
     <Transition name="mobile-menu">
-      <div v-if="mobileMenuOpen" id="mobile-navigation" class="mobile-menu">
+      <div
+        v-if="mobileMenuOpen"
+        id="mobile-navigation"
+        class="mobile-menu"
+        @keydown.esc.stop.prevent="closeMobileMenuAndRestoreFocus"
+      >
         <div class="mobile-menu-inner">
           <div class="mobile-menu-handle" aria-hidden="true"></div>
           <h2 class="mobile-menu-title">
@@ -310,53 +369,6 @@ watch(
         </div>
       </div>
     </Transition>
-
-    <nav class="mobile-tab-bar" aria-label="Mobile navigation">
-      <RouterLink to="/" class="mobile-tab" :class="{ active: route.name === 'home' }">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m3 10 9-7 9 7v10h-6v-6H9v6H3V10Z" />
-        </svg>
-        <span>Home</span>
-      </RouterLink>
-      <RouterLink to="/about" class="mobile-tab" :class="{ active: route.name === 'about' }">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z" />
-        </svg>
-        <span>Category</span>
-      </RouterLink>
-      <RouterLink to="/calendar" class="mobile-tab" :class="{ active: route.name === 'calendar' }">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 2h2v2h6V2h2v2h3v18H4V4h3V2Zm11 8H6v10h12V10Z" />
-        </svg>
-        <span>Calendar</span>
-      </RouterLink>
-      <button
-        type="button"
-        class="mobile-tab mobile-user-center"
-        :class="{ active: mobileMenuOpen }"
-        :aria-expanded="mobileMenuOpen"
-        aria-controls="mobile-navigation"
-        @click="toggleMobileMenu"
-      >
-        <img
-          v-if="isAuthenticated && profileAvatarUrl"
-          class="profile-avatar"
-          :src="profileAvatarUrl"
-          alt=""
-          referrerpolicy="no-referrer"
-          @error="handleProfileAvatarError"
-        />
-        <span v-else-if="isAuthenticated" class="profile-icon" aria-hidden="true">{{
-          profileInitial
-        }}</span>
-        <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"
-          />
-        </svg>
-        <span>{{ isAuthenticated ? 'Account' : 'Sign in' }}</span>
-      </button>
-    </nav>
 
     <main class="view-container">
       <ErrorDisplay v-if="appError" :message="appError" @retry="resetError" />
@@ -783,6 +795,11 @@ watch(
     padding: 0.32rem 0.4rem 0.32rem 0.75rem;
   }
 
+  .search-input {
+    /* iOS Safari zooms the viewport when focusing inputs below 16px. */
+    font-size: 1rem;
+  }
+
   .mobile-tab-bar {
     position: fixed;
     right: 0.75rem;
@@ -886,11 +903,6 @@ watch(
 
   .logo-link {
     gap: 0.45rem;
-  }
-
-  .search-input {
-    /* iOS Safari zooms the entire viewport when focusing inputs below 16px. */
-    font-size: 1rem;
   }
 }
 /* ---- Footer ---- */
