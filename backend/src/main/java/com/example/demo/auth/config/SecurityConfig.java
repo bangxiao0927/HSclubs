@@ -66,8 +66,8 @@ import org.springframework.web.util.UriComponentsBuilder;
  *       handshake itself, which by definition runs before there is a session.</li>
  *   <li>{@code GET /api/clubs}, {@code /api/clubs/calendar}, {@code /api/clubs/*},
  *       {@code /api/clubs/recommendations} -- the club information a visitor is meant to browse
- *       before deciding to sign in. Non-active clubs are filtered inside the service, not
- *       here.</li>
+ *       before deciding to sign in. Whether a non-active club is visible at all is decided by
+ *       {@code ClubVisibilityPolicy}, not here.</li>
  *   <li>{@code GET /api/clubs/{id}/posts} and {@code GET /api/clubs/{id}/posts/{postId}/comments}
  *       -- the public media feed (#78, #79). Separate matchers because a single-star pattern does
  *       not span path segments.</li>
