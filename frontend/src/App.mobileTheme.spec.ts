@@ -132,6 +132,20 @@ describe('mobile navigation', () => {
     expect(wrapper.find('.mobile-menu .search-bar').exists()).toBe(false)
   })
 
+  it('renders the open user center after its trigger and closes it with Escape', async () => {
+    const wrapper = await mountApp()
+    const trigger = wrapper.find('.mobile-user-center')
+    await trigger.trigger('click')
+
+    const sheet = wrapper.find('.mobile-menu')
+    expect(
+      trigger.element.compareDocumentPosition(sheet.element) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0)
+
+    await sheet.trigger('keydown', { key: 'Escape' })
+    expect(wrapper.find('.mobile-menu').exists()).toBe(false)
+  })
+
   it('shortens the search placeholder on a compact viewport so the title row fits', async () => {
     installMatchMedia(true)
     const wrapper = await mountApp()
