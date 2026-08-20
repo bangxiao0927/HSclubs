@@ -15,6 +15,7 @@ const authStore = useAuthStore()
 const { isAuthenticated, currentUser } = storeToRefs(authStore)
 
 const mobileMenuOpen = ref(false)
+const mobileMenuSheet = ref<HTMLElement | null>(null)
 const mobileUserCenterButton = ref<HTMLButtonElement | null>(null)
 const profileAvatarFailed = ref(false)
 
@@ -44,6 +45,17 @@ const closeMobileMenuAndRestoreFocus = () => {
   closeMobileMenu()
   void nextTick(() => mobileUserCenterButton.value?.focus())
 }
+
+// Move focus into the sheet when it opens. The Escape handler lives on the sheet, so it only
+// sees keydown events that bubble up from inside it -- without this, a keyboard user's focus
+// stays on the trigger and Escape never reaches the sheet.
+watch(
+  () => mobileMenuOpen.value,
+  (open) => {
+    if (open) mobileMenuSheet.value?.focus()
+  },
+  { flush: 'post' },
+)
 
 // Close the mobile menu whenever the route changes
 watch(
@@ -319,9 +331,11 @@ watch(
 
     <Transition name="mobile-menu">
       <div
+        ref="mobileMenuSheet"
         v-if="mobileMenuOpen"
         id="mobile-navigation"
         class="mobile-menu"
+        tabindex="-1"
         @keydown.esc.stop.prevent="closeMobileMenuAndRestoreFocus"
       >
         <div class="mobile-menu-inner">
