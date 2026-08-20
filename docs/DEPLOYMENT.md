@@ -45,7 +45,7 @@ the script activates a compatible version through
 ## This deployment: MVHS on `mvhs.hsclubs.net`
 
 The repository is generic, but the instance it was written for is one school. As of 2026-08 that
-school is **Monta Vista High School** and it answers on **`mvhs.hsclubs.net`**. The apex
+school is **Mountain View High School** and it answers on **`mvhs.hsclubs.net`**. The apex
 `hsclubs.net` is *not* this app -- it is the guiding page (the cross-school directory), which is
 also where the iOS app's Universal Link callback lives. The two used to be the other way round
 (`hsclubs.net` was this site, the directory was on `clubs.bangxiao.net`), so anything older than
@@ -56,7 +56,7 @@ correct. Set them explicitly anyway if you would rather not depend on a default:
 
 ```bash
 # backend/.env
-APP_SUMMARY_SCHOOL_NAME=Monta Vista High School
+APP_SUMMARY_SCHOOL_NAME=Mountain View High School
 APP_SUMMARY_SHORT_NAME=MVHS
 APP_SUMMARY_SLUG=mvhs
 FRONTEND_ORIGIN=https://mvhs.hsclubs.net
@@ -66,7 +66,7 @@ APP_MOBILE_AUTH_CALLBACK_URLS=https://hsclubs.net/mobile-auth/callback
 
 ```bash
 # frontend/.env.production
-VITE_SCHOOL_NAME=Monta Vista High School
+VITE_SCHOOL_NAME=Mountain View High School
 VITE_SCHOOL_SHORT_NAME=MVHS
 ```
 
@@ -597,6 +597,11 @@ Any reverse proxy works. The requirements the application actually has are:
 - Forward `/api/**`, `/oauth2/**`, and `/uploads/**` to the backend on `127.0.0.1:8080`.
   `/uploads/**` is easy to forget: club photos are served from there by the backend, not from
   the built frontend.
+- Forward `/.well-known/hsclubs-app.json` to the backend. It is the v1 identity manifest the
+  guiding page reads, and it cannot fall through to the SPA fallback (the registry expects JSON,
+  not the index document). The origin-challenge file beside it,
+  `/.well-known/hsclubs-site.txt`, stays a static file under `frontend/public/`, so do not proxy
+  the whole `/.well-known/` directory.
 - Send the original scheme through as `X-Forwarded-Proto`, so the backend knows the request
   arrived over HTTPS (see "Production session cookie" above).
 - Terminate TLS.
@@ -621,6 +626,9 @@ yourdomain.com {
         reverse_proxy 127.0.0.1:8080
     }
     handle /uploads/* {
+        reverse_proxy 127.0.0.1:8080
+    }
+    handle /.well-known/hsclubs-app.json {
         reverse_proxy 127.0.0.1:8080
     }
 
@@ -683,6 +691,15 @@ server {
 
     # Stored club photos, served by the backend
     location /uploads/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # The v1 identity manifest is backend JSON, not a static asset.
+    location = /.well-known/hsclubs-app.json {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

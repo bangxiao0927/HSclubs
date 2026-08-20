@@ -7,10 +7,10 @@ export const schoolTemplate = {
   // overridable, and a school copying this repo overrides all of them in its own .env rather
   // than editing this file. "HS Clubs" is the platform, not the school, so it stays put.
   brandName: import.meta.env.VITE_BRAND_NAME || 'HS Clubs',
-  schoolName: import.meta.env.VITE_SCHOOL_NAME || 'Monta Vista High School',
+  schoolName: import.meta.env.VITE_SCHOOL_NAME || 'Mountain View High School',
   shortName: import.meta.env.VITE_SCHOOL_SHORT_NAME || 'MVHS',
   tagline:
-    import.meta.env.VITE_SCHOOL_TAGLINE || 'Clubs at Monta Vista High School, in one place.',
+    import.meta.env.VITE_SCHOOL_TAGLINE || 'Clubs at Mountain View High School, in one place.',
   intro:
     import.meta.env.VITE_SCHOOL_INTRO ||
     'Browse active clubs, discover meeting times, and start membership workflows from a simple school-owned directory.',
