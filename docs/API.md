@@ -28,9 +28,9 @@ permanent `schoolId` this deployment was issued, and the `contract` / `version` 
   "contract": "hsclubs.summary",
   "version": 1,
   "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
-  "slug": "hsclubs",
-  "schoolName": "HS Clubs",
-  "shortName": "HS Clubs",
+  "slug": "mvhs",
+  "schoolName": "Monta Vista High School",
+  "shortName": "MVHS",
   "address": null,
   "status": "active",
   "clubCount": 106,
@@ -60,10 +60,10 @@ disagrees with what it issued.
   "contract": "hsclubs.school-manifest",
   "version": 1,
   "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
-  "slug": "hsclubs",
-  "schoolName": "HS Clubs",
-  "siteOrigin": "https://hsclubs.net",
-  "summaryUrl": "https://hsclubs.net/api/v1/summary",
+  "slug": "mvhs",
+  "schoolName": "Monta Vista High School",
+  "siteOrigin": "https://mvhs.hsclubs.net",
+  "summaryUrl": "https://mvhs.hsclubs.net/api/v1/summary",
   "capabilities": ["summary.v1"],
   "auth": { "mobile": { "supported": false } }
 }
@@ -107,9 +107,9 @@ vectors. The normal Google web login, registration, logout and protected pages a
 Response:
 ```json
 {
-  "schoolName": "HS Clubs",
-  "shortName": "HS Clubs",
-  "slug": "hsclubs",
+  "schoolName": "Monta Vista High School",
+  "shortName": "MVHS",
+  "slug": "mvhs",
   "address": "3535 Truman Ave, Mountain View, CA 94040",
   "status": "active",
   "clubCount": 42,

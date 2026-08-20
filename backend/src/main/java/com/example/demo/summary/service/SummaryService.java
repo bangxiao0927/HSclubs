@@ -53,9 +53,9 @@ public class SummaryService {
     private final Object refreshLock = new Object();
 
     public SummaryService(ClubMapper clubMapper,
-                          @Value("${app.summary.school-name:HS Clubs}") String schoolName,
-                          @Value("${app.summary.short-name:HS Clubs}") String shortName,
-                          @Value("${app.summary.slug:hsclubs}") String slug,
+                          @Value("${app.summary.school-name:Monta Vista High School}") String schoolName,
+                          @Value("${app.summary.short-name:MVHS}") String shortName,
+                          @Value("${app.summary.slug:mvhs}") String slug,
                           @Value("${app.summary.address:}") String address,
                           @Value("${app.summary.time-zone:}") String timeZone,
                           @Value("${spring.datasource.url:}") String datasourceUrl,

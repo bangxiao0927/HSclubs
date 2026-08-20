@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <p>The callback allow-list is the security pivot of the {@code start} step: the app asks the
  * school to send the browser to a {@code redirect_uri}, and only a value on this list is honoured,
  * so a tampered link cannot redirect the one-time code anywhere else. It defaults to the one
- * official Universal Link on the guiding page's domain.
+ * official Universal Link on the guiding page's domain, the apex {@code hsclubs.net}.
  *
  * <p>The code lifetime is bounded to the contract's 60-120 seconds; a value outside that range is
  * clamped rather than trusted, because a long-lived one-time code is the thing this flow exists to
@@ -18,7 +18,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.mobile-auth")
 public class MobileAuthProperties {
 
-    private List<String> callbackUrls = List.of("https://clubs.bangxiao.net/mobile-auth/callback");
+    private List<String> callbackUrls = List.of("https://hsclubs.net/mobile-auth/callback");
     private long codeTtlSeconds = 90;
 
     public List<String> getCallbackUrls() {

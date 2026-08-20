@@ -181,7 +181,7 @@ class SchoolIdentityPublicationTest {
             .andExpect(jsonPath("$.auth.mobile.supported").value(true))
             .andExpect(jsonPath("$.auth.mobile.startUrl").value(ORIGIN + "/api/mobile-auth/start"))
             .andExpect(jsonPath("$.auth.mobile.completeUrl").value(ORIGIN + "/api/mobile-auth/complete"))
-            .andExpect(jsonPath("$.auth.mobile.callbackUrl").value("https://clubs.bangxiao.net/mobile-auth/callback"))
+            .andExpect(jsonPath("$.auth.mobile.callbackUrl").value("https://hsclubs.net/mobile-auth/callback"))
             .andExpect(jsonPath("$.auth.mobile.codeChallengeMethods[0]").value("S256"));
     }
 

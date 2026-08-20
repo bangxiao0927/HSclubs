@@ -3,8 +3,8 @@
   "version": 1,
   "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
   "slug": "mvhs",
-  "siteOrigin": "https://hsclubs.net",
-  "summaryUrl": "https://hsclubs.net/api/v1/summary",
+  "siteOrigin": "https://mvhs.hsclubs.net",
+  "summaryUrl": "https://mvhs.hsclubs.net/api/v1/summary",
   "capabilities": ["summary.v1", "mobile-auth.v1"],
   "auth": { "mobile": { "supported": true } }
 }

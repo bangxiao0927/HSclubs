@@ -26,7 +26,7 @@ class MobileAuthEndpointTest {
 
     private static final String SCHOOL_ID = "sch_7Qb3Xf9KLm2ZpR4tVn6Y";
     private static final String ORIGIN = "https://clubs.example.edu";
-    private static final String CALLBACK = "https://clubs.bangxiao.net/mobile-auth/callback";
+    private static final String CALLBACK = "https://hsclubs.net/mobile-auth/callback";
     private static final String VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
     private static final String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
     private static final String STATE = "M2Rk8sYq1vB7nT4wX0cLpZ";
