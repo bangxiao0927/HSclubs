@@ -41,6 +41,66 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.util.UriComponentsBuilder;
 
+/**
+ * The authorization model for this single-school deployment, in one place.
+ *
+ * <h2>Two layers, doing different jobs</h2>
+ * <ol>
+ *   <li><b>This filter chain answers "who are you".</b> It is a coarse safety net: everything
+ *       under {@code /api/**} is denied to an anonymous caller unless it appears in the
+ *       permitAll() list below, so a newly added controller is authenticated by default rather
+ *       than public by accident. An unauthenticated call gets a bare 401 from
+ *       {@link org.springframework.security.web.authentication.HttpStatusEntryPoint} instead of a
+ *       redirect to a login page -- the client here is an SPA, not a browser form.</li>
+ *   <li><b>Controllers answer "what may you do".</b> Role and ownership checks live in the
+ *       controllers ({@code requireManageAccess}, {@code requirePlatformOwner} in
+ *       {@code ClubController} and friends), because they depend on the club being addressed and
+ *       on the caller's membership row -- neither of which a path pattern can express. Do not
+ *       read a bare {@code .authenticated()} below as "any signed-in student may do this".</li>
+ * </ol>
+ *
+ * <h2>What is public, and why</h2>
+ * <ul>
+ *   <li>{@code OPTIONS /**} -- CORS preflight, which by spec carries no credentials.</li>
+ *   <li>{@code /api/auth/**}, {@code /oauth2/**}, {@code /login/**}, {@code /error} -- the login
+ *       handshake itself, which by definition runs before there is a session.</li>
+ *   <li>{@code GET /api/clubs}, {@code /api/clubs/calendar}, {@code /api/clubs/*},
+ *       {@code /api/clubs/recommendations} -- the club information a visitor is meant to browse
+ *       before deciding to sign in. Non-active clubs are filtered inside the service, not
+ *       here.</li>
+ *   <li>{@code GET /api/clubs/{id}/posts} and {@code GET /api/clubs/{id}/posts/{postId}/comments}
+ *       -- the public media feed (#78, #79). Separate matchers because a single-star pattern does
+ *       not span path segments.</li>
+ *   <li>{@code GET /api/avatars/instagram/*} -- cached public avatar images.</li>
+ *   <li>{@code GET /api/summary} and {@code GET /api/v1/summary} -- the aggregate the guiding page
+ *       polls; counts only, no personal data.</li>
+ *   <li>{@code GET /api/mobile-auth/start} and {@code POST /api/mobile-auth/complete} -- the two
+ *       ends of the app sign-in flow. Start runs before a session exists and complete is what
+ *       creates one, so neither can require authentication; their safety comes from the
+ *       allow-listed Universal Link, the single-use code and the PKCE verifier.</li>
+ *   <li>Everything outside {@code /api} -- static assets, the SPA's own routes and the
+ *       {@code /.well-known} files.</li>
+ * </ul>
+ *
+ * <h2>Sessions</h2>
+ * A cookie session ({@code IF_REQUIRED}), deliberately long-lived: {@code
+ * server.servlet.session.timeout} and the {@code JSESSIONID} max-age are both 7 days, so a student
+ * stays signed in across browser restarts for a week without a remember-me token store (#16).
+ * Logout is POST-only and clears the cookie, the session and the SecurityContext.
+ *
+ * <h2>The two OAuth2 outcome handlers</h2>
+ * {@code handleLoginSuccess} and {@code handleLoginFailure} both branch on whether a mobile-auth
+ * flow is pending in the session. Web sign-in redirects to the SPA as it always has; an app
+ * sign-in is instead returned to the registered Universal Link carrying a one-time {@code code} or
+ * an {@code error}. Nothing else about the web login changes, and no token or session identifier
+ * ever travels in a URL.
+ *
+ * <h2>CSRF</h2>
+ * See {@link #configureCsrf}: off by default (the SPA does not echo the token yet), on via
+ * {@code app.security.csrf.enabled}. CORS is documented on {@link #corsConfigurationSource()},
+ * which runs two distinct policies -- first-party credentialed, and anonymous wildcard for the
+ * public read-only endpoints.
+ */
 @Configuration
 @EnableWebSecurity
 @EnableConfigurationProperties({SecurityProperties.class, MobileAuthProperties.class})
@@ -458,22 +518,3 @@ public class SecurityConfig {
         return "access_denied";
     }
 }
-/**
- * Security configuration for the single-school HSclubs platform.
- *
- * Authorization model (defense-in-depth):
- *   1. Spring Security filter-level rules (this file) — safety net for all /api/** routes.
- *   2. Controller-level permission checks (@{code requireManageAccess}, @{code requirePlatformOwner})
- *      — enforce role-specific access (platform owner, club president).
- *
- * Public endpoints (no authentication required):
- *   GET  /api/auth/providers        — OAuth provider list
- *   GET  /api/clubs                 — club listing
- *   GET  /api/clubs/calendar        — weekly schedule
- *   GET  /api/clubs/{id}            — club detail (permissions applied optionally)
- *   GET  /api/avatars/instagram/{handle} — cached public club avatar image
- *   GET  /api/summary               — aggregated stats for aggregator
- *
- * All other /api/** endpoints require authentication.
- * Controller methods enforce further role checks where needed.
- */
