@@ -34,8 +34,8 @@ public class SchoolManifestController {
     private final MobileAuthProperties mobileAuthProperties;
 
     public SchoolManifestController(SchoolIdentity schoolIdentity,
-                                    @Value("${app.summary.slug:hsclubs}") String slug,
-                                    @Value("${app.summary.school-name:HS Clubs}") String schoolName,
+                                    @Value("${app.summary.slug:mvhs}") String slug,
+                                    @Value("${app.summary.school-name:Monta Vista High School}") String schoolName,
                                     MobileAuthService mobileAuthService,
                                     MobileAuthProperties mobileAuthProperties) {
         this.schoolIdentity = schoolIdentity;

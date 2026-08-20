@@ -4,15 +4,15 @@
   "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
   "slug": "mvhs",
   "schoolName": "Mountain View High School",
-  "siteOrigin": "https://hsclubs.net",
-  "summaryUrl": "https://hsclubs.net/api/v1/summary",
+  "siteOrigin": "https://mvhs.hsclubs.net",
+  "summaryUrl": "https://mvhs.hsclubs.net/api/v1/summary",
   "capabilities": ["summary.v1", "mobile-auth.v1"],
   "auth": {
     "mobile": {
       "supported": true,
-      "startUrl": "https://hsclubs.net/api/mobile-auth/start",
-      "completeUrl": "https://hsclubs.net/api/mobile-auth/complete",
-      "callbackUrl": "https://clubs.bangxiao.net/mobile-auth/callback",
+      "startUrl": "https://mvhs.hsclubs.net/api/mobile-auth/start",
+      "completeUrl": "https://mvhs.hsclubs.net/api/mobile-auth/complete",
+      "callbackUrl": "https://hsclubs.net/mobile-auth/callback",
       "codeChallengeMethods": ["S256"]
     }
   },

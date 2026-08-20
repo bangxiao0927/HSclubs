@@ -136,7 +136,7 @@ Rules the schemas cannot express:
 code, the exact start and callback URLs, and which error each failure must produce. All three
 repositories assert against those numbers.
 
-The one official callback is `https://clubs.bangxiao.net/mobile-auth/callback` -- a Universal Link
+The one official callback is `https://hsclubs.net/mobile-auth/callback` -- a Universal Link
 on this domain, never a custom URL scheme another app could register. This guiding page serves the
 Apple App Site Association at `/.well-known/apple-app-site-association` (only once a production app
 id is configured) and a static fallback at the callback path that consumes nothing. See

@@ -92,9 +92,13 @@ app:
       # requests down to at most one query per window.
       known-handles-cache-ttl-ms: ${APP_INSTAGRAM_AVATAR_KNOWN_HANDLES_CACHE_TTL_MS:300000}
   summary:
-    school-name: ${APP_SUMMARY_SCHOOL_NAME:HS Clubs}
-    short-name: ${APP_SUMMARY_SHORT_NAME:HS Clubs}
-    slug: ${APP_SUMMARY_SLUG:hsclubs}
+    # This deployment's school identity. A school copying this repo replaces all three (and the
+    # matching @Value defaults in SummaryService and SchoolManifestController). The slug is not
+    # cosmetic: the guiding page refuses a summary whose slug disagrees with the registry entry
+    # it was fetched for, so changing it here means changing it in the registry in the same pass.
+    school-name: ${APP_SUMMARY_SCHOOL_NAME:Monta Vista High School}
+    short-name: ${APP_SUMMARY_SHORT_NAME:MVHS}
+    slug: ${APP_SUMMARY_SLUG:mvhs}
     # One human-readable line for the guiding page's listing, e.g. a street address. School
     # identity, like the name above -- never derived from club data. Empty publishes the field
     # as null rather than as an empty string, so a consumer has one thing to check, not two.
@@ -125,8 +129,9 @@ app:
   mobile-auth:
     # The Universal Links the iOS app may name as its return channel. Only a value on this list is
     # honoured as a redirect target, so a tampered start link cannot divert the one-time code. The
-    # default is the one official callback on the guiding page's domain.
-    callback-urls: ${APP_MOBILE_AUTH_CALLBACK_URLS:https://clubs.bangxiao.net/mobile-auth/callback}
+    # default is the one official callback on the guiding page's domain, which is the apex
+    # hsclubs.net (this school site is mvhs.hsclubs.net).
+    callback-urls: ${APP_MOBILE_AUTH_CALLBACK_URLS:https://hsclubs.net/mobile-auth/callback}
     # One-time code lifetime, clamped to the contract's 60-120 second window.
     code-ttl-seconds: ${APP_MOBILE_AUTH_CODE_TTL_SECONDS:90}
 

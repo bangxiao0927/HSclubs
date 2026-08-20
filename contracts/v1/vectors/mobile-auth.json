@@ -19,12 +19,12 @@
   },
   "startUrl": {
     "note": "Parameter order is not significant; percent-encoding is.",
-    "schoolStartEndpoint": "https://hsclubs.net/api/mobile-auth/start",
-    "example": "https://hsclubs.net/api/mobile-auth/start?schoolId=sch_7Qb3Xf9KLm2ZpR4tVn6Y&state=M2Rk8sYq1vB7nT4wX0cLpZ&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fclubs.bangxiao.net%2Fmobile-auth%2Fcallback&return_to=%2Fclubs%2Frobotics%3Ftab%3Dmembers"
+    "schoolStartEndpoint": "https://mvhs.hsclubs.net/api/mobile-auth/start",
+    "example": "https://mvhs.hsclubs.net/api/mobile-auth/start?schoolId=sch_7Qb3Xf9KLm2ZpR4tVn6Y&state=M2Rk8sYq1vB7nT4wX0cLpZ&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fhsclubs.net%2Fmobile-auth%2Fcallback&return_to=%2Fclubs%2Frobotics%3Ftab%3Dmembers"
   },
   "callbackUrl": {
-    "success": "https://clubs.bangxiao.net/mobile-auth/callback?schoolId=sch_7Qb3Xf9KLm2ZpR4tVn6Y&state=M2Rk8sYq1vB7nT4wX0cLpZ&code=K7hQ2mZ1tN8sV4wR0yB6cJ3xL5pD9fGa",
-    "cancelled": "https://clubs.bangxiao.net/mobile-auth/callback?schoolId=sch_7Qb3Xf9KLm2ZpR4tVn6Y&state=M2Rk8sYq1vB7nT4wX0cLpZ&error=access_denied"
+    "success": "https://hsclubs.net/mobile-auth/callback?schoolId=sch_7Qb3Xf9KLm2ZpR4tVn6Y&state=M2Rk8sYq1vB7nT4wX0cLpZ&code=K7hQ2mZ1tN8sV4wR0yB6cJ3xL5pD9fGa",
+    "cancelled": "https://hsclubs.net/mobile-auth/callback?schoolId=sch_7Qb3Xf9KLm2ZpR4tVn6Y&state=M2Rk8sYq1vB7nT4wX0cLpZ&error=access_denied"
   },
   "expectedFailures": [
     { "case": "state does not match a pending flow", "error": "invalid_state", "httpStatus": 400 },

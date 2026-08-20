@@ -42,6 +42,59 @@ the script activates a compatible version through
 
 ---
 
+## This deployment: MVHS on `mvhs.hsclubs.net`
+
+The repository is generic, but the instance it was written for is one school. As of 2026-08 that
+school is **Monta Vista High School** and it answers on **`mvhs.hsclubs.net`**. The apex
+`hsclubs.net` is *not* this app -- it is the guiding page (the cross-school directory), which is
+also where the iOS app's Universal Link callback lives. The two used to be the other way round
+(`hsclubs.net` was this site, the directory was on `clubs.bangxiao.net`), so anything older than
+that date, and any bookmark, will still point at the previous arrangement.
+
+The identity below ships as the built-in default, so a deployment that sets none of it is already
+correct. Set them explicitly anyway if you would rather not depend on a default:
+
+```bash
+# backend/.env
+APP_SUMMARY_SCHOOL_NAME=Monta Vista High School
+APP_SUMMARY_SHORT_NAME=MVHS
+APP_SUMMARY_SLUG=mvhs
+FRONTEND_ORIGIN=https://mvhs.hsclubs.net
+APP_SCHOOL_SITE_ORIGIN=https://mvhs.hsclubs.net
+APP_MOBILE_AUTH_CALLBACK_URLS=https://hsclubs.net/mobile-auth/callback
+```
+
+```bash
+# frontend/.env.production
+VITE_SCHOOL_NAME=Monta Vista High School
+VITE_SCHOOL_SHORT_NAME=MVHS
+```
+
+`APP_SUMMARY_SLUG` is not cosmetic. The guiding page rejects a summary whose slug disagrees with
+the registry entry it was fetched for, so the slug here and the slug in the registry move
+together or the school drops out of the directory.
+
+### Moving the site to a new hostname
+
+Changing the public host is not only DNS, because two other systems have the old one recorded:
+
+1. **Certificate and proxy.** Issue the certificate for the new name and add it to the Caddy site
+   block or nginx `server_name`. Keep the old name served and 301-redirecting for as long as
+   links to it exist.
+2. **OAuth.** Add `https://<new-host>/api/auth/google/callback` to the Google Cloud OAuth client's
+   authorized redirect URIs **before** cutting over; sign-in breaks the moment the origin changes
+   otherwise. Remove the old entry only after the redirect is retired.
+3. **`FRONTEND_ORIGIN` / `APP_SCHOOL_SITE_ORIGIN`.** The first is the CORS and post-login origin;
+   the second is what the manifest publishes. Neither is derived from the request's `Host`.
+4. **The origin challenge.** Verification proves control of a *host*, so the new hostname counts
+   as unverified until it is re-checked. The token itself travels with the build
+   (`frontend/public/.well-known/hsclubs-site.txt`), so nothing has to be republished by hand --
+   but the registry's `summaryUrl` must be pointed at the new host and the guiding page's
+   `npm run verify` re-run, or the school drops out of the directory.
+5. **Rebuild the frontend.** `VITE_API_BASE_URL` and the branding are baked in at build time.
+
+---
+
 ## Environment Variables
 
 ### Backend (`backend/.env`)

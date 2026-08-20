@@ -59,7 +59,8 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
-    allowedHosts: ['hsclubs.net'],
+    // This school site's public host. hsclubs.net itself is the guiding page, not this app.
+    allowedHosts: ['mvhs.hsclubs.net'],
   },
   resolve: {
     alias: {
