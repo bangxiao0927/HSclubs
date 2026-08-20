@@ -6,8 +6,12 @@
 # configured webhook on every invocation from cron or a systemd timer.
 #
 # No secrets live in this repository: the webhook URL is read from the
-# HEALTH_CHECK_WEBHOOK_URL environment variable (or a local, gitignored env
-# file passed via --env-file), never hardcoded or committed.
+# HEALTH_CHECK_WEBHOOK_URL environment variable, never hardcoded or
+# committed. This script takes no arguments and reads no config file of its
+# own; scripts/install-observability.sh is what loads the optional, private
+# observability env file into the environment before invoking it, via a
+# systemd `EnvironmentFile=` directive or an equivalent `set -a` wrapper in
+# the cron entry.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,6 +36,11 @@ HEALTH_CHECK_WEBHOOK_URL="${HEALTH_CHECK_WEBHOOK_URL:-}"
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+}
+
+die() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
 }
 
 json_escape() {
@@ -140,6 +149,12 @@ check_systemd_service() {
 main() {
   local overall_status=0
   local service
+
+  # Without curl every HTTP probe below fails identically to a real outage,
+  # which would alert once and then sit there looking like the site is down
+  # forever. A missing dependency is an operator error, not an outage, so
+  # fail loudly instead of reporting a false negative.
+  command -v curl >/dev/null 2>&1 || die "Missing required command: curl"
 
   check_http_endpoint "frontend" "$FRONTEND_HEALTH_URL" || overall_status=1
   check_http_endpoint "backend_api" "$BACKEND_HEALTH_URL" || overall_status=1

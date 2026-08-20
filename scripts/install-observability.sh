@@ -257,10 +257,30 @@ translate_oncalendar_to_cron() {
   return 1
 }
 
+# Prepares a path for interpolation into the *command* field of a crontab
+# line. Two hazards, both of which corrupt the entry silently:
+#   - cron rewrites an unescaped `%` into a newline and feeds everything
+#     after the first one to the job on stdin, truncating the command.
+#   - the command below wraps each path in single quotes, which a path
+#     containing a single quote would terminate early. There is no escape
+#     for a single quote inside single quotes, so reject it outright rather
+#     than emit a broken entry.
+cron_escape_path() {
+  local value="$1"
+  local label="$2"
+
+  case "$value" in
+    *\'*) die "$label contains a single quote, which cannot be safely placed in a crontab entry: $value" ;;
+  esac
+  printf '%s' "${value//%/\\%}"
+}
+
 render_cron_entries() {
   local runner="set -a; [ ! -r \"\$1\" ] || . \"\$1\"; set +a; exec \"\$2\""
   local health_cron_schedule
   local backup_cron_schedule
+  local env_file
+  local app_dir
 
   if [[ -n "$HEALTH_CHECK_CRON_SCHEDULE" ]]; then
     health_cron_schedule="$HEALTH_CHECK_CRON_SCHEDULE"
@@ -279,12 +299,14 @@ render_cron_entries() {
   # Cron does not understand systemd's EnvironmentFile directive. Run each
   # job through a small shell wrapper so cron and systemd-user mode load the
   # same optional private configuration file.
+  env_file="$(cron_escape_path "$OBSERVABILITY_ENV_FILE" "The observability env file path")"
+  app_dir="$(cron_escape_path "$APP_DIR" "The application directory path")"
   printf "%s /bin/sh -c '%s' _ '%s' '%s' >> '%s/hsclubs-health-check.log' 2>&1 %s\n" \
-    "$health_cron_schedule" "$runner" "$OBSERVABILITY_ENV_FILE" \
-    "$APP_DIR/scripts/health-check.sh" "$APP_DIR" "$CRON_MARKER"
+    "$health_cron_schedule" "$runner" "$env_file" \
+    "$app_dir/scripts/health-check.sh" "$app_dir" "$CRON_MARKER"
   printf "%s /bin/sh -c '%s' _ '%s' '%s' >> '%s/hsclubs-backup.log' 2>&1 %s\n" \
-    "$backup_cron_schedule" "$runner" "$OBSERVABILITY_ENV_FILE" \
-    "$APP_DIR/scripts/backup-mysql.sh" "$APP_DIR" "$CRON_MARKER"
+    "$backup_cron_schedule" "$runner" "$env_file" \
+    "$app_dir/scripts/backup-mysql.sh" "$app_dir" "$CRON_MARKER"
 }
 
 existing_crontab_without_managed_entries() {

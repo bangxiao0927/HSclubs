@@ -592,6 +592,58 @@ test_cron_entries_honor_explicit_backup_cron_schedule_override() {
   }
 }
 
+### cron command field: `%` and single quotes must not corrupt the entry #####
+
+# cron rewrites an unescaped `%` in the command field into a newline and
+# hands everything after the first one to the job on stdin, so a path
+# containing `%` would silently truncate the command.
+test_cron_entries_escape_percent_in_paths() {
+  local output
+  output="$(run_isolated "export APP_DIR='$FIXTURE_ROOT/app%20dir'" '
+    render_cron_entries
+  ')"
+
+  [[ "$output" != *"app%20dir"* ]] || {
+    printf '  expected every %% in the path to be escaped as \\%%, got: %s\n' "$output" >&2
+    return 1
+  }
+  local escaped
+  escaped="$(grep -c 'app\\%20dir' <<< "$output")"
+  assert_eq "2" "$escaped" "both cron lines must carry the percent-escaped application directory"
+}
+
+test_cron_entries_escape_percent_in_observability_env_file() {
+  local output
+  output="$(run_isolated "export OBSERVABILITY_ENV_FILE='$FIXTURE_ROOT/env%file.env'" '
+    render_cron_entries
+  ')"
+
+  [[ "$output" != *"env%file.env"* ]] || {
+    printf '  expected the env file %% to be escaped as \\%%, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
+# Each path is wrapped in single quotes in the rendered command, and there is
+# no way to escape a single quote inside single quotes, so the installer must
+# refuse rather than write a broken crontab line.
+test_cron_entries_reject_single_quote_in_path() {
+  local output
+  local status=0
+  output="$(run_isolated "export APP_DIR=\"\$FIXTURE_ROOT/it's-app\"" '
+    render_cron_entries
+  ')" || status=$?
+
+  [[ "$status" -ne 0 ]] || {
+    printf '  expected a non-zero exit for a path containing a single quote\n' >&2
+    return 1
+  }
+  [[ "$output" == *"single quote"* ]] || {
+    printf '  expected an actionable single-quote error, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
 test_parse_args_sets_health_cron_schedule_override() {
   local output
   output="$(run_isolated "" '
@@ -672,6 +724,9 @@ test_parse_args_sets_uninstall_action() {
 
 ### Run everything ###############################################################
 
+run_test "cron entries: percent in APP_DIR is escaped" test_cron_entries_escape_percent_in_paths
+run_test "cron entries: percent in the env file path is escaped" test_cron_entries_escape_percent_in_observability_env_file
+run_test "cron entries: a single quote in a path is rejected" test_cron_entries_reject_single_quote_in_path
 run_test "unit content: health-check service references the script and env file" test_health_check_service_references_the_script_and_env_file
 run_test "unit content: backup service references the script" test_backup_service_references_the_script
 run_test "unit content: health-check timer uses the configured interval" test_health_check_timer_uses_configured_interval
