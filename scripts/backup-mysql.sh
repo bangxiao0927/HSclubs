@@ -30,6 +30,11 @@ BACKUP_DIR="${BACKUP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/hsclubs/backups}
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
 LOCK_FILE="${LOCK_FILE:-$BACKUP_DIR/.backup.lock}"
 
+# Path to the temporary mode-0600 credentials file, set by perform_backup and
+# removed by its EXIT trap. Pre-declared so the trap is always safe to expand
+# under `set -u`, even if it somehow runs before the assignment.
+DEFAULTS_FILE=""
+
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
@@ -184,7 +189,6 @@ perform_backup() {
   local port
   local user
   local password
-  local defaults_file
   local destination
   local datasource_url
 
@@ -207,14 +211,19 @@ perform_backup() {
   timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
   destination="$BACKUP_DIR/$database-$timestamp.sql.gz"
 
-  defaults_file="$(create_mysql_defaults_file "$host" "$port" "$user" "$password")"
+  # DEFAULTS_FILE is deliberately a script-level global, not a `local`. An
+  # EXIT trap fires after this function has already returned, so a local
+  # would be out of scope by then: under `set -u` the trap itself would die
+  # on an unbound variable and never run the `rm`, leaving the mode-0600
+  # file (containing DB_PASSWORD) behind in $TMPDIR after every *successful*
+  # backup, and failing the run with a non-zero exit status.
+  DEFAULTS_FILE="$(create_mysql_defaults_file "$host" "$port" "$user" "$password")"
   # EXIT rather than RETURN: `die` (used by dump_and_compress on failure)
-  # calls `exit`, which a RETURN trap never sees, leaving the mode-0600
-  # defaults file (containing DB_PASSWORD) behind in $TMPDIR.
-  trap 'rm -f "$defaults_file"' EXIT
+  # calls `exit`, which a RETURN trap never sees.
+  trap 'rm -f "$DEFAULTS_FILE"' EXIT
 
   log "Backing up database $database from $host:$port to $destination"
-  dump_and_compress "$defaults_file" "$database" "$destination" "$BACKUP_DIR"
+  dump_and_compress "$DEFAULTS_FILE" "$database" "$destination" "$BACKUP_DIR"
   log "Backup complete: $destination"
 
   prune_old_backups "$BACKUP_DIR" "$BACKUP_RETENTION_DAYS"

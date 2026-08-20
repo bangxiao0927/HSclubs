@@ -414,6 +414,36 @@ test_perform_backup_leaves_no_defaults_file_when_mysqldump_fails() {
   assert_eq "0" "$leftovers" "the mode-0600 defaults file must not be left behind after a failed backup"
 }
 
+# Regression test for the success path, which is where the EXIT trap used to
+# break: `defaults_file` was a `local` in perform_backup, so by the time the
+# trap ran the function had already returned and the name was out of scope.
+# Under `set -u` the trap died on the unbound variable before ever reaching
+# `rm`, so every successful backup both leaked the plaintext DB_PASSWORD into
+# $TMPDIR and exited non-zero, making cron/systemd report a good backup as a
+# failed one. Asserts all three properties: a clean exit, no leftover temp
+# file, and the password nowhere on disk under TMPDIR.
+test_perform_backup_leaves_no_defaults_file_on_success() {
+  local tmp_dir="$FIXTURE_ROOT/tmp-defaults-success"
+  mkdir -p "$tmp_dir"
+  local backup_dir="$FIXTURE_ROOT/perform-backup-success-cleanup"
+  local status=0
+  local output
+  output="$(run_isolated "$COMMON_ENV BACKUP_DIR='$backup_dir' TMPDIR='$tmp_dir'" '
+    perform_backup
+  ')" || status=$?
+
+  [[ "$status" -eq 0 ]] || {
+    printf '  a successful backup must exit 0, got %s: %s\n' "$status" "$output" >&2
+    return 1
+  }
+  local leftovers
+  leftovers="$(find "$tmp_dir" -maxdepth 1 -type f | wc -l | tr -d '[:space:]')"
+  assert_eq "0" "$leftovers" "the mode-0600 defaults file must not survive a successful backup" || return 1
+  local leaked
+  leaked="$(grep -rl 'super-secret-password' "$tmp_dir" 2>/dev/null | wc -l | tr -d '[:space:]')"
+  assert_eq "0" "$leaked" "the plaintext DB_PASSWORD must not remain anywhere under TMPDIR"
+}
+
 test_perform_backup_dies_without_required_env_values() {
   local incomplete_env="$FIXTURE_ROOT/incomplete.env"
   echo "SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/mydb" > "$incomplete_env"
@@ -486,6 +516,7 @@ run_test "dump_and_compress: rejects a corrupt gzip stream" test_dump_and_compre
 run_test "prune_old_backups: deletes only files past retention" test_prune_old_backups_deletes_only_files_past_retention
 run_test "perform_backup: creates exactly one file named after the database" test_perform_backup_creates_one_file_named_after_database
 run_test "perform_backup: leaves no defaults file when mysqldump fails" test_perform_backup_leaves_no_defaults_file_when_mysqldump_fails
+run_test "perform_backup: leaves no defaults file on success" test_perform_backup_leaves_no_defaults_file_on_success
 run_test "perform_backup: dies without required env values" test_perform_backup_dies_without_required_env_values
 run_test "overlap lock: a second concurrent run skips instead of colliding" test_main_skips_when_lock_is_already_held
 

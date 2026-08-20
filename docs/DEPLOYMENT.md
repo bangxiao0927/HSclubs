@@ -749,6 +749,10 @@ periodic checks" below.
 The script exits non-zero if any check currently fails (useful for cron's own failure
 notifications), independent of whether an alert was sent for that run.
 
+`curl` is a hard requirement: without it every HTTP probe would fail exactly like a real
+outage, so the script exits with `Missing required command: curl` rather than reporting a
+false negative.
+
 ### MySQL backups (`scripts/backup-mysql.sh`)
 
 Reads `SPRING_DATASOURCE_URL`, `DB_USERNAME`, and `DB_PASSWORD` from `backend/.env` **without
@@ -836,6 +840,11 @@ chmod 600 ~/.config/hsclubs/observability.env
 ```
 
 Its absence is not an error: both scripts run fine with just their built-in defaults.
+
+In cron mode the application directory and the env file path are written into the crontab
+command field, where cron treats an unescaped `%` as a newline. The installer escapes `%`
+automatically, but it refuses to install if either path contains a single quote, since the
+quoting used for those paths has no way to escape one.
 
 A systemd `--user` manager only runs while a session for that user exists unless the account
 has "lingering" enabled. Auto mode therefore chooses cron when lingering is off. To use

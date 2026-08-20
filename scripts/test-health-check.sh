@@ -49,7 +49,7 @@ assert_eq() {
   return 1
 }
 
-mkdir -p "$FIXTURE_ROOT/bin" "$FIXTURE_ROOT/home"
+mkdir -p "$FIXTURE_ROOT/bin" "$FIXTURE_ROOT/home" "$FIXTURE_ROOT/empty-bin"
 
 # Fake curl: logs every invocation, and treats a -d/--data invocation as a
 # webhook delivery (captures the JSON payload) versus a plain check request
@@ -281,6 +281,30 @@ test_json_escape_handles_control_characters() {
   assert_eq 'line 1\nline 2\tvalue\r' "$output" "webhook payloads must remain valid JSON"
 }
 
+# Without curl, check_http_endpoint's probe fails exactly like a real
+# outage, so a host missing the dependency would alert once and then look
+# permanently down. main must fail loudly on the missing command instead of
+# reporting a false outage.
+test_main_fails_loudly_when_curl_is_missing() {
+  local output
+  local status=0
+  # A PATH deliberately without the fixture bin dir, so the fake curl is
+  # not found. systemctl is absent too, but the curl guard runs first.
+  # bash is invoked by absolute path: `env -i` with an empty PATH cannot
+  # look the interpreter up itself.
+  output="$(env -i PATH="$FIXTURE_ROOT/empty-bin" HOME="$FIXTURE_ROOT/home" \
+    "$BASH" --noprofile --norc "$HEALTH_CHECK" 2>&1)" || status=$?
+
+  [[ "$status" -ne 0 ]] || {
+    printf '  expected a non-zero exit when curl is unavailable\n' >&2
+    return 1
+  }
+  [[ "$output" == *"curl"* ]] || {
+    printf '  expected an actionable error naming curl, got: %s\n' "$output" >&2
+    return 1
+  }
+}
+
 ### Run everything ############################################################
 
 run_test "check_http_endpoint: passes and records ok" test_check_http_endpoint_passes_and_records_ok
@@ -295,6 +319,7 @@ run_test "alerts: no delivery attempt without a configured webhook" test_no_webh
 run_test "alerts: first observed status alerts (unknown -> status)" test_first_run_from_unknown_alerts
 run_test "no hardcoded webhook URL in the script" test_health_check_script_has_no_hardcoded_webhook_url
 run_test "defaults: frontend probe targets the local production proxy" test_default_frontend_probe_targets_local_proxy
+run_test "dependencies: a missing curl fails loudly instead of faking an outage" test_main_fails_loudly_when_curl_is_missing
 run_test "webhook JSON: control characters are escaped" test_json_escape_handles_control_characters
 
 printf '\n%d run, %d failed\n' "$TESTS_RUN" "$TESTS_FAILED"
