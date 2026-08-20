@@ -466,7 +466,7 @@ The task says "change the whole theme to the theme in the pdf as default." The c
 ## Issue #16: Review Login Remember Period
 
 **Status:** `done`
-**PR:** bangxiao0927/HSclubs#PENDING16
+**PR:** bangxiao0927/HSclubs#147
 **Verified:** 2026-08-20 — Resolved by step 1 of the solution below, not by a token store. The
 session already outlives a browser restart for a week:
 `backend/src/main/resources/application.yaml` sets `server.servlet.session.timeout: 7d`
@@ -551,7 +551,7 @@ explicitly excluded the Instagram avatar cache. No open gap remains.
 ## Issue #18: Document SecurityConfig Authorization Model
 
 **Status:** `done`
-**PR:** bangxiao0927/HSclubs#PENDING18
+**PR:** bangxiao0927/HSclubs#147
 **Verified:** 2026-08-20 — `SecurityConfig.java` now carries a class-level Javadoc covering the
 whole model, and the stale summary block that had been left dangling *after* the closing brace
 (so it documented nothing and had already drifted: no `/api/v1/summary`, no media feed, no
