@@ -3,10 +3,15 @@ package com.example.demo.auth.config;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.io.IOException;
+import java.time.Instant;
 
 import com.example.demo.security.CustomOAuth2UserService;
 import com.example.demo.security.CustomOidcUserService;
 import com.example.demo.security.LoginEligibilityPolicy;
+import com.example.demo.mobileauth.MobileAuthProperties;
+import com.example.demo.mobileauth.MobileAuthService;
+import com.example.demo.mobileauth.PendingMobileAuth;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -20,6 +25,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
@@ -33,16 +39,18 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties(SecurityProperties.class)
+@EnableConfigurationProperties({SecurityProperties.class, MobileAuthProperties.class})
 public class SecurityConfig {
 
     private final SecurityProperties securityProperties;
     private final CustomOAuth2UserService customOAuth2UserService;
     private final CustomOidcUserService customOidcUserService;
     private final ClientRegistrationRepository clientRegistrationRepository;
+    private final MobileAuthService mobileAuthService;
 
     /**
      * Built once from {@code securityProperties} (immutable after construction) and reused by
@@ -55,11 +63,13 @@ public class SecurityConfig {
     public SecurityConfig(SecurityProperties securityProperties,
                           CustomOAuth2UserService customOAuth2UserService,
                           CustomOidcUserService customOidcUserService,
-                          ClientRegistrationRepository clientRegistrationRepository) {
+                          ClientRegistrationRepository clientRegistrationRepository,
+                          MobileAuthService mobileAuthService) {
         this.securityProperties = securityProperties;
         this.customOAuth2UserService = customOAuth2UserService;
         this.customOidcUserService = customOidcUserService;
         this.clientRegistrationRepository = clientRegistrationRepository;
+        this.mobileAuthService = mobileAuthService;
         this.authenticatedCorsConfiguration = buildAuthenticatedCorsConfiguration();
     }
 
@@ -89,6 +99,15 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/clubs/*/posts/*/comments").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/avatars/instagram/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/summary").permitAll()
+                // The versioned summary is the same public data as /api/summary, so it is
+                // readable by the same anonymous aggregator. The manifest beside it is outside
+                // /api and therefore already covered by anyRequest().permitAll() below.
+                .requestMatchers(HttpMethod.GET, "/api/v1/summary").permitAll()
+                // Mobile auth starts before there is a session and completes to create one, so
+                // both endpoints are reachable unauthenticated. Their safety comes from the
+                // one-time code and PKCE, not from a session that does not exist yet.
+                .requestMatchers(HttpMethod.GET, "/api/mobile-auth/start").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/mobile-auth/complete").permitAll()
                 // Everything else under /api requires authentication
                 .requestMatchers("/api/**").authenticated()
                 // Static resources, frontend routes
@@ -107,13 +126,9 @@ public class SecurityConfig {
                     .userService(customOAuth2UserService)
                     .oidcUserService(customOidcUserService))
                 .successHandler((request, response, authentication) ->
-                    response.sendRedirect(PostLoginRedirectResolver.buildRedirectUri(
-                        resolveLoginRedirectUri(), consumeSessionRedirectTarget(request))))
+                    handleLoginSuccess(request, response, authentication))
                 .failureHandler((request, response, exception) ->
-                    response.sendRedirect(PostLoginRedirectResolver.buildRedirectUri(
-                        resolveLoginRedirectUri(),
-                        consumeSessionRedirectTarget(request),
-                        resolveLoginFailureCode(exception)))))
+                    handleLoginFailure(request, response, exception)))
             .logout(logout -> logout
                 // Explicit POST-only matcher: logoutUrl(String) alone degrades to matching ANY
                 // HTTP method once CSRF protection is off, which let a plain
@@ -161,7 +176,11 @@ public class SecurityConfig {
                 resolveAuthorizationRequestBaseUri() + "/**",
                 "/api/auth/*/callback",
                 "/oauth2/**",
-                "/login/**");
+                "/login/**",
+                // Complete is a POST from the school's own WKWebView, which has no CSRF cookie of
+                // its own; it is protected by the one-time code and PKCE verifier, which is a
+                // stronger proof than a CSRF token would be here.
+                "/api/mobile-auth/complete");
         // Logout is intentionally NOT in the ignore list: it is a real state-changing request
         // triggered by our own frontend (which knows how to attach the token when this flag is
         // on), so it gets the same CSRF protection as any other write.
@@ -183,6 +202,8 @@ public class SecurityConfig {
      */
     private static final List<String> PUBLIC_READ_ONLY_CORS_PATTERNS = List.of(
         "/api/summary",
+        "/api/v1/summary",
+        "/.well-known/hsclubs-app.json",
         "/api/clubs",
         "/api/clubs/calendar",
         "/api/clubs/*",
@@ -361,6 +382,80 @@ public class SecurityConfig {
         Object redirectTarget = session.getAttribute(RedirectCapturingAuthorizationRequestResolver.SESSION_ATTRIBUTE);
         session.removeAttribute(RedirectCapturingAuthorizationRequestResolver.SESSION_ATTRIBUTE);
         return redirectTarget instanceof String ? (String) redirectTarget : null;
+    }
+
+    /**
+     * Login succeeded. A normal web sign-in redirects into the app as before; a sign-in that began
+     * at {@code /api/mobile-auth/start} instead issues a one-time code and hands it back on the
+     * registered Universal Link, so the app -- not this browser session -- carries the sign-in
+     * onward.
+     */
+    private void handleLoginSuccess(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        Authentication authentication
+    ) throws IOException {
+        PendingMobileAuth pending = consumePendingMobileAuth(request);
+        if (pending != null) {
+            String code = mobileAuthService.issueCode(pending, authentication, Instant.now());
+            response.sendRedirect(buildMobileAuthCallback(pending, "code", code));
+            return;
+        }
+        response.sendRedirect(PostLoginRedirectResolver.buildRedirectUri(
+            resolveLoginRedirectUri(), consumeSessionRedirectTarget(request)));
+    }
+
+    /**
+     * Login failed. A mobile-auth sign-in is returned to the app on the same Universal Link with
+     * an {@code error} -- a cancel or an eligibility refusal the app can act on -- rather than the
+     * web login's error redirect, so the person is not left on a page inside the sign-in sheet.
+     */
+    private void handleLoginFailure(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        AuthenticationException exception
+    ) throws IOException {
+        PendingMobileAuth pending = consumePendingMobileAuth(request);
+        if (pending != null) {
+            response.sendRedirect(buildMobileAuthCallback(pending, "error", mobileAuthFailureError(exception)));
+            return;
+        }
+        response.sendRedirect(PostLoginRedirectResolver.buildRedirectUri(
+            resolveLoginRedirectUri(),
+            consumeSessionRedirectTarget(request),
+            resolveLoginFailureCode(exception)));
+    }
+
+    private PendingMobileAuth consumePendingMobileAuth(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session == null) {
+            return null;
+        }
+        Object pending = session.getAttribute(PendingMobileAuth.SESSION_ATTRIBUTE);
+        session.removeAttribute(PendingMobileAuth.SESSION_ATTRIBUTE);
+        return pending instanceof PendingMobileAuth flow ? flow : null;
+    }
+
+    private static String buildMobileAuthCallback(PendingMobileAuth pending, String parameter, String value) {
+        return UriComponentsBuilder.fromUriString(pending.redirectUri())
+            .queryParam("schoolId", pending.schoolId())
+            .queryParam("state", pending.state())
+            .queryParam(parameter, value)
+            .encode()
+            .build()
+            .toUriString();
+    }
+
+    /** An eligibility refusal is the person's account, not a transient fault; the rest is denial. */
+    private static String mobileAuthFailureError(AuthenticationException exception) {
+        if (exception instanceof OAuth2AuthenticationException oauth2Exception) {
+            String code = oauth2Exception.getError().getErrorCode();
+            if (LoginEligibilityPolicy.EMAIL_DOMAIN_NOT_ALLOWED.equals(code)
+                || LoginEligibilityPolicy.EMAIL_NOT_VERIFIED.equals(code)) {
+                return "access_denied";
+            }
+        }
+        return "access_denied";
     }
 }
 /**

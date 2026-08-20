@@ -10,6 +10,7 @@ import {
 import { buildApiUrl, setUnauthorizedHandler } from '../services/httpClient'
 import { localAvatar, userAvatar } from '../utils/avatarImages'
 import { normalizeAuthRedirect, savePendingAuthRedirect } from '../utils/authRedirect'
+import { isHSclubsAppUserAgent, MOBILE_AUTH_START_PATH } from '../utils/mobileApp'
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<AuthUser | null>(null)
@@ -123,6 +124,17 @@ export const useAuthStore = defineStore('auth', () => {
         'This sign-in provider is not configured correctly. Please refresh and try again.'
       return
     }
+
+    // Inside the native app, the fixed mobile-auth entry is the only way to sign in: the app
+    // intercepts it, runs Google in a system browser via ASWebAuthenticationSession, and returns a
+    // one-time code. The web OAuth redirect below would be trapped by the app's WebView boundary,
+    // so it is never used there. The app supplies its own state, PKCE and return path; the web
+    // page only has to navigate to the entry.
+    if (isHSclubsAppUserAgent()) {
+      window.location.href = buildApiUrl(MOBILE_AUTH_START_PATH)
+      return
+    }
+
     savePendingAuthRedirect(redirectTarget)
 
     const authorizationUrl = buildApiUrl(provider.authorizationUrl)

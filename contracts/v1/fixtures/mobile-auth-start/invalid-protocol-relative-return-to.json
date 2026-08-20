@@ -1,0 +1,8 @@
+{
+  "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
+  "state": "M2Rk8sYq1vB7nT4wX0cLpZ",
+  "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+  "code_challenge_method": "S256",
+  "redirect_uri": "https://clubs.bangxiao.net/mobile-auth/callback",
+  "return_to": "//evil.example/steal"
+}

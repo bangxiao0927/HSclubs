@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hsclubs.net/v1/summary.schema.json",
+  "title": "HS Clubs school summary, v1",
+  "description": "Body of GET /api/v1/summary on a school site. Anonymous, read-only, cross-origin readable. Unknown members are allowed on purpose: a school running a newer template must stay readable by an older consumer.",
+  "type": "object",
+  "required": [
+    "contract",
+    "version",
+    "schoolId",
+    "slug",
+    "schoolName",
+    "shortName",
+    "address",
+    "status",
+    "clubCount",
+    "categories",
+    "memberCount",
+    "lastUpdatedAt",
+    "dataHash"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "contract": { "const": "hsclubs.summary" },
+    "version": { "const": 1 },
+    "schoolId": { "$ref": "#/$defs/schoolId" },
+    "slug": { "$ref": "#/$defs/slug" },
+    "schoolName": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "shortName": { "type": ["string", "null"], "maxLength": 60 },
+    "address": { "type": ["string", "null"], "maxLength": 300 },
+    "status": { "type": ["string", "null"], "maxLength": 40 },
+    "clubCount": { "type": "integer", "minimum": 0 },
+    "categories": {
+      "type": "object",
+      "propertyNames": { "minLength": 1, "maxLength": 100 },
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "memberCount": { "type": "integer", "minimum": 0 },
+    "lastUpdatedAt": { "$ref": "#/$defs/instantOrNull" },
+    "dataHash": { "type": ["string", "null"], "maxLength": 128 }
+  },
+  "$defs": {
+    "schoolId": {
+      "description": "Opaque, immutable identity issued by the guiding page registry. Never derived from the slug and never reused.",
+      "type": "string",
+      "pattern": "^sch_[A-Za-z0-9]{16,48}$"
+    },
+    "slug": {
+      "description": "Display and URL handle. Mutable: it identifies nothing on its own.",
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+    },
+    "instantOrNull": {
+      "description": "ISO-8601 instant carrying an offset, so schools in different zones stay comparable. Null for a directory that has never been updated.",
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})$"
+    }
+  }
+}

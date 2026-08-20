@@ -1,0 +1,21 @@
+{
+  "contract": "hsclubs.app-directory",
+  "version": 1,
+  "generatedAt": "2026-08-18T04:11:02Z",
+  "schools": [
+    {
+      "schoolId": "sch_5Jd9Rk2XvA6nQ3zP8wC1",
+      "slug": "harborview",
+      "name": "harborview",
+      "shortName": null,
+      "siteOrigin": "https://clubs.harborview.example",
+      "host": "clubs.harborview.example",
+      "demo": false,
+      "integrationStatus": "incompatible",
+      "unavailableReason": "summary did not match contract hsclubs.summary v1",
+      "clubCount": null,
+      "lastUpdatedAt": null,
+      "mobileAuth": false
+    }
+  ]
+}

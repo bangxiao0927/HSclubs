@@ -58,6 +58,20 @@
   --mv-status-warning: #b45309;
   --mv-shadow-card: 0 18px 40px rgba(37, 99, 235, 0.12);
   --mv-shadow-elevated: 0 24px 56px rgba(37, 99, 235, 0.18);
+  /* Translucent "liquid glass" surfaces for the floating mobile chrome:
+     a layered tint plus a bright top edge, so the page scrolls visibly
+     behind the bar instead of hiding under an opaque block. */
+  --mv-glass-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(236, 244, 255, 0.32) 100%
+  );
+  --mv-glass-border: rgba(255, 255, 255, 0.48);
+  --mv-glass-highlight: rgba(255, 255, 255, 0.7);
+  --mv-glass-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+  --mv-glass-active: rgba(37, 99, 235, 0.14);
+  /* A stronger blur keeps text readable even though the tint is now lighter. */
+  --mv-glass-blur: saturate(190%) blur(30px);
 
   --color-background: var(--mv-night);
   --color-background-soft: var(--mv-ink);
@@ -123,6 +137,12 @@
   --mv-status-warning: #fde68a;
   --mv-shadow-card: 0 25px 40px rgba(0, 0, 0, 0.28);
   --mv-shadow-elevated: 0 25px 60px rgba(0, 0, 0, 0.38);
+  --mv-glass-bg: linear-gradient(180deg, rgba(30, 45, 68, 0.46) 0%, rgba(9, 19, 34, 0.34) 100%);
+  --mv-glass-border: rgba(148, 197, 235, 0.22);
+  --mv-glass-highlight: rgba(226, 240, 255, 0.26);
+  --mv-glass-shadow: 0 18px 44px rgba(0, 0, 0, 0.38);
+  --mv-glass-active: rgba(125, 211, 252, 0.2);
+  --mv-glass-blur: saturate(180%) blur(30px);
 }
 
 *,

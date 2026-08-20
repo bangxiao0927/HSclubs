@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hsclubs.net/v1/mobile-auth-start.schema.json",
+  "title": "HS Clubs mobile auth start parameters, v1",
+  "description": "Query parameters the app sends to GET /api/mobile-auth/start on a school site, decoded into an object. Every value arrives from a client the school does not control, so unknown parameters are rejected here rather than carried into the flow.",
+  "type": "object",
+  "required": ["schoolId", "state", "code_challenge", "code_challenge_method", "redirect_uri"],
+  "additionalProperties": false,
+  "properties": {
+    "schoolId": { "type": "string", "pattern": "^sch_[A-Za-z0-9]{16,48}$" },
+    "state": {
+      "description": "Client nonce, at least 128 bits of entropy, base64url without padding.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22,128}$"
+    },
+    "code_challenge": {
+      "description": "RFC 7636 S256 challenge: base64url of SHA-256 over the verifier, no padding.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "code_challenge_method": { "const": "S256" },
+    "redirect_uri": {
+      "description": "The universal link the school will send the browser back to. Must be one of the registry-pinned callbacks; an arbitrary value is refused before any redirect happens.",
+      "type": "string",
+      "pattern": "^https://[a-z0-9.-]+(?::\\d{2,5})?/[^\\s]*$"
+    },
+    "return_to": {
+      "description": "Where to land after the session exists, as a site-relative path. Absolute URLs are refused: this is the field an open redirect would arrive through.",
+      "type": "string",
+      "pattern": "^/(?![/\\\\])[^\\s?#]*(?:\\?[^\\s#]*)?$",
+      "maxLength": 512
+    }
+  }
+}
