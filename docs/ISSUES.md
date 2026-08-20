@@ -27,20 +27,18 @@ Work through issues in this order. Completed issues are collapsed at the bottom.
 |-----|---|-------|--------|----------|--------|
 | 1 | #9 | Verify president permissions | open | P0 | Small |
 | 2 | #7 | Club creation UI in admin page | open | P0 | Medium |
-| 3 | #18 | Document SecurityConfig authorization model | open | P0 | Tiny |
-| 4 | #5 | Account creation data collection (home school) | open | P1 | Medium |
-| 5 | #8 | President assignment page | open | P1 | Medium |
-| 6 | #14 | Profile page completeness | open | P1 | Small |
-| 7 | #6 | Homepage images from DB | open | P1 | Small |
-| 8 | #3 | Club summary API | open | P1 | Medium |
-| 9 | #16 | Login remember period | open | P2 | Small |
-| 10 | #15 | Theme matching design PDF | open | P2 | Medium |
-| 11 | #11 | Club recommendation page | open | P2 | Medium |
-| 12 | #10 | Comment & rating system | deferred | P3 | Large |
-| 13 | #12 | QR code club application | deferred | P3 | Medium |
-| 14 | #13 | Meeting attendance system | deferred | P3 | Large |
-| 15 | #20 | Define `clubs.visibility` semantics | open | P3 | Medium |
-| 16 | #21 | Rate limiting on media publishing | open | P3 | Small |
+| 3 | #5 | Account creation data collection (home school) | open | P1 | Medium |
+| 4 | #8 | President assignment page | open | P1 | Medium |
+| 5 | #14 | Profile page completeness | open | P1 | Small |
+| 6 | #6 | Homepage images from DB | open | P1 | Small |
+| 7 | #3 | Club summary API | open | P1 | Medium |
+| 8 | #15 | Theme matching design PDF | open | P2 | Medium |
+| 9 | #11 | Club recommendation page | open | P2 | Medium |
+| 10 | #10 | Comment & rating system | deferred | P3 | Large |
+| 11 | #12 | QR code club application | deferred | P3 | Medium |
+| 12 | #13 | Meeting attendance system | deferred | P3 | Large |
+| 13 | #20 | Define `clubs.visibility` semantics | open | P3 | Medium |
+| 14 | #21 | Rate limiting on media publishing | open | P3 | Small |
 
 ---
 
@@ -467,8 +465,25 @@ The task says "change the whole theme to the theme in the pdf as default." The c
 
 ## Issue #16: Review Login Remember Period
 
-**Status:** `open`
-**PR:** —
+**Status:** `done`
+**PR:** bangxiao0927/HSclubs#147
+**Verified:** 2026-08-20 — Resolved by step 1 of the solution below, not by a token store. The
+session already outlives a browser restart for a week:
+`backend/src/main/resources/application.yaml` sets `server.servlet.session.timeout: 7d`
+*and* `server.servlet.session.cookie.max-age: 7d`. Both are required and neither alone is
+enough — the timeout governs how long the server keeps the session alive between requests,
+while the cookie max-age is what stops `JSESSIONID` from being a session cookie the browser
+discards on exit. The same block pins `same-site: lax` (a `strict` cookie is withheld on the
+Google callback navigation and login fails with `authorization_request_not_found`) and
+`secure`, which defaults to `false` for plain-HTTP local dev and **must** be set to `true` in
+production via `SESSION_COOKIE_SECURE` — a 7-day cookie is far too long-lived to be allowed
+onto a plain-HTTP request.
+
+Spring Security's persistent `RememberMe` (steps 2-4 below) is deliberately **not**
+implemented: it would add a `persistent_logins` table, a second credential to steal, and its
+own expiry/cleanup job, all to extend a login period that a single config value already
+covers for a school site where a week is the right answer. Revisit only if the desired
+remember period grows past what a server-side session can reasonably hold.
 
 **Problem:**
 `SecurityConfig.java` uses `SessionCreationPolicy.IF_REQUIRED` with `JSESSIONID` cookies. The session lasts until the browser closes or the server-side session expires (default 30 min inactivity in Spring). There is no persistent "Remember Me" option. Users will be logged out frequently.
@@ -535,8 +550,38 @@ explicitly excluded the Instagram avatar cache. No open gap remains.
 
 ## Issue #18: Document SecurityConfig Authorization Model
 
-**Status:** `open`
-**PR:** —
+**Status:** `done`
+**PR:** bangxiao0927/HSclubs#147
+**Verified:** 2026-08-20 — `SecurityConfig.java` now carries a class-level Javadoc covering the
+whole model, and the stale summary block that had been left dangling *after* the closing brace
+(so it documented nothing and had already drifted: no `/api/v1/summary`, no media feed, no
+mobile-auth) is gone. What the new block states:
+
+- **The dual layer.** The filter chain answers "who are you" and is a coarse safety net — every
+  `/api/**` route is authenticated unless explicitly listed, so a new controller is private by
+  default. Controllers answer "what may you do" (`requireManageAccess`, `requirePlatformOwner`),
+  because that depends on the club addressed and the caller's membership row, which no path
+  pattern can express. A bare `.authenticated()` must not be read as "any signed-in student may".
+- **Every public route with its reason:** the CORS preflight, the login handshake
+  (`/api/auth/**`, `/oauth2/**`, `/login/**`, `/error`), browsable club data
+  (`GET /api/clubs`, `/api/clubs/calendar`, `/api/clubs/{id}`, `/api/clubs/recommendations`),
+  the media feed and its comments (#78, #79), cached Instagram avatars, the aggregate the
+  guiding page polls (`/api/summary`, `/api/v1/summary`), and everything outside `/api`.
+- **The two mobile-auth endpoints.** `GET /api/mobile-auth/start` runs before a session exists
+  and `POST /api/mobile-auth/complete` is what creates one, so neither *can* require
+  authentication; their safety comes from the allow-listed Universal Link, the single-use code
+  and the PKCE verifier, not from a session.
+- **The two OAuth2 outcome handlers** added with mobile-auth: `handleLoginSuccess` and
+  `handleLoginFailure` each branch on whether a mobile-auth flow is pending in the session — web
+  sign-in redirects to the SPA exactly as before, an app sign-in is returned to the registered
+  Universal Link with a one-time `code` or an `error`. No token or session identifier ever
+  travels in a URL.
+- **Session lifetime** (7-day timeout + 7-day cookie, see #16) and POST-only logout.
+- **CSRF.** Off by default because the SPA does not echo the token back yet; opt-in via
+  `app.security.csrf.enabled`. The detailed rationale (including why `/api/mobile-auth/complete`
+  is in the ignore list and logout deliberately is not) already lived on `configureCsrf`, so the
+  class comment points there rather than duplicating it, as it does for the two-policy CORS note
+  on `corsConfigurationSource`.
 
 **Problem:**
 `SecurityConfig.java` already blocks `/api/**` by default and whitelists public endpoints, but there is no documentation explaining:
