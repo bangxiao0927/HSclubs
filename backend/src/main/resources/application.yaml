@@ -96,7 +96,7 @@ app:
     # matching @Value defaults in SummaryService and SchoolManifestController). The slug is not
     # cosmetic: the guiding page refuses a summary whose slug disagrees with the registry entry
     # it was fetched for, so changing it here means changing it in the registry in the same pass.
-    school-name: ${APP_SUMMARY_SCHOOL_NAME:Monta Vista High School}
+    school-name: ${APP_SUMMARY_SCHOOL_NAME:Mountain View High School}
     short-name: ${APP_SUMMARY_SHORT_NAME:MVHS}
     slug: ${APP_SUMMARY_SLUG:mvhs}
     # One human-readable line for the guiding page's listing, e.g. a street address. School

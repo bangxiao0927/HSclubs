@@ -29,7 +29,7 @@ permanent `schoolId` this deployment was issued, and the `contract` / `version` 
   "version": 1,
   "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
   "slug": "mvhs",
-  "schoolName": "Monta Vista High School",
+  "schoolName": "Mountain View High School",
   "shortName": "MVHS",
   "address": null,
   "status": "active",
@@ -61,7 +61,7 @@ disagrees with what it issued.
   "version": 1,
   "schoolId": "sch_7Qb3Xf9KLm2ZpR4tVn6Y",
   "slug": "mvhs",
-  "schoolName": "Monta Vista High School",
+  "schoolName": "Mountain View High School",
   "siteOrigin": "https://mvhs.hsclubs.net",
   "summaryUrl": "https://mvhs.hsclubs.net/api/v1/summary",
   "capabilities": ["summary.v1"],
@@ -107,7 +107,7 @@ vectors. The normal Google web login, registration, logout and protected pages a
 Response:
 ```json
 {
-  "schoolName": "Monta Vista High School",
+  "schoolName": "Mountain View High School",
   "shortName": "MVHS",
   "slug": "mvhs",
   "address": "3535 Truman Ave, Mountain View, CA 94040",

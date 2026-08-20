@@ -53,7 +53,7 @@ public class SummaryService {
     private final Object refreshLock = new Object();
 
     public SummaryService(ClubMapper clubMapper,
-                          @Value("${app.summary.school-name:Monta Vista High School}") String schoolName,
+                          @Value("${app.summary.school-name:Mountain View High School}") String schoolName,
                           @Value("${app.summary.short-name:MVHS}") String shortName,
                           @Value("${app.summary.slug:mvhs}") String slug,
                           @Value("${app.summary.address:}") String address,
