@@ -28,6 +28,8 @@ public class MobileAuthStartController {
 
     private static final String DEFAULT_AUTHORIZE_BASE = "/api/auth/authorize";
     private static final String REGISTRATION_ID = "google";
+    /** Keeps an echoed parameter name well inside the contract's 200-character description. */
+    private static final int MAX_ECHOED_PARAMETER = 40;
     /** The only parameters the start entry accepts; the contract is additionalProperties:false. */
     private static final Set<String> ALLOWED_PARAMETERS = Set.of(
         "schoolId", "state", "code_challenge", "code_challenge_method", "redirect_uri", "return_to");
@@ -56,8 +58,12 @@ public class MobileAuthStartController {
         // never slip through unrecognised.
         for (String name : request.getParameterMap().keySet()) {
             if (!ALLOWED_PARAMETERS.contains(name)) {
+                // The name is echoed so an operator reading a log can see what was sent, but it
+                // came from the caller: cut it, and let the schema's own 200-character ceiling on
+                // error_description hold no matter what arrived.
                 throw new MobileAuthException(
-                    MobileAuthException.Error.INVALID_REQUEST, "unexpected parameter: " + name);
+                    MobileAuthException.Error.INVALID_REQUEST,
+                    "unexpected parameter: " + abbreviate(name));
             }
         }
 
@@ -86,5 +92,9 @@ public class MobileAuthStartController {
     /** Guards against a base URI that is somehow absolute; the redirect must stay on this origin. */
     static boolean isRelative(String uri) {
         return uri != null && !UrlUtils.isAbsoluteUrl(uri);
+    }
+
+    private static String abbreviate(String value) {
+        return value.length() <= MAX_ECHOED_PARAMETER ? value : value.substring(0, MAX_ECHOED_PARAMETER);
     }
 }

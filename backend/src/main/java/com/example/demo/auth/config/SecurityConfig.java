@@ -27,6 +27,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.web.SecurityFilterChain;
@@ -493,7 +494,13 @@ public class SecurityConfig {
         }
         Object pending = session.getAttribute(PendingMobileAuth.SESSION_ATTRIBUTE);
         session.removeAttribute(PendingMobileAuth.SESSION_ATTRIBUTE);
-        return pending instanceof PendingMobileAuth flow ? flow : null;
+        if (!(pending instanceof PendingMobileAuth flow)) {
+            return null;
+        }
+        // An abandoned flow is not a flow. Without this, a mobile sign-in someone gave up on
+        // would still be pending when that browser later logs in normally, and the ordinary web
+        // login would be redirected to the app's Universal Link instead of into the site.
+        return flow.isExpired(Instant.now()) ? null : flow;
     }
 
     private static String buildMobileAuthCallback(PendingMobileAuth pending, String parameter, String value) {
@@ -506,15 +513,26 @@ public class SecurityConfig {
             .toUriString();
     }
 
-    /** An eligibility refusal is the person's account, not a transient fault; the rest is denial. */
+    /**
+     * Which contract error the app is told about a failed mobile sign-in.
+     *
+     * <p>Two outcomes, and the difference matters to the person: {@code access_denied} means this
+     * account will not be let in -- they cancelled, or the eligibility policy refused them -- and
+     * the app returns them quietly, because retrying changes nothing. Everything else is a fault
+     * on our side or the provider's, which is {@code temporarily_unavailable}: the app says so and
+     * a retry is worth making. Reporting a provider outage as a cancellation left the person with
+     * no explanation for something that was never their doing.
+     */
     private static String mobileAuthFailureError(AuthenticationException exception) {
         if (exception instanceof OAuth2AuthenticationException oauth2Exception) {
             String code = oauth2Exception.getError().getErrorCode();
             if (LoginEligibilityPolicy.EMAIL_DOMAIN_NOT_ALLOWED.equals(code)
-                || LoginEligibilityPolicy.EMAIL_NOT_VERIFIED.equals(code)) {
+                || LoginEligibilityPolicy.EMAIL_NOT_VERIFIED.equals(code)
+                || OAuth2ErrorCodes.ACCESS_DENIED.equals(code)) {
                 return "access_denied";
             }
+            return "temporarily_unavailable";
         }
-        return "access_denied";
+        return "temporarily_unavailable";
     }
 }

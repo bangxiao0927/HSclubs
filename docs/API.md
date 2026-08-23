@@ -64,14 +64,24 @@ disagrees with what it issued.
   "schoolName": "Mountain View High School",
   "siteOrigin": "https://mvhs.hsclubs.net",
   "summaryUrl": "https://mvhs.hsclubs.net/api/v1/summary",
-  "capabilities": ["summary.v1"],
-  "auth": { "mobile": { "supported": false } }
+  "capabilities": ["summary.v1", "mobile-auth.v1"],
+  "auth": {
+    "mobile": {
+      "supported": true,
+      "startUrl": "https://mvhs.hsclubs.net/api/mobile-auth/start",
+      "completeUrl": "https://mvhs.hsclubs.net/api/mobile-auth/complete",
+      "callbackUrl": "https://hsclubs.net/mobile-auth/callback",
+      "codeChallengeMethods": ["S256"]
+    }
+  }
 }
 ```
 
 `siteOrigin` comes from `APP_SCHOOL_SITE_ORIGIN` (defaulting to the frontend origin), never from
 the request's `Host` header: a manifest that echoed the caller would say whatever the caller
-wanted. `auth.mobile.supported` stays false until the mobile authentication endpoints exist.
+wanted. `auth.mobile.supported` is true once this deployment has an issued identity and at least
+one registered callback; a deployment with neither publishes `supported: false` and omits the
+URLs, and the guiding page then lists it without mobile auth.
 
 ### GET /api/mobile-auth/start
 
