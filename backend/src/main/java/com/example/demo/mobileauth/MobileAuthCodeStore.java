@@ -8,6 +8,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.security.core.Authentication;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -52,7 +53,19 @@ public class MobileAuthCodeStore {
         return byHash.remove(hash(code));
     }
 
-    /** Drops expired entries; a school may call this on a schedule, but redemption is self-cleaning. */
+    /**
+     * Drops expired entries.
+     *
+     * <p>Redemption is self-cleaning, but a code that is issued and never redeemed -- the person
+     * closed the sheet, the app crashed, the callback never arrived -- has nothing to clean it,
+     * and each one holds an Authentication for as long as the process lives. Every five minutes
+     * is far more often than the 60-120 second lifetime, so nothing lingers meaningfully.
+     */
+    @Scheduled(fixedDelay = 5 * 60 * 1000L)
+    public void purgeExpired() {
+        purgeExpired(Instant.now());
+    }
+
     public void purgeExpired(Instant now) {
         byHash.values().removeIf(entry -> now.isAfter(entry.expiresAt()));
     }

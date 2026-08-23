@@ -81,7 +81,8 @@ public class MobileAuthService {
         if (returnTo != null && !RETURN_TO.matcher(returnTo).matches()) {
             throw new MobileAuthException(Error.INVALID_REQUEST, "return_to must be a site-relative path");
         }
-        return new PendingMobileAuth(schoolId, state, codeChallenge, redirectUri, returnTo);
+        return new PendingMobileAuth(
+            schoolId, state, codeChallenge, redirectUri, returnTo, Instant.now());
     }
 
     /**
