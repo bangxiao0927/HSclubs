@@ -143,9 +143,10 @@ spring:
       # Spring Boot's default is a single thread for every @Scheduled method. The Instagram
       # avatar prewarm can hold one for a long time (up to max-refresh-per-run handles, each
       # able to burn the Instaloader subprocess timeout and then the HTTP fallback timeout),
-      # which would leave the nightly orphan-upload cleanup waiting behind it.
+      # which would leave the nightly orphan-upload cleanup waiting behind it. One thread per
+      # scheduled job: the prewarm, that cleanup, and the mobile-auth code purge.
       pool:
-        size: ${SPRING_TASK_SCHEDULING_POOL_SIZE:2}
+        size: ${SPRING_TASK_SCHEDULING_POOL_SIZE:3}
   servlet:
     multipart:
       # Must sit above ImageStorageService's application-level 5MB image limit -- if they were

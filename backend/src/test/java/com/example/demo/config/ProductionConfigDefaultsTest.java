@@ -64,13 +64,14 @@ class ProductionConfigDefaultsTest {
 
     // Spring Boot's default is one thread for every @Scheduled method, so the Instagram avatar
     // prewarm (which can hold its thread for minutes across subprocess and HTTP timeouts) would
-    // block the nightly orphan-upload cleanup behind it.
+    // block the nightly orphan-upload cleanup behind it. The floor is the number of scheduled
+    // jobs: the prewarm, the cleanup, and the mobile-auth code purge.
     @Test
     void scheduledJobsDoNotShareASingleThread() throws IOException {
         String poolSize = resolve(BASE_CONFIG, "spring.task.scheduling.pool.size");
 
         assertThat(poolSize).isNotNull();
-        assertThat(Integer.parseInt(poolSize)).isGreaterThanOrEqualTo(2);
+        assertThat(Integer.parseInt(poolSize)).isGreaterThanOrEqualTo(3);
     }
 
     /**
