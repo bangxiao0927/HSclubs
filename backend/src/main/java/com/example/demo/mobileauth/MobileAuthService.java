@@ -23,6 +23,8 @@ public class MobileAuthService {
     private static final Pattern STATE = Pattern.compile("^[A-Za-z0-9_-]{22,128}$");
     // Site-relative only: a leading single slash, never "//" (protocol-relative) or a scheme.
     private static final Pattern RETURN_TO = Pattern.compile("^/(?![/\\\\])[^\\s?#]*(?:\\?[^\\s#]*)?$");
+    /** contracts/v1/schemas/mobile-auth-start.schema.json caps return_to at 512 characters. */
+    private static final int RETURN_TO_MAX = 512;
     private static final int CODE_BYTES = 32;
 
     private final SchoolIdentity schoolIdentity;
@@ -78,7 +80,7 @@ public class MobileAuthService {
         if (!properties.isRegisteredCallback(redirectUri)) {
             throw new MobileAuthException(Error.INVALID_REQUEST, "redirect_uri is not a registered callback");
         }
-        if (returnTo != null && !RETURN_TO.matcher(returnTo).matches()) {
+        if (returnTo != null && (returnTo.length() > RETURN_TO_MAX || !RETURN_TO.matcher(returnTo).matches())) {
             throw new MobileAuthException(Error.INVALID_REQUEST, "return_to must be a site-relative path");
         }
         return new PendingMobileAuth(

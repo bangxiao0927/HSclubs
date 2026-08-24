@@ -101,4 +101,23 @@ class MobileAuthServiceTest {
         assertThatThrownBy(() -> service.redeem(SCHOOL_ID, "never-issued", VERIFIER, now))
             .isInstanceOf(MobileAuthException.class);
     }
+
+    // The schema caps return_to at 512 characters. Without a length check here, a longer path
+    // would be accepted at start and handed back at complete, putting this school's own response
+    // outside the contract it publishes.
+    @Test
+    void rejectsAReturnToLongerThanTheContractAllows() {
+        String tooLong = "/" + "a".repeat(512);
+
+        assertThat(errorOf(() -> service.validateStart(SCHOOL_ID, STATE, CHALLENGE, "S256", CALLBACK, tooLong)))
+            .isEqualTo(Error.INVALID_REQUEST);
+    }
+
+    @Test
+    void acceptsAReturnToAtTheLimit() {
+        String atLimit = "/" + "a".repeat(511);
+
+        assertThat(service.validateStart(SCHOOL_ID, STATE, CHALLENGE, "S256", CALLBACK, atLimit).returnTo())
+            .isEqualTo(atLimit);
+    }
 }

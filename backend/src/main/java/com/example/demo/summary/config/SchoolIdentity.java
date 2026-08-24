@@ -4,6 +4,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -28,14 +30,21 @@ import org.springframework.util.StringUtils;
 public class SchoolIdentity {
 
     private static final Pattern SCHOOL_ID = Pattern.compile("^sch_[A-Za-z0-9]{16,48}$");
+    private static final Logger log = LoggerFactory.getLogger(SchoolIdentity.class);
 
     private final String schoolId;
     private final String siteOrigin;
 
     public SchoolIdentity(@Value("${app.school.id:}") String schoolId,
-                          @Value("${app.school.site-origin:}") String siteOrigin) {
+                          @Value("${app.school.site-origin:}") String siteOrigin,
+                          @Value("${app.security.frontend-origin:}") String frontendOrigin) {
         this.schoolId = normalizeSchoolId(schoolId);
-        this.siteOrigin = normalizeOrigin(siteOrigin);
+        this.siteOrigin = normalizeOrigin(siteOrigin, frontendOrigin);
+    }
+
+    /** For tests and callers that configure the origin directly. */
+    public SchoolIdentity(String schoolId, String siteOrigin) {
+        this(schoolId, siteOrigin, "");
     }
 
     private static String normalizeSchoolId(String configured) {
@@ -56,17 +65,35 @@ public class SchoolIdentity {
      * registry verified, and the aggregator would reject the school rather than guess what was
      * meant.
      */
-    private static String normalizeOrigin(String configured) {
+    private static String normalizeOrigin(String configured, String frontendOrigin) {
         if (!StringUtils.hasText(configured)) {
             return null;
         }
+        // site-origin defaults to the frontend origin, which on a development machine is
+        // http://localhost:5173. Refusing to start over an inherited value would make a dev
+        // deployment unbootable for a surface it never asked to publish, so an unusable *default*
+        // means "no v1 surface" -- the supported empty state -- while an explicitly configured
+        // value that cannot work is still a startup failure.
+        boolean inherited = configured.trim().equals(frontendOrigin == null ? "" : frontendOrigin.trim());
         URI uri;
         try {
             uri = new URI(configured.trim());
         } catch (URISyntaxException error) {
+            if (inherited) {
+                log.warn("app.school.site-origin defaulted to a frontend origin that is not a URL"
+                    + " ({}); publishing no v1 surface. Set APP_SCHOOL_SITE_ORIGIN to publish one.",
+                    configured);
+                return null;
+            }
             throw new IllegalStateException("app.school.site-origin is not a URL: " + configured, error);
         }
         if (!"https".equals(uri.getScheme()) || uri.getHost() == null) {
+            if (inherited) {
+                log.warn("app.school.site-origin defaulted to a non-https frontend origin ({});"
+                    + " publishing no v1 surface. Set APP_SCHOOL_SITE_ORIGIN to publish one.",
+                    configured);
+                return null;
+            }
             throw new IllegalStateException(
                 "app.school.site-origin must be an https origin, got: " + configured);
         }
