@@ -523,7 +523,7 @@ public class SecurityConfig {
      * a retry is worth making. Reporting a provider outage as a cancellation left the person with
      * no explanation for something that was never their doing.
      */
-    private static String mobileAuthFailureError(AuthenticationException exception) {
+    static String mobileAuthFailureError(AuthenticationException exception) {
         if (exception instanceof OAuth2AuthenticationException oauth2Exception) {
             String code = oauth2Exception.getError().getErrorCode();
             if (LoginEligibilityPolicy.EMAIL_DOMAIN_NOT_ALLOWED.equals(code)
