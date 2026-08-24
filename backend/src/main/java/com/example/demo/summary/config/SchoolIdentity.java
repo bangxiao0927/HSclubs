@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -35,6 +36,8 @@ public class SchoolIdentity {
     private final String schoolId;
     private final String siteOrigin;
 
+    // Two constructors, so the container is told which one to use rather than left to guess.
+    @Autowired
     public SchoolIdentity(@Value("${app.school.id:}") String schoolId,
                           @Value("${app.school.site-origin:}") String siteOrigin,
                           @Value("${app.security.frontend-origin:}") String frontendOrigin) {
