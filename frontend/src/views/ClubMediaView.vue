@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchClubById } from '../services/clubService'
@@ -499,6 +499,37 @@ const isDeletingPost = (postId: number) => deletingPostIds.value.has(postId)
 const isPinningPost = (postId: number) => pinningPostIds.value.has(postId)
 const isDeletingComment = (commentId: number) => deletingCommentIds.value.has(commentId)
 
+const deleteConfirmationPost = ref<ClubPost | null>(null)
+const deleteCancelButton = ref<HTMLButtonElement | null>(null)
+let deleteDialogTrigger: HTMLElement | null = null
+
+const requestDeletePost = (post: ClubPost, event: MouseEvent) => {
+  if (isDeletingPost(post.id)) {
+    return
+  }
+  deleteDialogTrigger = event.currentTarget as HTMLElement
+  deleteConfirmationPost.value = post
+  void nextTick(() => deleteCancelButton.value?.focus())
+}
+
+const closeDeleteConfirmation = (restoreFocus = true) => {
+  deleteConfirmationPost.value = null
+  if (restoreFocus) {
+    const trigger = deleteDialogTrigger
+    void nextTick(() => trigger?.focus())
+  }
+  deleteDialogTrigger = null
+}
+
+const confirmDeletePost = () => {
+  const postId = deleteConfirmationPost.value?.id
+  if (postId === undefined) {
+    return
+  }
+  closeDeleteConfirmation()
+  void handleDeletePost(postId)
+}
+
 const handleDeletePost = async (postId: number) => {
   if (isDeletingPost(postId)) {
     return
@@ -738,6 +769,7 @@ onBeforeUnmount(() => {
 
 watch(routeClubId, (nextClubId, previousClubId) => {
   if (nextClubId !== previousClubId) {
+    closeDeleteConfirmation(false)
     resetPublishContext()
   }
 })
@@ -887,7 +919,7 @@ watch(
                 type="button"
                 class="mv-post-delete"
                 :disabled="isDeletingPost(post.id)"
-                @click="handleDeletePost(post.id)"
+                @click="requestDeletePost(post, $event)"
               >
                 Delete post
               </button>
@@ -958,6 +990,40 @@ watch(
         <button type="button" :disabled="!hasNextPage" @click="goToPage(page + 1)">Next</button>
       </nav>
     </template>
+
+    <div
+      v-if="deleteConfirmationPost"
+      class="mv-delete-overlay"
+      role="presentation"
+      @click.self="closeDeleteConfirmation()"
+      @keydown.esc="closeDeleteConfirmation()"
+    >
+      <section
+        class="mv-delete-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="mv-delete-dialog-title"
+        aria-describedby="mv-delete-dialog-description"
+      >
+        <h2 id="mv-delete-dialog-title" class="mv-delete-dialog-title">Delete post?</h2>
+        <p id="mv-delete-dialog-description" class="mv-delete-dialog-description">
+          “{{ deleteConfirmationPost.title }}” will be permanently deleted. This action cannot be undone.
+        </p>
+        <div class="mv-delete-dialog-actions">
+          <button
+            ref="deleteCancelButton"
+            type="button"
+            class="mv-delete-cancel"
+            @click="closeDeleteConfirmation()"
+          >
+            Cancel
+          </button>
+          <button type="button" class="mv-delete-confirm" @click="confirmDeletePost">
+            Delete post
+          </button>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -1112,6 +1178,63 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.mv-delete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.64);
+}
+
+.mv-delete-dialog {
+  width: min(100%, 430px);
+  border: 1px solid var(--mv-border);
+  border-radius: 22px;
+  padding: 1.4rem;
+  background: var(--mv-surface-card-strong);
+  box-shadow: var(--mv-shadow-card);
+}
+
+.mv-delete-dialog-title {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.mv-delete-dialog-description {
+  margin: 0.65rem 0 1.25rem;
+  color: var(--mv-text-soft);
+  overflow-wrap: anywhere;
+}
+
+.mv-delete-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.mv-delete-cancel,
+.mv-delete-confirm {
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 0.55rem 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mv-delete-cancel {
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface-muted);
+  color: var(--mv-text-soft);
+}
+
+.mv-delete-confirm {
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  background: var(--mv-status-danger);
+  color: var(--mv-surface-card-strong);
 }
 
 .mv-pin-toggle,
@@ -1322,6 +1445,26 @@ watch(
   .mv-pagination button {
     flex: 1 1 auto;
     text-align: center;
+  }
+
+  .mv-delete-overlay {
+    place-items: end center;
+    padding: 0;
+  }
+
+  .mv-delete-dialog {
+    width: 100%;
+    border-radius: 22px 22px 0 0;
+    padding: 1.25rem max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  }
+
+  .mv-delete-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .mv-delete-cancel,
+  .mv-delete-confirm {
+    width: 100%;
   }
 }
 </style>

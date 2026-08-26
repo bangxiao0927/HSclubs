@@ -448,6 +448,7 @@ describe('ClubMediaView pagination', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('You do not have access to delete this post')
 
@@ -1165,6 +1166,30 @@ describe('ClubMediaView post and comment deletion', () => {
     expect(cards[1]!.find('.mv-post-delete').exists()).toBe(false)
   })
 
+  it('asks for confirmation before deleting a post and allows cancellation', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Tournament recap', viewerCanDelete: true })], total: 1 }),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+
+    const dialog = wrapper.find('[role="alertdialog"]')
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.text()).toContain('Tournament recap')
+    expect(dialog.attributes('aria-modal')).toBe('true')
+    expect(deleteClubPostMock).not.toHaveBeenCalled()
+
+    await wrapper.find('.mv-delete-cancel').trigger('click')
+
+    expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+    expect(deleteClubPostMock).not.toHaveBeenCalled()
+    expect(wrapper.find('li.mv-post-card').exists()).toBe(true)
+  })
+
   it('deletes a post, backfills the current page from the server, and removes it from the feed without a manual reload', async () => {
     fetchClubByIdMock.mockResolvedValue(buildClub())
     fetchClubMediaFeedMock.mockResolvedValueOnce(
@@ -1177,6 +1202,7 @@ describe('ClubMediaView post and comment deletion', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     expect(deleteClubPostMock).toHaveBeenCalledWith('1', 1)
@@ -1197,6 +1223,7 @@ describe('ClubMediaView post and comment deletion', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('You do not have access to delete this post')
@@ -1269,6 +1296,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
@@ -1311,6 +1339,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(2, '1', 0, 100)
@@ -1336,6 +1365,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     expect(wrapper.text()).toContain('Post 2')
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(3)
@@ -1372,6 +1402,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     expect(fetchClubMediaFeedMock).toHaveBeenNthCalledWith(3, '1', 0, 2)
@@ -1391,6 +1422,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     expect(fetchClubMediaFeedMock).toHaveBeenCalledTimes(2)
@@ -1427,6 +1459,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     // Deleting post 1 leaves post 2 on the page (never an empty list), so the Next button stays
     // mounted and enabled while its own backfill fetch for page 0 is still in flight below.
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Post 2')
 
@@ -1483,10 +1516,12 @@ describe('ClubMediaView post deletion pagination regressions', () => {
 
     const deleteButtons = () => wrapper.findAll('.mv-post-delete')
     await deleteButtons()[0]!.trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Post 2')
 
     await deleteButtons()[0]!.trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     // Post 2's newer backfill resolves first: only Post 3 remains.
@@ -1543,6 +1578,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
 
     // Delete is clicked but its own request has not resolved yet.
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     // Next is clicked while the delete is still in flight: load() bumps request tracking for
@@ -1597,6 +1633,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     const nextPageDeferred = createDeferred<ClubPostFeedPage>()
@@ -1648,6 +1685,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
     // The delete resolves immediately, so backfillCurrentPageAfterPostDeletion starts (and
     // captures club id '1') right away; its own fetch is left in flight (backfillDeferred).
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     fetchClubMediaFeedMock.mockResolvedValueOnce(
@@ -1691,6 +1729,7 @@ describe('ClubMediaView post deletion pagination regressions', () => {
 
     // Delete is clicked but its own request has not resolved yet.
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     // The viewer navigates to a different club (default page/size, same as club 1's) while the
@@ -2158,6 +2197,7 @@ describe('ClubMediaView view-state ownership across navigations', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     await router.push('/clubs/2/media?page=0&size=2')
@@ -2332,6 +2372,7 @@ describe('ClubMediaView view-state ownership across navigations', () => {
     await flushPromises()
 
     await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
     await flushPromises()
 
     wrapper.unmount()
