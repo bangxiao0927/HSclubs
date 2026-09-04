@@ -9,6 +9,7 @@ import java.time.Instant;
 import com.example.demo.security.CustomOAuth2UserService;
 import com.example.demo.security.CustomOidcUserService;
 import com.example.demo.security.LoginEligibilityPolicy;
+import com.example.demo.auth.internal.InternalReviewAccountProperties;
 import com.example.demo.mobileauth.MobileAuthProperties;
 import com.example.demo.mobileauth.MobileAuthService;
 import com.example.demo.mobileauth.PendingMobileAuth;
@@ -104,7 +105,11 @@ import org.springframework.web.util.UriComponentsBuilder;
  */
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({SecurityProperties.class, MobileAuthProperties.class})
+@EnableConfigurationProperties({
+    SecurityProperties.class,
+    MobileAuthProperties.class,
+    InternalReviewAccountProperties.class
+})
 public class SecurityConfig {
 
     private final SecurityProperties securityProperties;
@@ -236,6 +241,9 @@ public class SecurityConfig {
                 // send back.
                 resolveAuthorizationRequestBaseUri() + "/**",
                 "/api/auth/*/callback",
+                // A signed-out browser has no CSRF cookie yet. This endpoint accepts JSON only,
+                // and the first-party CORS policy rejects cross-origin credentialed requests.
+                "/api/auth/internal/login",
                 "/oauth2/**",
                 "/login/**",
                 // Complete is a POST from the school's own WKWebView, which has no CSRF cookie of

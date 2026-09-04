@@ -160,6 +160,47 @@ external session store), so every existing session is dropped by that restart an
 ever change this setting without a restart, expect existing sessions from a now-disallowed
 domain to survive until they expire.
 
+### Optional internal App Review account
+
+A deployment can expose one fixed email/password account for App Review. This is not public
+registration and is disabled unless both the email and a BCrypt password hash are configured.
+Never put the plaintext password in the repository or in `backend/.env`.
+
+Generate a long random password, save it in the private App Store Connect review notes, and hash
+it locally:
+
+```bash
+htpasswd -bnBC 12 '' 'choose-a-long-random-password' | tr -d ':\n'
+```
+
+Then add the result to the server's private `backend/.env`:
+
+```bash
+APP_INTERNAL_REVIEW_EMAIL=app-review@example.edu
+APP_INTERNAL_REVIEW_DISPLAY_NAME=App Review
+APP_INTERNAL_REVIEW_PASSWORD_HASH=$2y$12$...
+```
+
+Restart the backend. `GET /api/auth/providers` then includes `internal`, and `/auth` shows a
+"Sign in with password" option beneath Google. It opens `/auth/password`, where the reviewer enters
+the supplied credentials. The endpoint accepts JSON only, applies BCrypt verification, returns a
+generic error for either a wrong email or password, limits repeated failures, rotates the session
+before authentication, and creates the same normal application session used by Google login.
+
+Important: a review account helps Apple access protected features, but it does **not** by itself
+satisfy App Review guideline 4.8 when Google is offered as a third-party/social login. Whether
+the app qualifies for one of Apple's exceptions is a separate App Review decision.
+
+Suggested App Review notes (put the actual email and plaintext password in App Store Connect,
+never in this repository):
+
+```text
+The app can be browsed without signing in. Sign-in is required for Profile, club applications,
+and publishing or managing club content. On the sign-in page, choose "Sign in with password",
+then use the review email and password supplied below. The account has no two-factor
+authentication or additional verification step.
+```
+
 ### Production session cookie
 
 Set this on any HTTPS deployment:

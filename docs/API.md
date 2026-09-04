@@ -190,6 +190,27 @@ List available OAuth providers.
 
 Response: `[{ "id": "google", "name": "Google", "authorizationUrl": "/api/auth/authorize/google" }]`
 
+When the optional internal review account is configured, the response also includes:
+
+```json
+{ "id": "internal", "name": "Password", "authorizationUrl": "/api/auth/internal/login" }
+```
+
+### POST /api/auth/internal/login
+
+Authenticates the single deployment-owned App Review account. The endpoint exists but returns 404
+when the account is not configured.
+
+Request:
+
+```json
+{ "email": "app-review@example.edu", "password": "the password supplied in review notes" }
+```
+
+Returns the same `AuthUser` body as `GET /api/auth/me` and establishes the normal application
+session. Wrong credentials return 401 without revealing which field was wrong; repeated failures
+return 429 temporarily.
+
 ### GET /api/auth/me
 Return current authenticated user profile.
 

@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.example.demo.auth.config.SecurityProperties;
+import com.example.demo.auth.internal.InternalReviewAccountProperties;
+import com.example.demo.auth.internal.InternalReviewAuthService;
 import com.example.demo.auth.model.AuthProvider;
 import com.example.demo.auth.model.AuthUser;
 import com.example.demo.auth.mapper.OAuthUserMapper;
@@ -29,6 +31,7 @@ public class AuthService {
     private final OAuthUserMapper oAuthUserMapper;
     private final AuthenticatedUserResolver authenticatedUserResolver;
     private final LoginEligibilityPolicy loginEligibilityPolicy;
+    private final InternalReviewAccountProperties internalReviewAccount;
     private final String authorizationRequestBaseUri;
 
     public AuthService(ClientRegistrationRepository clientRegistrationRepository,
@@ -37,7 +40,8 @@ public class AuthService {
                        SecurityProperties securityProperties,
                        UserService userService,
                        AuthenticatedUserResolver authenticatedUserResolver,
-                       LoginEligibilityPolicy loginEligibilityPolicy) {
+                       LoginEligibilityPolicy loginEligibilityPolicy,
+                       InternalReviewAccountProperties internalReviewAccount) {
         if (clientRegistrationRepository instanceof Iterable<?>) {
             this.clientRegistrations = (Iterable<ClientRegistration>) clientRegistrationRepository;
         } else {
@@ -49,6 +53,7 @@ public class AuthService {
         this.oAuthUserMapper = oAuthUserMapper;
         this.authenticatedUserResolver = authenticatedUserResolver;
         this.loginEligibilityPolicy = loginEligibilityPolicy;
+        this.internalReviewAccount = internalReviewAccount;
         this.authorizationRequestBaseUri = resolveAuthorizationRequestBaseUri(securityProperties);
     }
 
@@ -58,6 +63,10 @@ public class AuthService {
             String authorizationPath = buildAuthorizationPath(registration.getRegistrationId());
             providers.add(new AuthProvider(registration.getRegistrationId(),
                 registration.getClientName(), authorizationPath));
+        }
+        if (internalReviewAccount.isConfigured()) {
+            providers.add(new AuthProvider(
+                InternalReviewAuthService.REGISTRATION_ID, "Password", "/api/auth/internal/login"));
         }
         return providers;
     }

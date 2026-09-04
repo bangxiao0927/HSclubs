@@ -5,6 +5,7 @@ import type { AuthProvider, AuthUser } from '../types/auth'
 import {
   fetchAuthProviders,
   fetchAuthenticatedUser,
+  loginWithReviewAccount as apiLoginWithReviewAccount,
   logout as apiLogout,
 } from '../services/authService'
 import { buildApiUrl, setUnauthorizedHandler } from '../services/httpClient'
@@ -32,8 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
       providersError.value = null
       providersLoaded.value = true
     } catch (error) {
-      providersError.value =
-        error instanceof Error ? error.message : 'Unable to load providers'
+      providersError.value = error instanceof Error ? error.message : 'Unable to load providers'
     } finally {
       providersLoading.value = false
     }
@@ -71,8 +71,7 @@ export const useAuthStore = defineStore('auth', () => {
       // failed request on cold load (offline blip, backend restart, proxy 502) logged the
       // student out of a still-valid session and bounced them off the page they were on, so the
       // previous user is deliberately kept here.
-      userError.value =
-        error instanceof Error ? error.message : 'Unable to verify session'
+      userError.value = error instanceof Error ? error.message : 'Unable to verify session'
     } finally {
       userLoading.value = false
       hasCheckedSession.value = true
@@ -114,8 +113,7 @@ export const useAuthStore = defineStore('auth', () => {
   const beginLogin = (providerId: string, redirectTarget?: string | null) => {
     const sanitizedId = providerId?.trim()
     if (!sanitizedId) {
-      providersError.value =
-        'No OAuth provider was selected. Please refresh and try again.'
+      providersError.value = 'No OAuth provider was selected. Please refresh and try again.'
       return
     }
     const provider = providers.value.find((item) => item.id === sanitizedId)
@@ -144,6 +142,12 @@ export const useAuthStore = defineStore('auth', () => {
       : authorizationUrl
   }
 
+  const loginWithReviewAccount = async (email: string, password: string): Promise<void> => {
+    currentUser.value = normalizeUser(await apiLoginWithReviewAccount(email, password))
+    hasCheckedSession.value = true
+    userError.value = null
+  }
+
   const logout = async () => {
     try {
       await apiLogout()
@@ -152,8 +156,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Neither caller catches (App.vue's header button, ProfileView's), so rethrowing here
       // only produced an unhandled rejection. The local session is cleared either way below;
       // record why the server call failed instead of crashing the handler.
-      userError.value =
-        error instanceof Error ? error.message : 'Sign-out request failed'
+      userError.value = error instanceof Error ? error.message : 'Sign-out request failed'
     } finally {
       // Signing out must always work client-side. Clearing only on success meant a 401 on an
       // already-dead session, or any network blip, left the app showing the user as signed in
@@ -184,6 +187,7 @@ export const useAuthStore = defineStore('auth', () => {
     ensureSessionChecked,
     bootstrap,
     beginLogin,
+    loginWithReviewAccount,
     logout,
   }
 })

@@ -128,6 +128,11 @@ const router = createRouter({
       name: 'auth-callback',
       component: () => import('../views/AuthCallbackView.vue'),
     },
+    {
+      path: '/auth/password',
+      name: 'auth-password',
+      component: () => import('../views/PasswordSignInView.vue'),
+    },
 
     // ---- 404 (must be last) ----
     {
@@ -141,6 +146,7 @@ const router = createRouter({
 const termsBypassRouteNames = new Set([
   'auth-choice',
   'auth-callback',
+  'auth-password',
   'accept-terms',
   'terms',
   'privacy',
@@ -184,7 +190,8 @@ router.beforeEach(async (to) => {
     // after the path. Resolving first and re-expressing the result as
     // `{ path, query, hash }` keeps the query and hash intact for both the
     // bare-string and object-shaped (`{ path, query }`) cases.
-    const destination = resolvePostAuthRoute(authStore.currentUser, to.query.redirect) ?? DEFAULT_POST_AUTH_PATH
+    const destination =
+      resolvePostAuthRoute(authStore.currentUser, to.query.redirect) ?? DEFAULT_POST_AUTH_PATH
     const resolved = router.resolve(destination)
     return {
       path: resolved.path,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { schoolTemplate } from '../config/schoolTemplate'
@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/auth'
 import BackButton from '../components/BackButton.vue'
 
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 const brandName = schoolTemplate.brandName
 const { providers, providersLoading, providersError } = storeToRefs(authStore)
@@ -50,8 +51,20 @@ const redirectTarget = computed(() => {
   return typeof redirect === 'string' ? redirect : null
 })
 
+const reviewAccountEnabled = computed(() =>
+  providers.value.some((provider) => provider.id === 'internal'),
+)
+const oauthProviders = computed(() =>
+  providers.value.filter((provider) => provider.id !== 'internal'),
+)
+
 const handleProviderLogin = (providerId: string) => {
   authStore.beginLogin(providerId, redirectTarget.value)
+}
+
+const handlePasswordLogin = () => {
+  const query = redirectTarget.value ? { redirect: redirectTarget.value } : undefined
+  router.push({ path: '/auth/password', query })
 }
 </script>
 
@@ -61,8 +74,7 @@ const handleProviderLogin = (providerId: string) => {
       <p class="page-label">{{ intentLabel }}</p>
       <h1>Continue with your school account</h1>
       <p class="description">
-        Use OAuth2 to sign in safely with your school-provided Google account. We only request basic
-        profile details so you can access {{ brandName }} across devices.
+        Use your school-provided Google account to access {{ brandName }} across devices.
       </p>
       <div class="alerts">
         <p v-if="routeError" class="alert error">{{ routeError }}</p>
@@ -77,7 +89,7 @@ const handleProviderLogin = (providerId: string) => {
       </p>
       <div v-if="!providersLoading && !providersError" class="provider-list">
         <button
-          v-for="provider in providers"
+          v-for="provider in oauthProviders"
           :key="provider.id"
           class="provider-btn"
           type="button"
@@ -85,6 +97,15 @@ const handleProviderLogin = (providerId: string) => {
         >
           <span class="provider-icon" aria-hidden="true">{{ provider.name.charAt(0) }}</span>
           Sign in with {{ provider.name }}
+        </button>
+        <button
+          v-if="reviewAccountEnabled"
+          class="provider-btn"
+          type="button"
+          @click="handlePasswordLogin"
+        >
+          <span class="provider-icon password-icon" aria-hidden="true">P</span>
+          Sign in with password
         </button>
         <p v-if="providers.length === 0" class="alert muted">
           No OAuth providers are configured yet.
@@ -171,6 +192,10 @@ const handleProviderLogin = (providerId: string) => {
 .provider-btn:hover {
   transform: translateY(-2px);
   box-shadow: var(--mv-shadow-elevated);
+}
+
+.password-icon {
+  color: var(--mv-gold);
 }
 
 .terms-notice {

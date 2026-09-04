@@ -7,8 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // relying on the router's auto-registered global component), so the mocked
 // module needs to provide a working stand-in: a plain anchor rendering its
 // `to` prop as `href`, which is enough to assert on the legal links below.
-const { RouterLinkStub } = vi.hoisted(() => {
+const { RouterLinkStub, routerPush } = vi.hoisted(() => {
   return {
+    routerPush: vi.fn(),
     RouterLinkStub: {
       name: 'RouterLink',
       props: ['to'],
@@ -25,12 +26,13 @@ const { RouterLinkStub } = vi.hoisted(() => {
 vi.mock('vue-router', () => ({
   RouterLink: RouterLinkStub,
   useRoute: vi.fn(),
-  useRouter: vi.fn(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() })),
+  useRouter: vi.fn(() => ({ push: routerPush, back: vi.fn(), replace: vi.fn() })),
 }))
 
 vi.mock('../services/authService', () => ({
   fetchAuthProviders: vi.fn(),
   fetchAuthenticatedUser: vi.fn(),
+  loginWithReviewAccount: vi.fn(),
   logout: vi.fn(),
 }))
 
@@ -54,6 +56,11 @@ const microsoftProvider: AuthProvider = {
   name: 'Microsoft',
   authorizationUrl: '/oauth2/authorization/microsoft',
 }
+const reviewProvider: AuthProvider = {
+  id: 'internal',
+  name: 'Password',
+  authorizationUrl: '/api/auth/internal/login',
+}
 
 const setRouteQuery = (query: Record<string, string>) => {
   useRouteMock.mockReturnValue({ query } as ReturnType<typeof useRoute>)
@@ -74,10 +81,46 @@ const createDeferred = <T>() => {
 beforeEach(() => {
   setActivePinia(createPinia())
   fetchAuthProvidersMock.mockReset()
+  routerPush.mockReset()
   setRouteQuery({})
 })
 
 describe('AuthChoiceView', () => {
+  it('shows a password sign-in option only when the backend enables that account', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider, reviewProvider])
+    const wrapper = mount(AuthChoiceView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Sign in with Google')
+    expect(wrapper.text()).toContain('Sign in with password')
+    expect(wrapper.find('input[type="email"]').exists()).toBe(false)
+    expect(wrapper.find('input[type="password"]').exists()).toBe(false)
+    expect(wrapper.findAll('button.provider-btn')).toHaveLength(2)
+  })
+
+  it('does not expose the password option on an ordinary school deployment', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider])
+    const wrapper = mount(AuthChoiceView)
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Sign in with password')
+  })
+
+  it('opens the separate password page and preserves the requested destination', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider, reviewProvider])
+    setRouteQuery({ redirect: '/clubs/9' })
+    const wrapper = mount(AuthChoiceView)
+    await flushPromises()
+
+    const passwordButton = wrapper.findAll('button.provider-btn')[1]!
+    await passwordButton.trigger('click')
+
+    expect(routerPush).toHaveBeenCalledWith({
+      path: '/auth/password',
+      query: { redirect: '/clubs/9' },
+    })
+  })
+
   it('renders one enabled provider button per configured provider, with no checkbox gating them', async () => {
     fetchAuthProvidersMock.mockResolvedValue([googleProvider, microsoftProvider])
     const wrapper = mount(AuthChoiceView)

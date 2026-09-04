@@ -3,7 +3,8 @@ import { buildApiUrl } from './httpClient'
 
 const withCredentials = (init?: RequestInit): RequestInit => ({
   credentials: 'include',
-  ...init})
+  ...init,
+})
 
 const readErrorMessage = async (response: Response) => {
   const text = await response.text()
@@ -34,13 +35,37 @@ export const fetchAuthenticatedUser = async (): Promise<AuthUser | null> => {
   return (await response.json()) as AuthUser
 }
 
+export const loginWithReviewAccount = async (
+  email: string,
+  password: string,
+): Promise<AuthUser> => {
+  const response = await fetch(
+    buildApiUrl('/api/auth/internal/login'),
+    withCredentials({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    }),
+  )
+
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Invalid email or password.')
+    if (response.status === 429)
+      throw new Error('Too many sign-in attempts. Please try again later.')
+    throw new Error(await readErrorMessage(response))
+  }
+  return (await response.json()) as AuthUser
+}
+
 export const logout = async (): Promise<void> => {
   const response = await fetch(
     buildApiUrl('/api/auth/logout'),
     withCredentials({
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'}}),
+        'Content-Type': 'application/json',
+      },
+    }),
   )
 
   if (!response.ok && response.status !== 204) {

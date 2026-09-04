@@ -55,6 +55,12 @@ app:
       # Comma-separated, e.g. APP_ALLOWED_EMAIL_DOMAINS=students.example.edu,example.edu
       allowed-email-domains: ${APP_ALLOWED_EMAIL_DOMAINS:}
       require-verified-email: ${APP_REQUIRE_VERIFIED_EMAIL:false}
+    # Optional password account for App Review. It is not a general registration mechanism and
+    # appears on /auth only when both values are set. Store only a BCrypt hash, never plaintext.
+    internal-review-account:
+      email: ${APP_INTERNAL_REVIEW_EMAIL:}
+      display-name: ${APP_INTERNAL_REVIEW_DISPLAY_NAME:App Review}
+      password-hash: ${APP_INTERNAL_REVIEW_PASSWORD_HASH:}
   upload:
     dir: ${APP_UPLOAD_DIR:uploads}
   avatar:
