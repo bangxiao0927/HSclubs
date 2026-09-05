@@ -147,6 +147,56 @@ describe('ClubDetailView club GET deduplication', () => {
   })
 })
 
+describe('ClubDetailView page sections', () => {
+  it('drops the generic "What we run" card that only restated the hero description', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+
+    const wrapper = await mountAtClubRoute()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('What we run')
+    expect(wrapper.find('.spotlight').exists()).toBe(false)
+  })
+
+  it('shows the president update and achievements only when the club has them', async () => {
+    fetchClubByIdMock.mockResolvedValue(
+      buildClub({ scheduleNote: 'No meeting next week.', achievements: ['State finalists'] }),
+    )
+
+    const wrapper = await mountAtClubRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.schedule-note').text()).toContain('No meeting next week.')
+    expect(wrapper.find('.achievements').text()).toContain('State finalists')
+  })
+
+  it('omits both cards, and the empty "no achievements" copy, when the club filled in neither', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ achievements: [] }))
+
+    const wrapper = await mountAtClubRoute()
+    await flushPromises()
+
+    expect(wrapper.find('.club-body').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('No achievements logged yet')
+  })
+
+  it('places "Also trending" after the media feed, so the club\u2019s own posts come first', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchAllClubsMock.mockResolvedValue([buildClub({ id: 2, name: 'Robotics Club' })])
+
+    const wrapper = await mountAtClubRoute()
+    await flushPromises()
+
+    const related = wrapper.find('.related')
+    expect(related.text()).toContain('Also trending')
+    expect(related.text()).toContain('Robotics Club')
+    expect(
+      wrapper.find('#media').element.compareDocumentPosition(related.element)
+        & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0)
+  })
+})
+
 const stubScrollIntoView = () => {
   const spy = vi.fn()
   const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView')

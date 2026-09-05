@@ -281,50 +281,48 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <section class="club-body">
-      <div class="spotlight">
-        <h2>What we run</h2>
-        <p>
-          {{ club.description }} Use this section to share expectations, recruiting notes,
-          showcase plans, and advisor guidance for this club.
-        </p>
-        <h3>Recent achievements</h3>
-        <div v-if="club.scheduleNote" class="schedule-note">
-          <h3>President update</h3>
-          <p>{{ club.scheduleNote }}</p>
-        </div>
-        <ul v-if="club.achievements && club.achievements.length">
+    <!-- Only what a club lead actually wrote: the generic "What we run" card repeated the
+         description already in the hero, so it is gone and these render only when filled in. -->
+    <section
+      v-if="club.scheduleNote || (club.achievements && club.achievements.length)"
+      class="club-body"
+    >
+      <div v-if="club.scheduleNote" class="schedule-note">
+        <h2>President update</h2>
+        <p>{{ club.scheduleNote }}</p>
+      </div>
+
+      <div v-if="club.achievements && club.achievements.length" class="achievements">
+        <h2>Recent achievements</h2>
+        <ul>
           <li v-for="achievement in club.achievements" :key="achievement">
             {{ achievement }}
           </li>
         </ul>
-        <p v-else>No achievements logged yet.</p>
-        <button type="button" :disabled="!club.contactEmail">
-          Email {{ club.contactEmail || 'advisor' }} →
-        </button>
       </div>
-
-      <aside class="related" v-if="relatedClubs.length">
-        <h3>Also trending</h3>
-        <ul>
-          <li v-for="item in relatedClubs" :key="item.id">
-            <RouterLink :to="`/clubs/${item.id}`" class="related-link">
-              <div class="club-avatar small">
-                <img :src="clubImage(item)" :alt="`${item.name} avatar`" loading="lazy" />
-              </div>
-              <div>
-                <span>{{ item.name }}</span>
-                <small>{{ item.memberCount }} members</small>
-              </div>
-            </RouterLink>
-          </li>
-        </ul>
-      </aside>
     </section>
 
     <section id="media" ref="mediaSectionRef" class="club-media-section">
       <ClubMediaView embedded :snapshot="club" />
     </section>
+
+    <!-- After the club's own media: leaving the club is the last thing this page offers. -->
+    <aside class="related" v-if="relatedClubs.length">
+      <h2>Also trending</h2>
+      <ul>
+        <li v-for="item in relatedClubs" :key="item.id">
+          <RouterLink :to="`/clubs/${item.id}`" class="related-link">
+            <div class="club-avatar small">
+              <img :src="clubImage(item)" :alt="`${item.name} avatar`" loading="lazy" />
+            </div>
+            <div>
+              <span>{{ item.name }}</span>
+              <small>{{ item.memberCount }} members</small>
+            </div>
+          </RouterLink>
+        </li>
+      </ul>
+    </aside>
   </section>
 
   <section v-else class="club-detail page-shell empty-state">
@@ -569,23 +567,30 @@ onBeforeUnmount(() => {
 
 .club-body {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: clamp(1rem, 4vw, 2rem);
   align-items: flex-start;
 }
 
-.spotlight {
+.schedule-note,
+.achievements {
   border-radius: 28px;
   border: 1px solid var(--mv-border);
-  padding: clamp(1.5rem, 4vw, 2.75rem);
+  padding: clamp(1.25rem, 3vw, 2rem);
   background: var(--mv-surface-card-strong);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
   box-shadow: var(--mv-shadow-card);
 }
 
-.spotlight ul {
+.schedule-note h2,
+.achievements h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.achievements ul {
   margin: 0;
   padding-left: 1.25rem;
   color: var(--mv-text);
@@ -594,38 +599,10 @@ onBeforeUnmount(() => {
   gap: 0.4rem;
 }
 
-.schedule-note {
-  border-radius: 18px;
-  border: 1px solid var(--mv-border);
-  background: var(--mv-surface-soft);
-  padding: 1rem 1.1rem;
-}
-
-.schedule-note h3,
 .schedule-note p {
   margin: 0;
-}
-
-.schedule-note p {
-  margin-top: 0.4rem;
   color: var(--mv-text-soft);
   white-space: pre-wrap;
-}
-
-.spotlight button {
-  align-self: flex-start;
-  border-radius: 20px;
-  border: 1px solid var(--mv-border-strong);
-  background: var(--mv-surface-accent);
-  color: var(--mv-gold);
-  padding: 0.65rem 1.6rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.spotlight button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .related {
@@ -636,21 +613,44 @@ onBeforeUnmount(() => {
   box-shadow: var(--mv-shadow-card);
 }
 
+.related h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
 .related ul {
   list-style: none;
   margin: 1rem 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 0.75rem;
 }
-
 
 .related-link {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+  padding: 0.5rem;
+  border-radius: 16px;
   color: inherit;
+}
+
+.related-link:hover,
+.related-link:focus-visible {
+  background: var(--mv-surface-accent);
+}
+
+.related-link > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.related-link span {
+  overflow-wrap: anywhere;
+  font-weight: 600;
 }
 
 .related small {
@@ -665,12 +665,6 @@ onBeforeUnmount(() => {
 
 .empty-state {
   gap: 0.75rem;
-}
-
-@media (max-width: 900px) {
-  .club-body {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 640px) {
@@ -744,16 +738,8 @@ onBeforeUnmount(() => {
     height: 20px;
   }
 
-  .spotlight {
-    padding: 1.25rem;
-    border-radius: 22px;
-  }
-
-  .spotlight button {
-    align-self: stretch;
-    min-height: 48px;
-  }
-
+  .schedule-note,
+  .achievements,
   .related {
     padding: 1.25rem;
     border-radius: 20px;
