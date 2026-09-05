@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import com.example.demo.auth.config.SecurityProperties;
+import com.example.demo.auth.internal.InternalReviewAuthService;
 
 /**
  * Decides whether an authenticated OAuth2 account may sign in to this school's site at all.
@@ -50,6 +51,29 @@ public class LoginEligibilityPolicy {
      *                                       OAuth2 failure handler passes to the frontend
      */
     public void verifyEligible(Map<String, Object> attributes) {
+        verifyEligible(null, attributes);
+    }
+
+    /**
+     * The same question, asked about a session that names the provider it came from.
+     *
+     * <p>The optional password account (app.security.internal-review-account.*) is exempt, and
+     * deliberately so: it does not come from an identity provider at all: it exists only because
+     * an operator put an address and a bcrypt hash in this deployment's own environment, which
+     * *is* the decision this policy otherwise makes on their behalf. Without the exemption a
+     * school that restricts sign-in to its own domain gets a reviewer who can sign in and then
+     * can never leave the terms page: the login path does not consult this policy, but
+     * {@code AuthService#acceptTerms} does, so acceptance would 403 forever while
+     * {@code /api/auth/me} kept reporting acceptedTerms=false -- the same silent dead end that
+     * method's own javadoc warns about.
+     *
+     * @param registrationId the provider the session was created through, or null for "unknown",
+     *                       which is treated as an ordinary provider and fully checked
+     */
+    public void verifyEligible(String registrationId, Map<String, Object> attributes) {
+        if (InternalReviewAuthService.REGISTRATION_ID.equals(registrationId)) {
+            return;
+        }
         SecurityProperties.Login login = securityProperties.getLogin();
         String email = emailOf(attributes);
 

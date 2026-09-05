@@ -128,4 +128,29 @@ class LoginEligibilityPolicyTest {
             .verifyEligible(account("student@gmail.com", false)))
             .doesNotThrowAnyException();
     }
+
+    // The password account is provisioned by the operator in this deployment's own environment,
+    // not by an identity provider, so the domain restriction is not its gate. Without this, a
+    // school that restricts sign-in gets a reviewer who can log in and then never gets past the
+    // terms page, because accepting them asks this policy the same question.
+    @Test
+    void theOperatorProvisionedPasswordAccountIsExemptFromTheDomainRestriction() {
+        assertThatCode(() -> policy(List.of("mvla.net"), false)
+            .verifyEligible("internal", account("app-review@hsclubs.net", true)))
+            .doesNotThrowAnyException();
+    }
+
+    // ...and the exemption is that provider alone: naming any other one still gets checked, as
+    // does a session that names none.
+    @Test
+    void everyOtherProviderIsStillChecked() {
+        assertThatThrownBy(() -> policy(List.of("mvla.net"), false)
+            .verifyEligible("google", account("stranger@gmail.com", true)))
+            .isInstanceOf(OAuth2AuthenticationException.class)
+            .hasMessageContaining("email domain");
+        assertThatThrownBy(() -> policy(List.of("mvla.net"), false)
+            .verifyEligible(null, account("stranger@gmail.com", true)))
+            .isInstanceOf(OAuth2AuthenticationException.class)
+            .hasMessageContaining("email domain");
+    }
 }

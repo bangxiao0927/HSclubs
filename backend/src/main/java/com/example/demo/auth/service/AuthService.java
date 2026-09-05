@@ -137,7 +137,9 @@ public class AuthService {
         // The replay below re-creates an oauth_users row from the session principal, so it has
         // to answer the same question the login path does: a session that predates a newly
         // enabled sign-in restriction must not be able to write itself back in through it.
-        loginEligibilityPolicy.verifyEligible(attributes);
+        // Passing the registration id matters for the operator-provisioned password account,
+        // which no sign-in restriction applies to; see LoginEligibilityPolicy.
+        loginEligibilityPolicy.verifyEligible(authentication.getAuthorizedClientRegistrationId(), attributes);
         oAuthUserService.ensureStoredUser(authentication.getAuthorizedClientRegistrationId(), attributes);
         int updated = oAuthUserMapper.acceptTerms(email);
         return updated > 0 || hasAcceptedTerms(email);

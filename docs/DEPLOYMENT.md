@@ -645,13 +645,20 @@ Any reverse proxy works. The requirements the application actually has are:
   the whole `/.well-known/` directory.
 - Send the original scheme through as `X-Forwarded-Proto`, so the backend knows the request
   arrived over HTTPS (see "Production session cookie" above).
+- Set `X-Forwarded-For` to the address the proxy itself observed, **replacing** whatever the
+  client sent. The backend runs with `server.forward-headers-strategy: framework`, so
+  `HttpServletRequest#getRemoteAddr()` returns the *first* entry of that header. Anything that
+  appends to a client-supplied value therefore hands the caller control of the address the
+  application sees, which is what the password sign-in throttle keys on.
 - Terminate TLS.
 
-#### Caddy
+#### Caddy (what this deployment runs)
 
-Caddy is the smaller configuration of the two, because it obtains and renews certificates
-itself and `reverse_proxy` already sets `X-Forwarded-Proto`, `X-Forwarded-For`, and
-`X-Forwarded-Host`.
+Caddy is the proxy the MVHS deployment runs and the one to copy for a new school. It is also the
+smaller configuration, because it obtains and renews certificates itself and `reverse_proxy`
+already sets `X-Forwarded-Proto`, `X-Forwarded-For`, and `X-Forwarded-Host` — and, with no
+`trusted_proxies` configured, it replaces a client-supplied `X-Forwarded-For` rather than
+appending to it, which is the behaviour the bullet above asks for.
 
 Example `/etc/caddy/Caddyfile`:
 
@@ -693,6 +700,13 @@ With this single-origin layout the frontend build needs no absolute API base URL
 
 #### Nginx (alternative)
 
+Only if the host already runs nginx for something else. Note the `X-Forwarded-For` line below:
+it is `$remote_addr`, **not** the usual `$proxy_add_x_forwarded_for`. The usual one appends the
+peer address to whatever the client sent, so the client's own value stays first — and the first
+entry is exactly what the backend reads as the remote address. With `$proxy_add_x_forwarded_for`
+here, anyone can pick the address this application sees by sending the header themselves, which
+defeats the per-address throttle on `POST /api/auth/internal/login`.
+
 Example `/etc/nginx/sites-available/hsclubs`:
 
 ```nginx
@@ -714,7 +728,7 @@ server {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
@@ -723,7 +737,7 @@ server {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         # Required, like the /api/ block above: without the original scheme the backend
         # treats the request as plain HTTP, so JSESSIONID loses its Secure attribute and
         # any absolute URL the app builds during the OAuth handshake comes out as http://.
@@ -735,7 +749,7 @@ server {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
@@ -744,7 +758,7 @@ server {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
