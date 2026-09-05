@@ -81,8 +81,8 @@ const activeCategory = computed(
           :class="{ active: category.title === activeCategory?.title }"
           @click="selectedCategoryTitle = category.title"
         >
-          <span>{{ category.icon }}</span>
-          <span>{{ category.title }}</span>
+          <span aria-hidden="true">{{ category.icon }}</span>
+          <span class="category-pill-title">{{ category.title }}</span>
           <small>{{ category.clubCount }}</small>
         </button>
       </div>
@@ -200,6 +200,7 @@ const activeCategory = computed(
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
+  min-height: 44px;
   padding: 0.7rem 1rem;
   border-radius: 999px;
   border: 1px solid var(--mv-border);
@@ -209,7 +210,13 @@ const activeCategory = computed(
   font-weight: 600;
 }
 
+.category-pill-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .category-pill small {
+  flex-shrink: 0;
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
   background: var(--mv-surface-soft);
@@ -217,9 +224,14 @@ const activeCategory = computed(
 }
 
 .category-pill.active {
-  background: var(--mv-surface-accent);
-  border-color: var(--mv-border-strong);
-  color: var(--mv-gold);
+  border-color: var(--mv-primary-bg);
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+}
+
+.category-pill.active small {
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
 }
 
 .category-clubs {
@@ -352,14 +364,39 @@ const activeCategory = computed(
   color: var(--mv-text-muted);
 }
 
-@media (max-width: 640px) {
-  .category-pill {
-    width: 100%;
-    justify-content: space-between;
-  }
-}
-
 @media (max-width: 720px) {
+  .quiz-link {
+    min-height: 96px;
+    padding: 1.25rem 2.5rem 1.25rem 1.1rem;
+    border-radius: 18px;
+    text-align: left;
+    justify-content: flex-start;
+  }
+
+  /* Two compact columns instead of one full-width pill per category: the six
+     categories stay visible together instead of pushing the club list a full
+     screen down. */
+  .category-picker {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .category-pill {
+    justify-content: flex-start;
+    gap: 0.4rem;
+    padding: 0.6rem 0.7rem;
+    border-radius: 14px;
+    font-size: 0.85rem;
+    line-height: 1.25;
+    text-align: left;
+  }
+
+  .category-pill small {
+    margin-left: auto;
+    font-size: 0.75rem;
+  }
+
   .top-grid {
     grid-template-columns: 1fr;
     gap: 0.85rem;
@@ -373,6 +410,21 @@ const activeCategory = computed(
   .clubs-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .club-avatar.large {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+  }
+
+  .club-description {
+    font-size: 0.9rem;
+    -webkit-line-clamp: 3;
+  }
+
+  .card-meta {
+    font-size: 0.82rem;
   }
 }
 </style>

@@ -318,6 +318,11 @@ describe('ClubMediaView populated feed', () => {
         total: 2,
       }),
     )
+    fetchClubPostCommentsMock.mockResolvedValue([
+      buildComment({ id: 1, postId: 1, body: 'First' }),
+      buildComment({ id: 2, postId: 1, body: 'Second' }),
+      buildComment({ id: 3, postId: 1, body: 'Third' }),
+    ])
 
     const wrapper = await mountAtMediaRoute()
     await flushPromises()
@@ -327,8 +332,8 @@ describe('ClubMediaView populated feed', () => {
     expect(wrapper.text()).toContain('Pinned announcement')
     expect(wrapper.text()).toContain('Regular update')
     expect(wrapper.text()).toContain('Ada Lovelace')
-    expect(wrapper.text()).toContain('Show comments (3)')
-    expect(wrapper.text()).toContain('Show comments (0)')
+    expect(wrapper.text()).toContain('Comments (3)')
+    expect(wrapper.text()).toContain('Comments (0)')
 
     const badges = wrapper.findAll('.mv-badge-pinned')
     expect(badges).toHaveLength(1)
@@ -467,6 +472,98 @@ describe('ClubMediaView pagination', () => {
     await wrapper.find('.mv-comments-toggle').trigger('click')
     await flushPromises()
     expect(wrapper.find<HTMLTextAreaElement>('.mv-comment-form .mv-comment-input').element.value).toBe('')
+  })
+})
+
+describe('ClubMediaView comment previews', () => {
+  it('shows the first three comments of a post without the viewer expanding it, and offers the rest', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 7, commentCount: 5 })], total: 1 }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValue([
+      buildComment({ id: 1, postId: 7, body: 'Comment one' }),
+      buildComment({ id: 2, postId: 7, body: 'Comment two' }),
+      buildComment({ id: 3, postId: 7, body: 'Comment three' }),
+      buildComment({ id: 4, postId: 7, body: 'Comment four' }),
+      buildComment({ id: 5, postId: 7, body: 'Comment five' }),
+    ])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(fetchClubPostCommentsMock).toHaveBeenCalledWith('1', 7)
+    expect(wrapper.findAll('.mv-comment-preview-body').map((node) => node.text())).toEqual([
+      'Comment one',
+      'Comment two',
+      'Comment three',
+    ])
+    expect(wrapper.find('.mv-comments-toggle').text()).toBe('View all 5 comments')
+
+    // Expanding shows the complete list without a second fetch: the preview already has it.
+    await wrapper.find('.mv-comments-toggle').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubPostCommentsMock).toHaveBeenCalledTimes(1)
+    expect(wrapper.findAll('.mv-comment-body')).toHaveLength(5)
+    expect(wrapper.find('.mv-comment-preview-body').exists()).toBe(false)
+  })
+
+  it('labels the toggle with the plain count when every comment already fits in the preview', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 7, commentCount: 2 })], total: 1 }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValue([
+      buildComment({ id: 1, postId: 7, body: 'Comment one' }),
+      buildComment({ id: 2, postId: 7, body: 'Comment two' }),
+    ])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(wrapper.findAll('.mv-comment-preview')).toHaveLength(2)
+    expect(wrapper.find('.mv-comments-toggle').text()).toBe('Comments (2)')
+  })
+
+  // A post with no comments must not cost a request per feed page just to learn that.
+  it('does not fetch a preview for a post the feed reports as having no comments', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValue(
+      buildFeed({ items: [buildPost({ id: 7, commentCount: 0 })], total: 1 }),
+    )
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    expect(fetchClubPostCommentsMock).not.toHaveBeenCalled()
+    expect(wrapper.find('.mv-comment-preview').exists()).toBe(false)
+    expect(wrapper.find('.mv-comments-toggle').text()).toBe('Comments (0)')
+  })
+
+  // Previews are per feed page, so a preview still in flight when the viewer pages away must
+  // not land on the page that replaced it.
+  it('drops a preview that resolves after the viewer already moved to another page', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 7, commentCount: 1 })], page: 0, size: 12, total: 24 }),
+    )
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 8, commentCount: 0 })], page: 1, size: 12, total: 24 }),
+    )
+    const stalePreview = createDeferred<ClubPostComment[]>()
+    fetchClubPostCommentsMock.mockReturnValueOnce(stalePreview.promise)
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-pagination button:last-of-type').trigger('click')
+    await flushPromises()
+
+    stalePreview.resolve([buildComment({ id: 1, postId: 7, body: 'Comment from the previous page' })])
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Comment from the previous page')
   })
 })
 
@@ -1037,7 +1134,7 @@ describe('ClubMediaView comment form', () => {
     // optimistic +1 layered on top of it -- collapsing back to the toggle's own label is what
     // surfaces post.commentCount, proving the two were never added together.
     await wrapper.find('.mv-comments-toggle').trigger('click')
-    expect(wrapper.text()).toContain('Show comments (1)')
+    expect(wrapper.text()).toContain('Comments (1)')
   })
 
   it('surfaces the comment cap error message verbatim', async () => {
@@ -1103,7 +1200,7 @@ describe('ClubMediaView comment form', () => {
     // reconciliation left it, and the new comment is never dropped.
     expect(commentBodies()).toEqual(['Earlier comment', 'Nice photo!'])
     await wrapper.find('.mv-comments-toggle').trigger('click')
-    expect(wrapper.text()).toContain('Show comments (2)')
+    expect(wrapper.text()).toContain('Comments (2)')
   })
 
   // Same race as above, but the stale, older GET settles by rejecting instead of resolving --
@@ -1141,7 +1238,7 @@ describe('ClubMediaView comment form', () => {
     expect(commentBodies()).toEqual(['Earlier comment', 'Nice photo!'])
     expect(wrapper.text()).not.toContain('Network error')
     await wrapper.find('.mv-comments-toggle').trigger('click')
-    expect(wrapper.text()).toContain('Show comments (2)')
+    expect(wrapper.text()).toContain('Comments (2)')
   })
 })
 
@@ -2295,6 +2392,11 @@ describe('ClubMediaView view-state ownership across navigations', () => {
     fetchClubMediaFeedMock.mockResolvedValueOnce(
       buildFeed({ items: [buildPost({ id: 5, title: 'Club Two Post Five', commentCount: 3 })], total: 1 }),
     )
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 21, postId: 5, body: 'Club two comment one' }),
+      buildComment({ id: 22, postId: 5, body: 'Club two comment two' }),
+      buildComment({ id: 23, postId: 5, body: 'Club two comment three' }),
+    ])
 
     const wrapper = await mountAtMediaRoute('/clubs/1/media')
     await flushPromises()

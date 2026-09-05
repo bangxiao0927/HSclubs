@@ -765,4 +765,11 @@ const changeHeroImage = (offset: number) => {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+@media (max-width: 720px) {
+  .load-more .btn {
+    width: 100%;
+    min-height: 46px;
+  }
+}
 </style>

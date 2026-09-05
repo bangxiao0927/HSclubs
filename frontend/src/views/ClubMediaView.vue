@@ -24,6 +24,13 @@ import BackButton from '../components/BackButton.vue'
 const DEFAULT_PAGE_SIZE = 12
 const TITLE_MAX_LENGTH = 140
 const COMMENT_MAX_LENGTH = 300
+// How many comments a post shows without the viewer opening its comments panel. The preview is
+// what every post gets by default, so it is also the cap on how much vertical space a busy
+// post can take in the feed.
+const COMMENT_PREVIEW_LIMIT = 3
+// Comment previews are one GET per post, so they are fetched a few at a time rather than as one
+// burst of `size` parallel requests the moment a feed page lands.
+const COMMENT_PREVIEW_CONCURRENCY = 3
 const SUPPORTED_FORMATS_NOTICE =
   'Supported formats: JPEG, PNG, and GIF. WebP is also supported, but limited to smaller images '
   + '(3 megapixels or less, e.g. up to about 2000x1500). HEIC (the default photo format on many '
@@ -195,6 +202,12 @@ const load = async () => {
       loading.value = false
     })
   }
+
+  // Previews are secondary to the page itself: fetched only once the feed is on screen, and
+  // never allowed to hold up the spinner clearing above.
+  if (session.isCurrent) {
+    void loadCommentPreviews(session, posts.value)
+  }
 }
 
 const retryLoad = () => {
@@ -229,11 +242,14 @@ const isExpanded = (postId: number) => expandedPostIds.value.has(postId)
 const emptyCommentsEntry: CommentsEntry = { loading: false, error: '', comments: [] }
 const commentsState = (postId: number) => commentsByPost.value[postId] ?? emptyCommentsEntry
 
-const loadComments = async (postId: number) => {
+const loadComments = async (postId: number, session: ViewSession = feedSessions.current()) => {
   // One claim per post on the current session: the newest request for a post wins over any
   // older one for that same post (another expand, or a post-submit reconciliation), while a
   // navigation ends the session and so drops all of them at once.
-  const attempt = feedSessions.current().claim(commentsChannel(postId))
+  const attempt = session.claim(commentsChannel(postId))
+  if (!attempt.isCurrent) {
+    return
+  }
   commentsByPost.value = {
     ...commentsByPost.value,
     [postId]: { loading: true, error: '', comments: [] },
@@ -270,6 +286,50 @@ const toggleComments = (postId: number) => {
   if (!existing || existing.error) {
     void loadComments(postId)
   }
+}
+
+// The comments a post shows without being expanded: the oldest few, in the same order the full
+// list uses, so expanding only ever adds to what is already on screen.
+const previewComments = (postId: number) =>
+  commentsState(postId).comments.slice(0, COMMENT_PREVIEW_LIMIT)
+
+// Before the preview lands, the post's own commentCount is the only count available; once it
+// has, the fetched list is authoritative (a comment can have been added or deleted since the
+// feed page was built).
+const knownCommentCount = (post: ClubPost) => {
+  const entry = commentsByPost.value[post.id]
+  return entry && !entry.loading && !entry.error ? entry.comments.length : post.commentCount
+}
+
+const hiddenCommentCount = (post: ClubPost) =>
+  Math.max(0, knownCommentCount(post) - COMMENT_PREVIEW_LIMIT)
+
+const commentsToggleLabel = (post: ClubPost) => {
+  if (isExpanded(post.id)) {
+    return 'Hide comments'
+  }
+  const count = knownCommentCount(post)
+  return hiddenCommentCount(post) > 0 ? `View all ${count} comments` : `Comments (${count})`
+}
+
+// Fetches the previews for a freshly loaded feed page, a few posts at a time. Runs on the load's
+// own session, so a navigation drops the previews still in flight along with the load itself,
+// and each post's fetch takes that post's normal comments claim -- expanding a post whose
+// preview is still in flight therefore reuses it rather than racing it.
+const loadCommentPreviews = async (session: ViewSession, feedPosts: ClubPost[]) => {
+  const pending = feedPosts.filter((post) => post.commentCount > 0).map((post) => post.id)
+  const workers = Array.from(
+    { length: Math.min(COMMENT_PREVIEW_CONCURRENCY, pending.length) },
+    async () => {
+      for (let postId = pending.shift(); postId !== undefined; postId = pending.shift()) {
+        if (!session.isCurrent) {
+          return
+        }
+        await loadComments(postId, session)
+      }
+    },
+  )
+  await Promise.all(workers)
 }
 
 // ---- Publishing (member-only) ----
@@ -890,16 +950,6 @@ watch(
                 <p class="mv-post-time">{{ formatRelativeTime(post.createdAt) }}</p>
               </div>
             </div>
-            <button
-              type="button"
-              class="mv-comments-toggle"
-              :aria-expanded="isExpanded(post.id)"
-              :aria-controls="commentsRegionId(post.id)"
-              @click="toggleComments(post.id)"
-            >
-              {{ isExpanded(post.id) ? 'Hide comments' : `Show comments (${post.commentCount})` }}
-            </button>
-
             <p v-if="postActionError[post.id]" class="mv-status mv-status--error">
               {{ postActionError[post.id] }}
             </p>
@@ -924,6 +974,32 @@ watch(
                 Delete post
               </button>
             </div>
+
+            <!-- Every post shows its oldest few comments without being opened; the panel below
+                 is what the toggle expands, and it holds the complete list and the comment box. -->
+            <ul
+              v-if="!isExpanded(post.id) && previewComments(post.id).length"
+              class="mv-comment-preview-list"
+            >
+              <li
+                v-for="comment in previewComments(post.id)"
+                :key="comment.id"
+                class="mv-comment-preview"
+              >
+                <span class="mv-comment-preview-author">{{ comment.authorDisplayName }}</span>
+                <span class="mv-comment-preview-body">{{ comment.body }}</span>
+              </li>
+            </ul>
+
+            <button
+              type="button"
+              class="mv-comments-toggle"
+              :aria-expanded="isExpanded(post.id)"
+              :aria-controls="commentsRegionId(post.id)"
+              @click="toggleComments(post.id)"
+            >
+              {{ commentsToggleLabel(post) }}
+            </button>
 
             <div
               v-show="isExpanded(post.id)"
@@ -1349,6 +1425,37 @@ watch(
   cursor: pointer;
 }
 
+/* Preview comments read as quiet one-liners under the post, not as cards: they are a
+   teaser for the panel below, so they never repeat its avatars, timestamps or controls. */
+.mv-comment-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mv-comment-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--mv-text-soft);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mv-comment-preview-author {
+  margin-right: 0.4rem;
+  font-weight: 600;
+}
+
+.mv-comment-preview-body {
+  color: var(--mv-text-faint);
+}
+
 .mv-comments {
   border-top: 1px solid var(--mv-border);
   padding-top: 0.75rem;
@@ -1424,6 +1531,24 @@ watch(
 
   .mv-post-body {
     padding: 1rem;
+  }
+
+  /* Comfortable thumb targets for the controls that sit close together under a post. */
+  .mv-comments-toggle,
+  .mv-pin-toggle,
+  .mv-post-delete,
+  .mv-comment-delete {
+    min-height: 40px;
+  }
+
+  .mv-publish-submit,
+  .mv-comment-submit {
+    align-self: stretch;
+    min-height: 44px;
+  }
+
+  .mv-post-actions > button {
+    flex: 1 1 auto;
   }
 }
 

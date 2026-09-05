@@ -201,7 +201,7 @@ onBeforeUnmount(() => {
 
     <header class="club-hero">
       <div class="hero-top">
-        <div>
+        <div class="hero-main">
           <p class="section-label">{{ club.category }}</p>
           <h1>{{ club.name }}</h1>
           <p class="hero-meta">
@@ -366,6 +366,11 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.hero-main {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
 .hero-side {
   display: flex;
   flex-direction: column;
@@ -376,19 +381,40 @@ onBeforeUnmount(() => {
 .hero-actions {
   margin-top: 0.75rem;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.5rem;
-  align-items: center;
+  align-items: stretch;
 }
 
+/* One full-width, solid-color bar: the primary action on the page has to be
+   unmistakable on a phone, where it sits between the description and the stats. */
 .apply-btn {
-  border-radius: 999px;
-  border: 1px solid var(--mv-border-strong);
-  background: var(--mv-surface-accent);
-  color: var(--mv-gold);
-  font-weight: 600;
-  padding: 0.5rem 1.6rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.9rem 1.5rem;
+  border: 0;
+  border-radius: 16px;
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+  box-shadow: var(--mv-primary-shadow);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    filter 0.15s ease;
+}
+
+.apply-btn:hover:not(:disabled),
+.apply-btn:focus-visible {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.apply-btn:focus-visible {
+  outline: 3px solid var(--mv-gold);
+  outline-offset: 3px;
 }
 
 .apply-btn:disabled {
@@ -397,12 +423,15 @@ onBeforeUnmount(() => {
 }
 
 .cancel-btn {
-  border-radius: 999px;
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  background: transparent;
+  width: 100%;
+  min-height: 52px;
+  border-radius: 16px;
+  border: 2px solid rgba(239, 68, 68, 0.55);
+  background: var(--mv-surface-danger);
   color: var(--mv-status-danger);
-  font-weight: 600;
-  padding: 0.5rem 1.6rem;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.75rem 1.5rem;
   cursor: pointer;
 }
 
@@ -645,14 +674,9 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
-  .hero-side {
-    width: 100%;
-    align-items: flex-start;
-  }
-
   .admin-link {
-    width: 100%;
-    text-align: center;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.85rem;
   }
 }
 
@@ -668,33 +692,66 @@ onBeforeUnmount(() => {
     gap: 1rem;
   }
 
+  /* Avatar and the manage link ride on one row above the club name, so the
+     apply button below stays the first thing a thumb reaches. */
   .hero-side {
+    order: -1;
+    width: 100%;
+    flex-direction: row;
     align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .hero-main {
+    width: 100%;
+  }
+
+  .section-label {
+    font-size: 0.72rem;
   }
 
   .club-avatar.xlarge {
-    width: 88px;
-    height: 88px;
-    border-radius: 22px;
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+  }
+
+  .hero-description {
+    font-size: 0.92rem;
   }
 
   .hero-stats {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 0.75rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
   }
 
   .stat-card {
-    padding: 1rem;
-    border-radius: 18px;
+    padding: 0.7rem 0.8rem;
+    border-radius: 14px;
+  }
+
+  .stat-label {
+    font-size: 0.72rem;
   }
 
   .stat-value {
-    font-size: 1rem;
+    margin-top: 0.2rem;
+    font-size: 0.92rem;
+  }
+
+  .instagram-icon {
+    width: 20px;
+    height: 20px;
   }
 
   .spotlight {
     padding: 1.25rem;
     border-radius: 22px;
+  }
+
+  .spotlight button {
+    align-self: stretch;
+    min-height: 48px;
   }
 
   .related {
@@ -714,21 +771,15 @@ onBeforeUnmount(() => {
   }
 
   .club-hero h1 {
-    font-size: 1.6rem;
+    font-size: 1.45rem;
   }
 
   .hero-meta {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
   }
 
-  .hero-stats {
-    grid-template-columns: 1fr;
-  }
-
-  .apply-btn,
-  .cancel-btn {
-    width: 100%;
-    text-align: center;
+  .hero-description {
+    font-size: 0.88rem;
   }
 
   .back-link {

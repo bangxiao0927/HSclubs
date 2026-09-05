@@ -37,6 +37,9 @@ const error = ref('')
 const calendarEvents = ref<CalendarEvent[]>([])
 const weeklySchedule = ref<WeeklySchedule>(createEmptySchedule())
 let clockTimer: ReturnType<typeof setInterval> | undefined
+// Narrow screens get a one-day view instead of the seven-column grid (which only fits
+// behind a horizontal scroll), so this is the day that view is showing.
+const selectedDay = ref(calendarDays[0] as string)
 
 const weekDates = computed(() => {
   const current = new Date(now.value)
@@ -66,6 +69,25 @@ const todayLabel = computed(() =>
 
 const todayShortLabel = computed(() =>
   new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(now.value),
+)
+
+// Today when the week on screen contains it; otherwise the start of that week.
+const isSelectedDayToday = computed(() => selectedDay.value === todayShortLabel.value)
+
+const selectedDayLabel = computed(() =>
+  new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  }).format(getWeekDate(selectedDay.value)),
+)
+
+const selectedDaySchedule = computed(
+  () => weeklySchedule.value[selectedDay.value] ?? { lunch: [], afterSchool: [] },
+)
+
+const selectedDayMeetingCount = computed(
+  () => selectedDaySchedule.value.lunch.length + selectedDaySchedule.value.afterSchool.length,
 )
 
 const weekRangeLabel = computed(() => {
@@ -119,6 +141,9 @@ onMounted(async () => {
   clockTimer = setInterval(() => {
     now.value = new Date()
   }, 60_000)
+  selectedDay.value = calendarDays.includes(todayShortLabel.value)
+    ? todayShortLabel.value
+    : (calendarDays[0] as string)
 
   loading.value = true
   error.value = ''
@@ -297,6 +322,57 @@ function clampPercentage(value: number) {
               </section>
             </div>
           </div>
+        </div>
+
+        <div class="calendar-day-view">
+          <div class="day-picker" role="group" aria-label="Day of the week">
+            <button
+              v-for="day in calendarDays"
+              :key="day"
+              type="button"
+              class="day-chip"
+              :class="{ selected: day === selectedDay, today: day === todayShortLabel }"
+              :aria-pressed="day === selectedDay"
+              @click="selectedDay = day"
+            >
+              <span class="day-chip-name">{{ day }}</span>
+              <span class="day-chip-date">{{ formatWeekDate(day) }}</span>
+            </button>
+          </div>
+
+          <div class="day-summary">
+            <p class="day-summary-title">
+              {{ selectedDayLabel }}
+              <span v-if="isSelectedDayToday" class="today-tag">Today</span>
+            </p>
+            <p class="day-summary-count">
+              {{ selectedDayMeetingCount }} {{ selectedDayMeetingCount === 1 ? 'meeting' : 'meetings' }}
+            </p>
+          </div>
+
+          <section v-for="period in meetingPeriods" :key="period.key" class="day-period">
+            <header class="day-period-header">
+              <strong>{{ period.label }}</strong>
+              <span>{{ period.time }}</span>
+            </header>
+            <ul v-if="selectedDaySchedule[period.key].length" class="day-event-list">
+              <li v-for="event in selectedDaySchedule[period.key]" :key="event.id">
+                <RouterLink class="day-event" :to="`/clubs/${event.id}`">
+                  <img
+                    class="event-avatar"
+                    :src="event.avatarUrl"
+                    :alt="`${event.title} avatar`"
+                    loading="lazy"
+                  />
+                  <span class="day-event-text">
+                    <span class="day-event-title">{{ event.title }}</span>
+                    <span class="day-event-location">{{ event.location || 'Location TBD' }}</span>
+                  </span>
+                </RouterLink>
+              </li>
+            </ul>
+            <p v-else class="empty">No meetings</p>
+          </section>
         </div>
       </template>
     </section>
@@ -621,17 +697,152 @@ function clampPercentage(value: number) {
   text-transform: uppercase;
 }
 
-@media (max-width: 720px) {
-  .calendar-scroll-hint {
-    position: static;
-    width: auto;
-    height: auto;
-    margin: -0.5rem 0 0;
-    overflow: visible;
-    clip: auto;
-    white-space: normal;
-  }
+/* The one-day view is the mobile layout only: the week grid stays the desktop
+   experience, and exactly one of the two is displayed at any width. */
+.calendar-day-view {
+  display: none;
+  flex-direction: column;
+  gap: 0.85rem;
+}
 
+.day-picker {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.day-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.5rem 0.15rem;
+  border: 1px solid var(--mv-border);
+  border-radius: 14px;
+  background: var(--mv-surface-card);
+  color: var(--mv-text-faint);
+  cursor: pointer;
+  font: inherit;
+}
+
+.day-chip-name {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.day-chip-date {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.day-chip.today {
+  border-color: var(--mv-border-strong);
+  color: var(--mv-gold);
+}
+
+.day-chip.selected {
+  border-color: var(--mv-primary-bg);
+  background: var(--mv-primary-bg);
+  color: var(--mv-primary-text);
+}
+
+.day-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.day-summary-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.today-tag {
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--mv-surface-accent);
+  color: var(--mv-gold);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.day-summary-count {
+  margin: 0;
+  color: var(--mv-text-dim);
+  font-size: 0.82rem;
+}
+
+.day-period {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem;
+  border: 1px solid var(--mv-border);
+  border-radius: 18px;
+  background: var(--mv-surface-card);
+  box-shadow: var(--mv-shadow-card);
+}
+
+.day-period-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.day-period-header span {
+  color: var(--mv-text-dim);
+  font-size: 0.72rem;
+}
+
+.day-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day-event {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 48px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--mv-border);
+  border-radius: 14px;
+  background: var(--mv-surface-soft);
+  color: inherit;
+  text-decoration: none;
+}
+
+.day-event-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.day-event-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.day-event-location {
+  color: var(--mv-text-faint);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
   .calendar-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -641,17 +852,20 @@ function clampPercentage(value: number) {
     max-width: 100%;
   }
 
-  .weekly-calendar {
-    min-width: 980px;
+  /* Phones get the day view; the week grid (and its horizontal-scroll hint,
+     which only describes that grid) is not rendered at all. */
+  .calendar-scroll,
+  .calendar-scroll-hint {
+    display: none;
   }
 
-  .week-grid {
-    grid-template-columns: 96px repeat(7, minmax(126px, 1fr));
+  .calendar-day-view {
+    display: flex;
   }
 
-  .time-axis-heading,
-  .period-label {
-    padding-inline: 0.65rem;
+  .calendar-total {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
   }
 }
 
@@ -660,11 +874,13 @@ function clampPercentage(value: number) {
     font-size: 1.8rem;
   }
 
-  .calendar-scroll {
-    margin-inline: calc(var(--page-padding-inline) * -1);
-    border-right: 0;
-    border-left: 0;
-    border-radius: 0;
+  .calendar-subtitle {
+    font-size: 0.88rem;
+  }
+
+  .day-chip {
+    padding: 0.45rem 0.1rem;
+    border-radius: 12px;
   }
 }
 </style>
