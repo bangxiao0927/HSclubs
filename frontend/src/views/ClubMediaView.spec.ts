@@ -565,6 +565,83 @@ describe('ClubMediaView comment previews', () => {
 
     expect(wrapper.text()).not.toContain('Comment from the previous page')
   })
+
+  // Deleting a post pulls the next page's first post up into this one. That post arrives with
+  // no preview, and nothing else would ever fetch one for it.
+  it('previews the post that slides onto the page after a delete, without refetching the posts that stayed', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub())
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 1, title: 'Doomed post', viewerCanDelete: true, commentCount: 0 }),
+          buildPost({ id: 2, title: 'Survivor', commentCount: 1 }),
+        ],
+        page: 0,
+        size: 2,
+        total: 3,
+      }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 20, postId: 2, body: 'Survivor comment' }),
+    ])
+    deleteClubPostMock.mockResolvedValue(undefined)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 2, title: 'Survivor', commentCount: 1 }),
+          buildPost({ id: 3, title: 'Slid up from page two', commentCount: 1 }),
+        ],
+        page: 0,
+        size: 2,
+        total: 2,
+      }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 30, postId: 3, body: 'Backfilled post comment' }),
+    ])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-post-delete').trigger('click')
+    await wrapper.find('.mv-delete-confirm').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Backfilled post comment')
+    // Two fetches only: the original preview for post 2, and the new one for post 3.
+    expect(fetchClubPostCommentsMock).toHaveBeenCalledTimes(2)
+    expect(fetchClubPostCommentsMock).toHaveBeenLastCalledWith('1', 3)
+    expect(wrapper.text()).toContain('Survivor comment')
+  })
+
+  it('previews a post that a pin pulls onto the page', async () => {
+    fetchClubByIdMock.mockResolvedValue(buildClub({ canManage: true }))
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({ items: [buildPost({ id: 1, title: 'Only post', commentCount: 0 })], total: 2 }),
+    )
+    pinClubPostMock.mockResolvedValue(undefined)
+    fetchClubMediaFeedMock.mockResolvedValueOnce(
+      buildFeed({
+        items: [
+          buildPost({ id: 4, title: 'Newly pinned', pinnedAt: '2024-06-01T00:00:00Z', commentCount: 1 }),
+          buildPost({ id: 1, title: 'Only post', commentCount: 0 }),
+        ],
+        total: 2,
+      }),
+    )
+    fetchClubPostCommentsMock.mockResolvedValueOnce([
+      buildComment({ id: 40, postId: 4, body: 'Pinned post comment' }),
+    ])
+
+    const wrapper = await mountAtMediaRoute()
+    await flushPromises()
+
+    await wrapper.find('.mv-pin-toggle').trigger('click')
+    await flushPromises()
+
+    expect(fetchClubPostCommentsMock).toHaveBeenCalledWith('1', 4)
+    expect(wrapper.text()).toContain('Pinned post comment')
+  })
 })
 
 describe('ClubMediaView load staleness across overlapping navigations', () => {

@@ -3,10 +3,6 @@ import { computed, ref, watch } from 'vue'
 import { schoolTemplate, type ColorMode } from '../config/schoolTemplate'
 import { resolveInitialTheme } from '../utils/themeBootstrap'
 
-// One shared piece of state for the whole app: the title bar's toggle and the profile page's
-// toggle are the same preference, and a second copy of it would let the two disagree.
-const theme = ref<ColorMode>(schoolTemplate.defaultColorMode)
-
 const readStoredTheme = () => {
   try {
     return window.localStorage.getItem('theme')
@@ -15,6 +11,12 @@ const readStoredTheme = () => {
     return null
   }
 }
+
+// One shared piece of state for the whole app: the title bar's toggle and the profile page's
+// toggle are the same preference, and a second copy of it would let the two disagree. Seeded
+// from storage at import rather than at first use, so the watch below can never write the
+// default over the theme index.html's pre-mount script already applied.
+const theme = ref<ColorMode>(resolveInitialTheme(readStoredTheme(), schoolTemplate.defaultColorMode))
 
 const persistTheme = (value: ColorMode) => {
   try {

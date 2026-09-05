@@ -312,12 +312,16 @@ const commentsToggleLabel = (post: ClubPost) => {
   return hiddenCommentCount(post) > 0 ? `View all ${count} comments` : `Comments (${count})`
 }
 
-// Fetches the previews for a freshly loaded feed page, a few posts at a time. Runs on the load's
-// own session, so a navigation drops the previews still in flight along with the load itself,
-// and each post's fetch takes that post's normal comments claim -- expanding a post whose
-// preview is still in flight therefore reuses it rather than racing it.
+// Fetches the previews the posts now on screen are still missing, a few at a time. Runs on the
+// session of whatever put those posts there, so a navigation drops the previews still in flight
+// along with it, and each post's fetch takes that post's normal comments claim -- expanding a
+// post whose preview is still in flight therefore reuses it rather than racing it. Posts that
+// already have comments loaded are skipped, so the refresh after a delete or a pin only fetches
+// for the posts that slid onto the page.
 const loadCommentPreviews = async (session: ViewSession, feedPosts: ClubPost[]) => {
-  const pending = feedPosts.filter((post) => post.commentCount > 0).map((post) => post.id)
+  const pending = feedPosts
+    .filter((post) => post.commentCount > 0 && !commentsByPost.value[post.id])
+    .map((post) => post.id)
   const workers = Array.from(
     { length: Math.min(COMMENT_PREVIEW_CONCURRENCY, pending.length) },
     async () => {
@@ -401,6 +405,10 @@ const refreshCurrentFeedAfterMutation = async (
       size.value = feed.size
       total.value = feed.total
     })
+    // A pin can pull a post onto this page from another one; it arrives without a preview.
+    if (attempt.isCurrent) {
+      void loadCommentPreviews(session, posts.value)
+    }
   } catch {
     // A successful mutation should still get useful local feedback if its follow-up GET fails.
     // Applying through the same claim prevents an older fallback from overwriting a newer
@@ -672,6 +680,11 @@ const backfillCurrentPageAfterPostDeletion = async (session: ViewSession) => {
       size.value = feed.size
       total.value = feed.total
     })
+    // Same as the pin refresh: whatever slid up from the next page has no preview yet. In the
+    // navigate-back branch above nothing was replaced, so this finds nothing to fetch.
+    if (attempt.isCurrent) {
+      void loadCommentPreviews(session, posts.value)
+    }
   } catch {
     // The delete itself already succeeded; a failed backfill just leaves the optimistic,
     // already-shorter local list in place rather than surfacing a second, confusing error.

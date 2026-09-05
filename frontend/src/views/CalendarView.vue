@@ -71,7 +71,6 @@ const todayShortLabel = computed(() =>
   new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(now.value),
 )
 
-// Today when the week on screen contains it; otherwise the start of that week.
 const isSelectedDayToday = computed(() => selectedDay.value === todayShortLabel.value)
 
 const selectedDayLabel = computed(() =>

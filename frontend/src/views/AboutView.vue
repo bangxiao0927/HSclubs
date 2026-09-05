@@ -79,6 +79,7 @@ const activeCategory = computed(
           type="button"
           class="category-pill"
           :class="{ active: category.title === activeCategory?.title }"
+          :aria-pressed="category.title === activeCategory?.title"
           @click="selectedCategoryTitle = category.title"
         >
           <span aria-hidden="true">{{ category.icon }}</span>
