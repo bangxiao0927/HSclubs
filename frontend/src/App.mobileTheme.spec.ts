@@ -163,8 +163,10 @@ describe('mobile navigation', () => {
     expect(wrapper.find('.header .logo-text').text()).toBe(schoolTemplate.shortName)
   })
 
-  it('opens a user center sheet with profile access for an authenticated student', async () => {
-    const wrapper = await mountApp()
+  // A signed-in student has a profile page, and it holds everything the sheet used to offer
+  // (theme, admin, sign out), so the account tab is a plain link to it rather than a sheet.
+  it('sends an authenticated student straight to the profile page, with no sheet in between', async () => {
+    const { router, wrapper } = await mountAppWithRouter()
     const authStore = useAuthStore()
     authStore.currentUser = {
       id: 'student-1',
@@ -179,11 +181,14 @@ describe('mobile navigation', () => {
     const shortcut = wrapper.find('.mobile-user-center')
     expect(shortcut.text()).toContain('Account')
     expect(shortcut.find('.profile-icon').text()).toBe('A')
+    expect(shortcut.attributes('href')).toBe('/profile')
+    expect(shortcut.attributes('aria-expanded')).toBeUndefined()
 
     await shortcut.trigger('click')
-    const sheet = wrapper.find('.mobile-menu')
-    expect(sheet.find('.mobile-menu-title').text()).toBe('Alex')
-    expect(sheet.find('.mobile-nav-link').attributes('href')).toBe('/profile')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('profile')
+    expect(wrapper.find('.mobile-menu').exists()).toBe(false)
   })
 })
 

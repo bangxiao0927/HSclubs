@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from '../stores/auth'
+import { useTheme } from '../composables/useTheme'
 import { updateGraduationYear, fetchMyClubs, fetchMyMembershipRequests } from '../services/userService'
 import type { Club, ClubMembershipRequest } from '../types/club'
 import { clubImage } from '../utils/clubImages'
@@ -16,6 +17,10 @@ const reminders = [
 
 const authStore = useAuthStore()
 const { isAuthenticated, currentUser, userLoading, userError } = storeToRefs(authStore)
+
+// Same shared preference the title bar toggles; on phones the account tab now goes straight
+// here, so this is where the theme switch lives.
+const { themeLabel, themeIcon, toggleTheme } = useTheme()
 
 const handleLogout = () => authStore.logout()
 
@@ -201,6 +206,14 @@ const handleGraduationYearSave = async () => {
               to="/admin"
               class="btn ghost"
             >Platform admin</RouterLink>
+          </div>
+          <!-- Stacked, with the appearance switch directly above sign out: the mobile account
+               tab now lands here, so this is the app's only theme control for a signed-in user. -->
+          <div class="cta-group account-actions">
+            <button type="button" class="btn ghost theme-toggle" @click="toggleTheme">
+              <span aria-hidden="true">{{ themeIcon }}</span>
+              <span>{{ themeLabel }}</span>
+            </button>
             <button type="button" class="btn ghost" @click="handleLogout">Sign out</button>
           </div>
         </div>
@@ -372,6 +385,18 @@ const handleGraduationYearSave = async () => {
 .hero-copy h1 { margin: 0; font-size: clamp(2rem, 5vw, 3rem); }
 
 .cta-group { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+.account-actions {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
 
 .btn {
   padding: 0.85rem 1.5rem;

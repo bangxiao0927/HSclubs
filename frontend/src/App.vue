@@ -5,8 +5,8 @@ import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from './stores/auth'
 import ErrorDisplay from './components/ErrorDisplay.vue'
-import { schoolTemplate, type ColorMode } from './config/schoolTemplate'
-import { resolveInitialTheme } from './utils/themeBootstrap'
+import { schoolTemplate } from './config/schoolTemplate'
+import { useTheme } from './composables/useTheme'
 
 const searchQuery = ref('')
 const route = useRoute()
@@ -93,47 +93,13 @@ const handleLogout = () => {
   authStore.logout()
 }
 
-const handleMobileLogout = () => {
-  closeMobileMenu()
-  handleLogout()
-}
-
 // Left open after toggling so the visual change is immediately visible,
 // unlike navigation actions in this menu which close it.
 const handleMobileThemeToggle = () => {
   toggleTheme()
 }
 
-const theme = ref<ColorMode>(schoolTemplate.defaultColorMode)
-const themeLabel = computed(() => (theme.value === 'light' ? 'Dark mode' : 'Light mode'))
-
-const applyTheme = (value: ColorMode) => {
-  document.documentElement.dataset.theme = value
-  document.documentElement.style.colorScheme = value
-}
-
-const persistTheme = (value: ColorMode) => {
-  try {
-    window.localStorage.setItem('theme', value)
-  } catch (error) {
-    console.warn('Failed to persist theme preference.', error)
-  }
-}
-
-const toggleTheme = () => {
-  const nextTheme = theme.value === 'light' ? 'dark' : 'light'
-  theme.value = nextTheme
-  persistTheme(nextTheme)
-}
-
-try {
-  theme.value = resolveInitialTheme(
-    window.localStorage.getItem('theme'),
-    schoolTemplate.defaultColorMode,
-  )
-} catch (error) {
-  console.warn('Failed to read theme preference.', error)
-}
+const { theme, themeLabel, toggleTheme } = useTheme()
 
 const syncSearchQueryFromRoute = () => {
   searchQuery.value = typeof route.query.q === 'string' ? route.query.q : ''
@@ -194,8 +160,6 @@ watch(
     profileAvatarFailed.value = false
   },
 )
-
-watch(theme, (value) => applyTheme(value), { immediate: true })
 
 watch(
   () => route.query.q,
@@ -300,7 +264,28 @@ watch(
         </svg>
         <span>Calendar</span>
       </RouterLink>
+      <!-- Signed in, the account tab is a plain link to the profile page, which already holds
+           everything the sheet used to offer (theme, admin, sign out). The sheet stays for
+           signed-out visitors, who have no profile page to send them to. -->
+      <RouterLink
+        v-if="isAuthenticated"
+        to="/profile"
+        class="mobile-tab mobile-user-center"
+        :class="{ active: route.name === 'profile' }"
+      >
+        <img
+          v-if="profileAvatarUrl"
+          class="profile-avatar"
+          :src="profileAvatarUrl"
+          alt=""
+          referrerpolicy="no-referrer"
+          @error="handleProfileAvatarError"
+        />
+        <span v-else class="profile-icon" aria-hidden="true">{{ profileInitial }}</span>
+        <span>Account</span>
+      </RouterLink>
       <button
+        v-else
         ref="mobileUserCenterButton"
         type="button"
         class="mobile-tab mobile-user-center"
@@ -309,30 +294,19 @@ watch(
         aria-controls="mobile-navigation"
         @click="toggleMobileMenu"
       >
-        <img
-          v-if="isAuthenticated && profileAvatarUrl"
-          class="profile-avatar"
-          :src="profileAvatarUrl"
-          alt=""
-          referrerpolicy="no-referrer"
-          @error="handleProfileAvatarError"
-        />
-        <span v-else-if="isAuthenticated" class="profile-icon" aria-hidden="true">{{
-          profileInitial
-        }}</span>
-        <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
             d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"
           />
         </svg>
-        <span>{{ isAuthenticated ? 'Account' : 'Sign in' }}</span>
+        <span>Sign in</span>
       </button>
     </nav>
 
     <Transition name="mobile-menu">
       <div
         ref="mobileMenuSheet"
-        v-if="mobileMenuOpen"
+        v-if="mobileMenuOpen && !isAuthenticated"
         id="mobile-navigation"
         class="mobile-menu"
         tabindex="-1"
@@ -340,45 +314,21 @@ watch(
       >
         <div class="mobile-menu-inner">
           <div class="mobile-menu-handle" aria-hidden="true"></div>
-          <h2 class="mobile-menu-title">
-            {{ isAuthenticated ? currentUser?.displayName || 'User center' : 'Not signed in' }}
-          </h2>
+          <h2 class="mobile-menu-title">Not signed in</h2>
           <p class="mobile-menu-subtitle">
-            {{
-              isAuthenticated
-                ? 'Manage your profile and clubs.'
-                : 'Sign in to join clubs and save your interests.'
-            }}
+            Sign in to join clubs and save your interests.
           </p>
-          <nav v-if="currentUser?.isOwner" class="mobile-nav">
-            <RouterLink to="/admin" class="mobile-nav-link" @click="closeMobileMenu"
-              >Admin</RouterLink
-            >
-          </nav>
           <button type="button" class="mobile-theme-toggle" @click="handleMobileThemeToggle">
             <span class="theme-icon" aria-hidden="true">{{ theme === 'light' ? '🌙' : '☀️' }}</span>
             <span>{{ themeLabel }}</span>
           </button>
           <div class="mobile-actions">
-            <template v-if="isAuthenticated">
-              <RouterLink to="/profile" class="mobile-nav-link" @click="closeMobileMenu"
-                >Profile</RouterLink
-              >
-              <button type="button" class="auth-btn ghost" @click="handleMobileLogout">
-                Log out
-              </button>
-            </template>
-            <template v-else>
-              <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
-                >Log in</RouterLink
-              >
-              <RouterLink
-                to="/auth?intent=register"
-                class="auth-btn primary"
-                @click="closeMobileMenu"
-                >Register</RouterLink
-              >
-            </template>
+            <RouterLink to="/auth?intent=login" class="mobile-nav-link" @click="closeMobileMenu"
+              >Log in</RouterLink
+            >
+            <RouterLink to="/auth?intent=register" class="auth-btn primary" @click="closeMobileMenu"
+              >Register</RouterLink
+            >
           </div>
         </div>
       </div>
