@@ -209,7 +209,9 @@ Request:
 
 Returns the same `AuthUser` body as `GET /api/auth/me` and establishes the normal application
 session. Wrong credentials return 401 without revealing which field was wrong; repeated failures
-return 429 temporarily.
+return 429 temporarily -- per client address, and account-wide as a backstop for deployments whose
+proxy lets a caller choose the address the backend sees. Both counts expire and are cleared by a
+successful sign-in.
 
 ### GET /api/auth/me
 Return current authenticated user profile.

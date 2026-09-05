@@ -110,8 +110,13 @@ public class InternalReviewAuthService {
     }
 
     private static String clientKey(HttpServletRequest request) {
-        // The server is normally behind a trusted nginx proxy. Deliberately use the immediate
-        // remote address rather than an attacker-controlled X-Forwarded-For value.
+        // Only as trustworthy as the reverse proxy in front of this application. The backend
+        // runs with server.forward-headers-strategy: framework, so this is NOT the peer address
+        // -- it is the first entry of X-Forwarded-For, which is the caller's own value unless
+        // the proxy replaces the header (docs/DEPLOYMENT.md requires that; Caddy, which this
+        // deployment runs, does it by default). Where that requirement is not met the caller
+        // picks their own key, which is exactly why InternalLoginRateLimiter also keeps an
+        // account-wide count that no key can escape.
         String address = request.getRemoteAddr();
         return StringUtils.hasText(address) ? address : "unknown";
     }

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -56,5 +57,17 @@ class SecurityConfigCsrfEnabledTest {
         var result = mockMvc.perform(get("/api/auth/logout")).andReturn();
 
         assertThat(result.getResponse().getStatus()).isNotEqualTo(204);
+    }
+
+    // Password sign-in establishes a session, so a cross-site submission of it is worth
+    // refusing: otherwise a page on another origin could drop a visitor into the review
+    // account's session. It is deliberately not on the CSRF ignore list, and a 403 here (rather
+    // than a 401 from the credentials check) is what proves the token is being demanded.
+    @Test
+    void passwordSignInWithoutTokenIsRejectedBeforeTheCredentialsAreEvenRead() throws Exception {
+        mockMvc.perform(post("/api/auth/internal/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"app-review@hsclubs.net\",\"password\":\"anything\"}"))
+            .andExpect(status().isForbidden());
     }
 }

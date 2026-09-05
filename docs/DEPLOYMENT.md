@@ -184,8 +184,19 @@ APP_INTERNAL_REVIEW_PASSWORD_HASH=$2y$12$...
 Restart the backend. `GET /api/auth/providers` then includes `internal`, and `/auth` shows a
 "Sign in with password" option beneath Google. It opens `/auth/password`, where the reviewer enters
 the supplied credentials. The endpoint accepts JSON only, applies BCrypt verification, returns a
-generic error for either a wrong email or password, limits repeated failures, rotates the session
-before authentication, and creates the same normal application session used by Google login.
+generic error for either a wrong email or password, rotates the session before authentication, and
+creates the same normal application session used by Google login.
+
+Repeated failures are throttled twice over: 5 within 15 minutes blocks that client address, and 20
+within 15 minutes blocks the account for everyone. The second cap exists because the client address
+is only as trustworthy as the reverse proxy in front of it (see the `X-Forwarded-For` requirement
+under "Reverse Proxy"): where that requirement is not met, a caller can pick their own address and
+would otherwise sidestep the per-client count entirely. Both counts clear on a successful sign-in
+and both expire on their own, so neither can lock a reviewer out permanently.
+
+If you enable `APP_CSRF_ENABLED`, note that this endpoint is protected like every other write, so
+the frontend must send the `X-XSRF-TOKEN` header for password sign-in to work -- the same
+outstanding frontend change that flag already waits on.
 
 Important: a review account helps Apple access protected features, but it does **not** by itself
 satisfy App Review guideline 4.8 when Google is offered as a third-party/social login. Whether

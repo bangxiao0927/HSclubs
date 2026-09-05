@@ -241,9 +241,6 @@ public class SecurityConfig {
                 // send back.
                 resolveAuthorizationRequestBaseUri() + "/**",
                 "/api/auth/*/callback",
-                // A signed-out browser has no CSRF cookie yet. This endpoint accepts JSON only,
-                // and the first-party CORS policy rejects cross-origin credentialed requests.
-                "/api/auth/internal/login",
                 "/oauth2/**",
                 "/login/**",
                 // Complete is a POST from the school's own WKWebView, which has no CSRF cookie of
@@ -253,6 +250,10 @@ public class SecurityConfig {
         // Logout is intentionally NOT in the ignore list: it is a real state-changing request
         // triggered by our own frontend (which knows how to attach the token when this flag is
         // on), so it gets the same CSRF protection as any other write.
+        // Password sign-in (/api/auth/internal/login) is excluded from the ignore list for the
+        // same reason, and one of its own: a request that establishes a session is worth
+        // protecting from cross-site submission, or a page on another origin could drop a
+        // visitor into the review account's session without them doing anything.
     }
 
     /**
