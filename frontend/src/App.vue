@@ -65,7 +65,7 @@ watch(
   },
 )
 
-const logoText = schoolTemplate.brandName
+const logoText = schoolTemplate.shortName
 // A bound constant (rather than a literal in the template) so Vue's asset-url
 // transform, which only rewrites relative paths, leaves this root-absolute
 // public path untouched under both Vite build and Vitest's SSR module runner.
