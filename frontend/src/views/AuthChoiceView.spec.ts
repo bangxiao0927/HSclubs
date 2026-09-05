@@ -86,6 +86,23 @@ beforeEach(() => {
 })
 
 describe('AuthChoiceView', () => {
+  // Inside the app's WebView the Google button is diverted to the fixed mobile-auth entry the app
+  // intercepts (see stores/auth.ts). Password sign-in must NOT be: it is an ordinary same-origin
+  // POST that establishes the session in the WebView directly, and sending it to the mobile-auth
+  // entry would hand the reviewer the Google flow they were trying to avoid.
+  it('keeps password sign-in on its own page inside the native app', async () => {
+    fetchAuthProvidersMock.mockResolvedValue([googleProvider, reviewProvider])
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (iPhone) HSclubsApp/1 (mobile-auth/1)' })
+    const wrapper = mount(AuthChoiceView)
+    await flushPromises()
+
+    const passwordButton = wrapper.findAll('button.provider-btn')[1]!
+    await passwordButton.trigger('click')
+
+    expect(routerPush).toHaveBeenCalledWith({ path: '/auth/password', query: undefined })
+    vi.unstubAllGlobals()
+  })
+
   it('shows a password sign-in option only when the backend enables that account', async () => {
     fetchAuthProvidersMock.mockResolvedValue([googleProvider, reviewProvider])
     const wrapper = mount(AuthChoiceView)

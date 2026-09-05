@@ -151,7 +151,18 @@ h1 {
   padding: 0.85rem 0.95rem;
   background: var(--mv-surface-card-strong);
   color: var(--mv-text);
-  font: inherit;
+  font-family: inherit;
+  /*
+   * 16px, not the 0.9rem the label above uses. iOS Safari and WKWebView zoom the page in when a
+   * focused field's text is smaller than 16px, and they do not zoom back out on blur -- so on the
+   * one page a reviewer has to type on, an inherited label size would leave them stranded at a
+   * magnified, horizontally scrolled layout for the rest of the session.
+   */
+  font-size: 1rem;
+  /* Fields are the full panel width; without this the padding above would push them past it. */
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .password-form input:focus {
@@ -204,5 +215,18 @@ h1 {
 
 .back-link:hover {
   color: var(--mv-gold);
+}
+
+/* Matches AuthChoiceView's own narrow-screen panel padding, so moving between the two pages
+   does not shift the card's edges. */
+@media (max-width: 480px) {
+  .password-page {
+    padding: 1rem;
+  }
+
+  .password-panel {
+    padding: 2rem 1.5rem;
+    border-radius: 28px;
+  }
 }
 </style>

@@ -167,11 +167,22 @@ registration and is disabled unless both the email and a BCrypt password hash ar
 Never put the plaintext password in the repository or in `backend/.env`.
 
 Generate a long random password, save it in the private App Store Connect review notes, and hash
-it locally:
+it. Any BCrypt implementation will do; pick whichever tool the machine already has. Generate the
+password with `openssl rand -base64 24` (or a password manager) rather than inventing one:
 
 ```bash
+# Python, which every deployment already has (the Instaloader setup installs it):
+python3 -c 'import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt(12)).decode())' \
+  'choose-a-long-random-password'
+
+# ...or htpasswd, if apache2-utils happens to be installed:
 htpasswd -bnBC 12 '' 'choose-a-long-random-password' | tr -d ':\n'
 ```
+
+`apache2-utils` (which provides `htpasswd`) is not installed on a stock server, so the Python
+form is the one to reach for first. Hash on the machine you generated the password on, and pass
+the password as a shell argument only if you are comfortable with it reaching that shell's
+history; otherwise let the tool prompt for it.
 
 Then add the result to the server's private `backend/.env`:
 
