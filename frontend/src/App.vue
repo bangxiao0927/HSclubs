@@ -466,6 +466,7 @@ watch(
 .logo-text {
   font-weight: 700;
   color: var(--mv-logo-text);
+  white-space: nowrap;
 }
 
 .nav {
@@ -787,10 +788,15 @@ watch(
   }
 
   .header-left,
-  .logo,
+  .logo {
+    min-width: 0;
+  }
+
+  /* The school's short name is the title bar's identity, so it keeps its full
+     width on every phone: the search field beside it shrinks instead. */
   .logo-link,
   .logo-text {
-    min-width: 0;
+    flex-shrink: 0;
   }
 
   .nav,
@@ -903,10 +909,12 @@ watch(
 @media (max-width: 480px) {
   .logo-text {
     font-size: 0.9rem;
-    max-width: 6.5rem;
+    /* Not a truncation of the school's name (MVHS-length names are far below
+       this): only a guard so an unusually long configured brand cannot push the
+       search field off the row. */
+    max-width: 45vw;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .logo-icon {

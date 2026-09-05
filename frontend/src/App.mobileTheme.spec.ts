@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import App from './App.vue'
+import { schoolTemplate } from './config/schoolTemplate'
 import { useAuthStore } from './stores/auth'
 
 const stubView = { template: '<div />' }
@@ -151,6 +152,15 @@ describe('mobile navigation', () => {
     const wrapper = await mountApp()
 
     expect(wrapper.find('.header .search-input').attributes('placeholder')).toBe('Search clubs')
+  })
+
+  // The school's short name is the title bar's identity: the compact viewport shortens the
+  // search placeholder instead of dropping or abbreviating the brand beside it.
+  it('keeps the school short name in the title bar on a compact viewport', async () => {
+    installMatchMedia(true)
+    const wrapper = await mountApp()
+
+    expect(wrapper.find('.header .logo-text').text()).toBe(schoolTemplate.shortName)
   })
 
   it('opens a user center sheet with profile access for an authenticated student', async () => {
