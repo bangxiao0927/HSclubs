@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
@@ -23,6 +23,7 @@ const passwordLoginEnabled = computed(() =>
   providers.value.some((provider) => provider.id === 'internal'),
 )
 const redirectTarget = computed(() => normalizeAuthRedirect(route.query.redirect))
+const hasLegalConsent = computed(() => authStore.pendingLoginConsent)
 const backTarget = computed(() => ({
   path: '/auth',
   query: redirectTarget.value ? { redirect: redirectTarget.value } : undefined,
@@ -32,8 +33,12 @@ onMounted(() => {
   authStore.ensureProvidersLoaded()
 })
 
+onUnmounted(() => {
+  authStore.clearLoginConsent()
+})
+
 const submit = async () => {
-  if (!passwordLoginEnabled.value || submitting.value) return
+  if (!passwordLoginEnabled.value || !hasLegalConsent.value || submitting.value) return
   submitting.value = true
   loginError.value = ''
   try {
@@ -72,7 +77,7 @@ const submit = async () => {
           <input v-model="password" type="password" autocomplete="current-password" required />
         </label>
         <p v-if="loginError" class="alert error" role="alert">{{ loginError }}</p>
-        <button class="submit-btn" type="submit" :disabled="submitting">
+        <button class="submit-btn" type="submit" :disabled="submitting || !hasLegalConsent">
           {{ submitting ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
 import { useAuthStore } from '../stores/auth'
 import { useTheme } from '../composables/useTheme'
-import { updateGraduationYear, fetchMyClubs, fetchMyMembershipRequests } from '../services/userService'
+import { deleteMyAccount, updateGraduationYear, fetchMyClubs, fetchMyMembershipRequests } from '../services/userService'
 import type { Club, ClubMembershipRequest } from '../types/club'
 import { clubImage } from '../utils/clubImages'
 
@@ -16,6 +16,7 @@ const reminders = [
 ]
 
 const authStore = useAuthStore()
+const router = useRouter()
 const { isAuthenticated, currentUser, userLoading, userError } = storeToRefs(authStore)
 
 // Same shared preference the title bar toggles; on phones the account tab now goes straight
@@ -23,6 +24,41 @@ const { isAuthenticated, currentUser, userLoading, userError } = storeToRefs(aut
 const { themeLabel, themeIcon, toggleTheme } = useTheme()
 
 const handleLogout = () => authStore.logout()
+
+const deleteConfirmationOpen = ref(false)
+const deleteConfirmation = ref('')
+const deleteAccountError = ref('')
+const deleteAccountLoading = ref(false)
+const canDeleteAccount = computed(() => deleteConfirmation.value === 'DELETE')
+
+const openDeleteConfirmation = () => {
+  deleteConfirmation.value = ''
+  deleteAccountError.value = ''
+  deleteConfirmationOpen.value = true
+}
+
+const cancelDeleteConfirmation = () => {
+  if (deleteAccountLoading.value) return
+  deleteConfirmationOpen.value = false
+  deleteConfirmation.value = ''
+  deleteAccountError.value = ''
+}
+
+const handleDeleteAccount = async () => {
+  if (!canDeleteAccount.value || deleteAccountLoading.value) return
+  deleteAccountLoading.value = true
+  deleteAccountError.value = ''
+  try {
+    await deleteMyAccount()
+    authStore.clearDeletedAccount()
+    await router.replace({ path: '/', query: { accountDeleted: 'true' } })
+  } catch (error) {
+    deleteAccountError.value =
+      error instanceof Error ? error.message : 'Unable to delete your account. Please try again.'
+  } finally {
+    deleteAccountLoading.value = false
+  }
+}
 
 const avatarFailed = ref(false)
 
@@ -287,6 +323,38 @@ const handleGraduationYearSave = async () => {
           <li v-for="message in reminders" :key="message">{{ message }}</li>
         </ul>
       </section>
+
+      <section class="card danger-zone">
+        <h2>Delete account</h2>
+        <p class="card-subtitle">
+          Permanently delete your profile, memberships, applications, posts, and comments. Clubs
+          will remain available. This action cannot be undone.
+        </p>
+        <button v-if="!deleteConfirmationOpen" type="button" class="btn danger" @click="openDeleteConfirmation">
+          Delete account
+        </button>
+        <form v-else class="delete-account-form" @submit.prevent="handleDeleteAccount">
+          <label for="deleteAccountConfirmation">
+            Type <strong>DELETE</strong> to confirm permanent account deletion.
+          </label>
+          <input
+            id="deleteAccountConfirmation"
+            v-model="deleteConfirmation"
+            type="text"
+            autocomplete="off"
+            :disabled="deleteAccountLoading"
+          />
+          <p v-if="deleteAccountError" class="form-feedback error" role="alert">{{ deleteAccountError }}</p>
+          <div class="form-actions">
+            <button type="submit" class="btn danger" :disabled="!canDeleteAccount || deleteAccountLoading">
+              {{ deleteAccountLoading ? 'Deleting…' : 'Permanently delete account' }}
+            </button>
+            <button type="button" class="btn ghost" :disabled="deleteAccountLoading" @click="cancelDeleteConfirmation">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </section>
     </div>
 
     <section v-else class="auth-gate page-shell">
@@ -505,6 +573,21 @@ const handleGraduationYearSave = async () => {
 
 /* Graduation */
 .graduation-form { display: flex; flex-direction: column; gap: 0.5rem; max-width: 320px; }
+.danger-zone { border-color: color-mix(in srgb, var(--mv-status-danger) 55%, var(--mv-border)); }
+.btn.danger { background: var(--mv-status-danger); color: #fff; border-color: transparent; }
+.btn.danger:disabled { cursor: not-allowed; opacity: 0.55; }
+.delete-account-form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 480px; }
+.delete-account-form label { color: var(--mv-text-soft); line-height: 1.5; }
+.delete-account-form input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--mv-border);
+  border-radius: 14px;
+  background: var(--mv-surface-card-strong);
+  color: var(--mv-text);
+  font-size: 1rem;
+}
 
 .graduation-form label { font-size: 0.85rem; color: var(--mv-text-soft); }
 

@@ -67,7 +67,7 @@ describe('AuthCallbackView', () => {
     expect(replaceMock).toHaveBeenCalledWith('/clubs/3')
   })
 
-  it('sends a brand-new user (terms not yet accepted) to accept-terms, carrying the target along', async () => {
+  it('sends a brand-new user directly to onboarding because consent happened before sign-in', async () => {
     fetchAuthenticatedUserMock.mockResolvedValue(
       buildUser({ acceptedTerms: false, graduationYear: null }),
     )
@@ -75,7 +75,7 @@ describe('AuthCallbackView', () => {
     await mountWithQuery({ redirect: '/clubs/3' })
 
     expect(replaceMock).toHaveBeenCalledWith({
-      path: '/accept-terms',
+      path: '/onboarding',
       query: { redirect: '/clubs/3' },
     })
   })

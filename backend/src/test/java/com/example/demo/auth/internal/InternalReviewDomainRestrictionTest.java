@@ -48,17 +48,14 @@ class InternalReviewDomainRestrictionTest {
     private MockMvc mockMvc;
 
     @Test
-    void theReviewAccountCanGetPastTheTermsPageDespiteTheDomainRestriction() throws Exception {
+    void theReviewAccountRecordsPreLoginConsentDespiteTheDomainRestriction() throws Exception {
         var login = mockMvc.perform(post("/api/auth/internal/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"app-review@hsclubs.net\",\"password\":\"" + PASSWORD + "\"}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.acceptedTerms").value(false))
+            .andExpect(jsonPath("$.acceptedTerms").value(true))
             .andReturn();
         MockHttpSession session = (MockHttpSession) login.getRequest().getSession(false);
-
-        mockMvc.perform(post("/api/auth/accept-terms").session(session))
-            .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/api/auth/me").session(session))
             .andExpect(status().isOk())

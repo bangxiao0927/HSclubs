@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
@@ -12,6 +12,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const brandName = schoolTemplate.brandName
 const { providers, providersLoading, providersError } = storeToRefs(authStore)
+const agreedToLegal = ref(false)
 
 onMounted(() => {
   authStore.ensureProvidersLoaded()
@@ -59,10 +60,13 @@ const oauthProviders = computed(() =>
 )
 
 const handleProviderLogin = (providerId: string) => {
+  if (!agreedToLegal.value) return
   authStore.beginLogin(providerId, redirectTarget.value)
 }
 
 const handlePasswordLogin = () => {
+  if (!agreedToLegal.value) return
+  authStore.grantLoginConsent()
   const query = redirectTarget.value ? { redirect: redirectTarget.value } : undefined
   router.push({ path: '/auth/password', query })
 }
@@ -81,18 +85,22 @@ const handlePasswordLogin = () => {
         <p v-if="providersError" class="alert error">{{ providersError }}</p>
         <p v-else-if="providersLoading" class="alert muted">Loading sign-in options…</p>
       </div>
-      <p class="terms-notice">
-        By continuing you agree to our
-        <RouterLink to="/terms" target="_blank">Terms of Use</RouterLink>
-        and
-        <RouterLink to="/privacy" target="_blank">Privacy Policy</RouterLink>.
-      </p>
+      <label class="terms-notice">
+        <input v-model="agreedToLegal" type="checkbox" />
+        <span>
+          I have read and agree to the
+          <RouterLink to="/terms" target="_blank">Terms of Use</RouterLink>
+          and
+          <RouterLink to="/privacy" target="_blank">Privacy Policy</RouterLink>.
+        </span>
+      </label>
       <div v-if="!providersLoading && !providersError" class="provider-list">
         <button
           v-for="provider in oauthProviders"
           :key="provider.id"
           class="provider-btn"
           type="button"
+          :disabled="!agreedToLegal"
           @click="handleProviderLogin(provider.id)"
         >
           <span class="provider-icon" aria-hidden="true">{{ provider.name.charAt(0) }}</span>
@@ -102,6 +110,7 @@ const handlePasswordLogin = () => {
           v-if="reviewAccountEnabled"
           class="provider-btn"
           type="button"
+          :disabled="!agreedToLegal"
           @click="handlePasswordLogin"
         >
           <span class="provider-icon password-icon" aria-hidden="true">P</span>
@@ -194,6 +203,12 @@ const handlePasswordLogin = () => {
   box-shadow: var(--mv-shadow-elevated);
 }
 
+.provider-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
 .password-icon {
   color: var(--mv-gold);
 }
@@ -204,6 +219,13 @@ const handlePasswordLogin = () => {
   color: var(--mv-text-soft);
   font-size: 0.95rem;
   line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.terms-notice input {
+  margin-top: 0.25rem;
 }
 
 .terms-notice a {

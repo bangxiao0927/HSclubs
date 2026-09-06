@@ -47,8 +47,7 @@ export const sanitizeAuthRedirectTarget = (
     return fallback
   }
   const path = normalized.split(/[?#]/, 1)[0] ?? normalized
-  const comparablePath =
-    path === '/' ? path : path.toLowerCase().replace(/\/$/, '')
+  const comparablePath = path === '/' ? path : path.toLowerCase().replace(/\/$/, '')
   return NON_TARGETABLE_AUTH_STEPS.has(comparablePath) ? fallback : normalized
 }
 
@@ -91,18 +90,15 @@ export const clearPendingAuthRedirect = () => {
 
 export type PostAuthUser = Pick<AuthUser, 'acceptedTerms' | 'graduationYear'>
 
-export type PostAuthRoute =
-  | { path: '/accept-terms' | '/onboarding'; query: { redirect: string } }
-  | string
+export type PostAuthRoute = { path: '/onboarding'; query: { redirect: string } } | string
 
 /**
  * The single source of truth for "where does this user go after auth?".
  *
  * Ordering:
  *   1. no user               -> null (caller handles the unauthenticated case)
- *   2. terms not accepted    -> /accept-terms, carrying the sanitized target
- *   3. no graduation year    -> /onboarding, carrying the sanitized target
- *   4. otherwise             -> the sanitized target itself
+ *   2. no graduation year    -> /onboarding, carrying the sanitized target
+ *   3. otherwise             -> the sanitized target itself
  */
 export const resolvePostAuthRoute = (
   user: PostAuthUser | null | undefined,
@@ -113,10 +109,6 @@ export const resolvePostAuthRoute = (
   }
 
   const target = sanitizeAuthRedirectTarget(rawTarget)
-
-  if (user.acceptedTerms === false) {
-    return { path: '/accept-terms', query: { redirect: target } }
-  }
 
   if (user.graduationYear == null) {
     return { path: '/onboarding', query: { redirect: target } }

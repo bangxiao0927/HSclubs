@@ -4,17 +4,19 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../services/userService', () => ({
+  deleteMyAccount: vi.fn(),
   updateGraduationYear: vi.fn(),
   fetchMyClubs: vi.fn(),
   fetchMyMembershipRequests: vi.fn(),
 }))
 
-import { fetchMyClubs, fetchMyMembershipRequests } from '../services/userService'
+import { deleteMyAccount, fetchMyClubs, fetchMyMembershipRequests } from '../services/userService'
 import { useAuthStore } from '../stores/auth'
 import ProfileView from './ProfileView.vue'
 
 const fetchMyClubsMock = vi.mocked(fetchMyClubs)
 const fetchMyMembershipRequestsMock = vi.mocked(fetchMyMembershipRequests)
+const deleteMyAccountMock = vi.mocked(deleteMyAccount)
 
 const originalLocalStorage = Object.getOwnPropertyDescriptor(window, 'localStorage')
 
@@ -67,8 +69,28 @@ beforeEach(() => {
   document.documentElement.removeAttribute('data-theme')
   fetchMyClubsMock.mockReset()
   fetchMyMembershipRequestsMock.mockReset()
+  deleteMyAccountMock.mockReset()
   fetchMyClubsMock.mockResolvedValue([])
   fetchMyMembershipRequestsMock.mockResolvedValue([])
+})
+
+describe('ProfileView account deletion', () => {
+  it('requires DELETE before permanently deleting the signed-in account', async () => {
+    deleteMyAccountMock.mockResolvedValue()
+    const wrapper = await mountProfile()
+
+    await wrapper.find('.danger-zone > button').trigger('click')
+    const submit = wrapper.find('.delete-account-form button[type="submit"]')
+    expect(submit.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('#deleteAccountConfirmation').setValue('DELETE')
+    expect(submit.attributes('disabled')).toBeUndefined()
+    await wrapper.find('.delete-account-form').trigger('submit')
+    await flushPromises()
+
+    expect(deleteMyAccountMock).toHaveBeenCalledTimes(1)
+    expect(useAuthStore().currentUser).toBeNull()
+  })
 })
 
 afterAll(() => {

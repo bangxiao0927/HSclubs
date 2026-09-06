@@ -22,6 +22,7 @@ export const useAuthStore = defineStore('auth', () => {
   const userLoading = ref(false)
   const userError = ref<string | null>(null)
   const hasCheckedSession = ref(false)
+  const pendingLoginConsent = ref(false)
 
   const isAuthenticated = computed(() => currentUser.value !== null)
 
@@ -148,6 +149,14 @@ export const useAuthStore = defineStore('auth', () => {
     userError.value = null
   }
 
+  const grantLoginConsent = () => {
+    pendingLoginConsent.value = true
+  }
+
+  const clearLoginConsent = () => {
+    pendingLoginConsent.value = false
+  }
+
   const logout = async () => {
     try {
       await apiLogout()
@@ -163,6 +172,12 @@ export const useAuthStore = defineStore('auth', () => {
       // as well.
       currentUser.value = null
     }
+  }
+
+  const clearDeletedAccount = () => {
+    currentUser.value = null
+    userError.value = null
+    hasCheckedSession.value = true
   }
 
   // A 401 from any other endpoint means this session is gone; drop the user so the router
@@ -181,6 +196,7 @@ export const useAuthStore = defineStore('auth', () => {
     userLoading,
     userError,
     hasCheckedSession,
+    pendingLoginConsent,
     isAuthenticated,
     ensureProvidersLoaded,
     refreshUser,
@@ -188,6 +204,9 @@ export const useAuthStore = defineStore('auth', () => {
     bootstrap,
     beginLogin,
     loginWithReviewAccount,
+    grantLoginConsent,
+    clearLoginConsent,
     logout,
+    clearDeletedAccount,
   }
 })

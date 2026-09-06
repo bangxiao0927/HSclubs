@@ -42,6 +42,11 @@ public class OAuthUserService {
         record.setRole(role == null || role.isBlank() ? "student" : role);
 
         oAuthUserMapper.upsert(record);
+        // Consent is collected immediately before every sign-in. Persist the account-level
+        // acceptance here so a newly created account never needs a second post-login prompt.
+        if (record.getEmail() != null && !record.getEmail().isBlank()) {
+            oAuthUserMapper.acceptTerms(record.getEmail());
+        }
     }
 
     /**

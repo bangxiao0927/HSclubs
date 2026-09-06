@@ -35,8 +35,9 @@ const brandName = schoolTemplate.brandName
 
       <h2>4. Data Retention</h2>
       <p>
-        Your account data is retained as long as your account is active. You may request account
-        deletion by contacting your school administrator or the platform owner.
+        Your account data is retained as long as your account is active. You can permanently delete
+        your account in the app by opening Account, then Profile, then Delete account. Deletion
+        removes your profile, memberships, applications, posts, and comments and cannot be undone.
       </p>
 
       <h2>5. Security</h2>

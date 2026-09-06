@@ -97,9 +97,13 @@ describe('AuthChoiceView', () => {
     await flushPromises()
 
     const passwordButton = wrapper.findAll('button.provider-btn')[1]!
+    await wrapper.find('input[type="checkbox"]').setValue(true)
     await passwordButton.trigger('click')
 
-    expect(routerPush).toHaveBeenCalledWith({ path: '/auth/password', query: undefined })
+    expect(routerPush).toHaveBeenCalledWith({
+      path: '/auth/password',
+      query: undefined,
+    })
     vi.unstubAllGlobals()
   })
 
@@ -130,6 +134,7 @@ describe('AuthChoiceView', () => {
     await flushPromises()
 
     const passwordButton = wrapper.findAll('button.provider-btn')[1]!
+    await wrapper.find('input[type="checkbox"]').setValue(true)
     await passwordButton.trigger('click')
 
     expect(routerPush).toHaveBeenCalledWith({
@@ -138,20 +143,23 @@ describe('AuthChoiceView', () => {
     })
   })
 
-  it('renders one enabled provider button per configured provider, with no checkbox gating them', async () => {
+  it('gates every configured provider behind one unified legal checkbox', async () => {
     fetchAuthProvidersMock.mockResolvedValue([googleProvider, microsoftProvider])
     const wrapper = mount(AuthChoiceView)
     await flushPromises()
 
-    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
+    const checkbox = wrapper.find('input[type="checkbox"]')
+    expect(checkbox.exists()).toBe(true)
 
     const buttons = wrapper.findAll('button.provider-btn')
     expect(buttons).toHaveLength(2)
     expect(wrapper.text()).toContain('Sign in with Google')
     expect(wrapper.text()).toContain('Sign in with Microsoft')
     buttons.forEach((button) => {
-      expect(button.attributes('disabled')).toBeUndefined()
+      expect(button.attributes('disabled')).toBeDefined()
     })
+    await checkbox.setValue(true)
+    buttons.forEach((button) => expect(button.attributes('disabled')).toBeUndefined())
   })
 
   it('renders inline legal copy linking to both the Terms of Use and the Privacy Policy', async () => {
@@ -175,6 +183,7 @@ describe('AuthChoiceView', () => {
     const wrapper = mount(AuthChoiceView)
     await flushPromises()
 
+    await wrapper.find('input[type="checkbox"]').setValue(true)
     await wrapper.find('button.provider-btn').trigger('click')
 
     expect(beginLoginSpy).toHaveBeenCalledWith('google', '/clubs/9')
@@ -187,6 +196,7 @@ describe('AuthChoiceView', () => {
     const wrapper = mount(AuthChoiceView)
     await flushPromises()
 
+    await wrapper.find('input[type="checkbox"]').setValue(true)
     await wrapper.find('button.provider-btn').trigger('click')
 
     expect(beginLoginSpy).toHaveBeenCalledWith('google', null)

@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { invalidateClubCache } from '../services/clubService'
@@ -12,14 +13,22 @@ const jsonResponse = (body: unknown) => ({
 })
 
 const mountHome = async () => {
-  const wrapper = mount(HomeView, { global: { stubs: { RouterLink: true } } })
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/', component: HomeView }],
+  })
+  await router.push('/')
+  await router.isReady()
+  const wrapper = mount(HomeView, { global: { plugins: [router] } })
   await flushPromises()
   return wrapper
 }
 
 beforeEach(() => {
   invalidateClubCache()
-  fetchMock = vi.fn().mockResolvedValue(jsonResponse([{ id: 1, name: 'Chess Club', memberCount: 5 }]))
+  fetchMock = vi
+    .fn()
+    .mockResolvedValue(jsonResponse([{ id: 1, name: 'Chess Club', memberCount: 5 }]))
   vi.stubGlobal('fetch', fetchMock)
 })
 

@@ -125,9 +125,9 @@ describe('resolvePostAuthRoute', () => {
     expect(resolvePostAuthRoute(null, '/clubs')).toBeNull()
   })
 
-  it('sends a brand-new user (terms not accepted, no graduation year) to accept-terms', () => {
+  it('sends a brand-new user directly to onboarding because consent happened before sign-in', () => {
     expect(resolvePostAuthRoute({ acceptedTerms: false, graduationYear: null }, '/clubs')).toEqual({
-      path: '/accept-terms',
+      path: '/onboarding',
       query: { redirect: '/clubs' },
     })
   })
@@ -158,7 +158,7 @@ describe('resolvePostAuthRoute', () => {
   it('does not loop back to a redirect step used as the target', () => {
     expect(
       resolvePostAuthRoute({ acceptedTerms: false, graduationYear: null }, '/onboarding'),
-    ).toEqual({ path: '/accept-terms', query: { redirect: '/profile' } })
+    ).toEqual({ path: '/onboarding', query: { redirect: '/profile' } })
   })
 
   it('sends a fully-onboarded user to the default landing path when there is no target', () => {

@@ -8,10 +8,14 @@ import com.example.demo.user.dto.UserSearchResult;
 import com.example.demo.user.dto.UpdateGraduationYearRequest;
 import com.example.demo.user.service.UserService;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @RestController
 @RequestMapping("/api/users")
@@ -47,6 +52,29 @@ public class UserController {
         } catch (IllegalStateException ex) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
         }
+    }
+
+    @DeleteMapping("/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteMyAccount(Authentication authentication,
+                                HttpServletRequest request,
+                                HttpServletResponse response) {
+        String email = authenticatedUserResolver.requireAuthenticatedEmail(authentication);
+        try {
+            userService.deleteAccount(email);
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+
+        if (request.getSession(false) != null) {
+            request.getSession(false).invalidate();
+        }
+        SecurityContextHolder.clearContext();
+        Cookie sessionCookie = new Cookie("JSESSIONID", "");
+        sessionCookie.setPath("/");
+        sessionCookie.setHttpOnly(true);
+        sessionCookie.setMaxAge(0);
+        response.addCookie(sessionCookie);
     }
 
     @GetMapping("/me/clubs")

@@ -55,4 +55,8 @@
         LIMIT 1
     </select>
 
+    <delete id="deleteById">
+        DELETE FROM oauth_users WHERE uid = #{uid}
+    </delete>
+
 </mapper>

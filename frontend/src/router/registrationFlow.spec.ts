@@ -17,8 +17,8 @@ import router from './index'
 const fetchAuthenticatedUserMock = vi.mocked(fetchAuthenticatedUser)
 
 // The server-side state of a brand-new student, mutated by the stubbed
-// endpoints exactly as the real backend would: accepting the terms stamps
-// acceptedTerms, saving the graduation year fills graduationYear. Every
+// endpoints exactly as the real backend would: pre-login consent is already recorded,
+// and saving the graduation year fills graduationYear. Every
 // /api/auth/me read returns a snapshot of this, so the views only ever see
 // what a real round trip would have told them.
 let storedUser: AuthUser
@@ -31,7 +31,7 @@ const buildNewStudent = (): AuthUser => ({
   provider: 'google',
   isOwner: false,
   graduationYear: null,
-  acceptedTerms: false,
+  acceptedTerms: true,
 })
 
 const jsonResponse = (body: unknown) =>
@@ -78,10 +78,6 @@ beforeEach(async () => {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('/api/auth/accept-terms')) {
-        storedUser = { ...storedUser, acceptedTerms: true }
-        return noContentResponse()
-      }
       if (url.includes('/api/users/me/graduation-year')) {
         storedUser = { ...storedUser, graduationYear: 2027 }
         return noContentResponse()
@@ -103,25 +99,13 @@ afterEach(() => {
 })
 
 describe('first-time registration flow, driven through the real router', () => {
-  it('walks a brand-new student from the terms page to the interest quiz and on to the graduation-year step', async () => {
+  it('walks a brand-new student from the interest quiz to the graduation-year step', async () => {
     const wrapper = mountApp()
-    await router.push('/accept-terms?redirect=/profile')
+    await router.push('/recommendations?onboarding=true&redirect=/profile')
     await settle()
-
-    expect(wrapper.text()).toContain('Before you continue')
-
-    await wrapper.find('input[type="checkbox"]').setValue(true)
-    await wrapper.find('form').trigger('submit')
-    await settle()
-
-    // The click has to actually move the browser off the terms page: the bug
-    // being guarded against here left the URL untouched with no error shown.
-    await waitForRoute('/recommendations?onboarding=true&redirect=/profile')
     expect(wrapper.text()).toContain('Find clubs that fit you')
 
-    const skipButton = wrapper
-      .findAll('button')
-      .find((button) => button.text() === 'Skip for now')
+    const skipButton = wrapper.findAll('button').find((button) => button.text() === 'Skip for now')
     expect(skipButton).toBeDefined()
     await skipButton!.trigger('click')
     await settle()
@@ -139,12 +123,8 @@ describe('first-time registration flow, driven through the real router', () => {
 
   it('answers the whole quiz and reaches the graduation-year step from the results screen', async () => {
     const wrapper = mountApp()
-    await router.push('/accept-terms?redirect=/clubs/5')
+    await router.push('/recommendations?onboarding=true&redirect=/clubs/5')
     await settle()
-
-    await wrapper.find('input[type="checkbox"]').setValue(true)
-    await wrapper.find('form').trigger('submit')
-    await waitForRoute('/recommendations?onboarding=true&redirect=/clubs/5')
 
     // Four questions: pick the first option each time, then advance.
     for (let question = 0; question < 4; question++) {
@@ -168,31 +148,5 @@ describe('first-time registration flow, driven through the real router', () => {
     await settle()
 
     await waitForRoute('/onboarding?redirect=/clubs/5')
-  })
-
-  it('keeps the student on the terms page with a visible error when the server records nothing', async () => {
-    // Emulates the production dead end: the POST answers 204 but /api/auth/me
-    // still reports acceptedTerms=false.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input)
-        if (url.includes('/api/auth/accept-terms')) {
-          return noContentResponse()
-        }
-        return jsonResponse([])
-      }),
-    )
-
-    const wrapper = mountApp()
-    await router.push('/accept-terms?redirect=/profile')
-    await settle()
-
-    await wrapper.find('input[type="checkbox"]').setValue(true)
-    await wrapper.find('form').trigger('submit')
-    await settle()
-
-    expect(router.currentRoute.value.fullPath).toBe('/accept-terms?redirect=/profile')
-    expect(wrapper.text()).toContain('We could not confirm your acceptance')
   })
 })

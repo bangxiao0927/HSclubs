@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.demo.user.mapper.UserAccountMapper">
+
+    <update id="clearClubApprovalReferences">
+        UPDATE clubs SET approved_by_oauth_user_id = NULL WHERE approved_by_oauth_user_id = #{oauthUserId}
+    </update>
+    <update id="clearMembershipReviewReferences">
+        UPDATE club_membership_requests SET reviewed_by_oauth_user_id = NULL
+        WHERE reviewed_by_oauth_user_id = #{oauthUserId}
+    </update>
+    <update id="clearPostPinReferences">
+        UPDATE club_post SET pinned_by_oauth_user_id = NULL WHERE pinned_by_oauth_user_id = #{oauthUserId}
+    </update>
+
+    <delete id="deleteAuthoredComments">
+        DELETE FROM club_post_comment
+        WHERE author_oauth_user_id = #{oauthUserId}
+           OR post_id IN (SELECT id FROM club_post WHERE author_oauth_user_id = #{oauthUserId})
+    </delete>
+    <delete id="deleteAuthoredPosts">
+        DELETE FROM club_post WHERE author_oauth_user_id = #{oauthUserId}
+    </delete>
+
+    <delete id="deleteMembershipRequests">
+        DELETE FROM club_membership_requests WHERE oauth_user_id = #{oauthUserId}
+    </delete>
+    <delete id="deleteMemberships">
+        DELETE FROM club_member WHERE oauth_user_id = #{oauthUserId}
+    </delete>
+    <delete id="deleteProfile">
+        DELETE FROM user_profiles WHERE oauth_user_id = #{oauthUserId}
+    </delete>
+
+</mapper>

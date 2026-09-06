@@ -31,6 +31,7 @@ vi.mock('../services/authService', () => ({
 
 import { useRoute } from 'vue-router'
 import { fetchAuthProviders, loginWithReviewAccount } from '../services/authService'
+import { useAuthStore } from '../stores/auth'
 import PasswordSignInView from './PasswordSignInView.vue'
 
 const providersMock = vi.mocked(fetchAuthProviders)
@@ -76,6 +77,7 @@ describe('PasswordSignInView', () => {
       graduationYear: 2026,
       acceptedTerms: true,
     })
+    useAuthStore().grantLoginConsent()
     const wrapper = mount(PasswordSignInView)
     await flushPromises()
 
@@ -100,6 +102,7 @@ describe('PasswordSignInView', () => {
   })
 
   it('shows the generic credentials error without leaving the page', async () => {
+    useAuthStore().grantLoginConsent()
     providersMock.mockResolvedValue([passwordProvider])
     loginMock.mockRejectedValue(new Error('Invalid email or password.'))
     const wrapper = mount(PasswordSignInView)

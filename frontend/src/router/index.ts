@@ -113,8 +113,7 @@ const router = createRouter({
     {
       path: '/accept-terms',
       name: 'accept-terms',
-      component: () => import('../views/AcceptTermsView.vue'),
-      meta: { requiresAuth: true },
+      redirect: '/profile',
     },
 
     // ---- Auth routes ----
@@ -142,16 +141,6 @@ const router = createRouter({
     },
   ],
 })
-
-const termsBypassRouteNames = new Set([
-  'auth-choice',
-  'auth-callback',
-  'auth-password',
-  'accept-terms',
-  'terms',
-  'privacy',
-  'not-found',
-])
 
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
@@ -199,18 +188,6 @@ router.beforeEach(async (to) => {
       hash: resolved.hash,
       replace: true,
     }
-  }
-
-  if (
-    authStore.isAuthenticated &&
-    authStore.currentUser?.acceptedTerms === false &&
-    !termsBypassRouteNames.has(String(to.name))
-  ) {
-    return { name: 'accept-terms', query: { redirect: to.fullPath } }
-  }
-
-  if (to.name === 'accept-terms' && authStore.currentUser?.acceptedTerms === true) {
-    return resolvePostAuthRoute(authStore.currentUser, to.query.redirect) ?? DEFAULT_POST_AUTH_PATH
   }
 
   if (requiresOwner && !authStore.currentUser?.isOwner) {

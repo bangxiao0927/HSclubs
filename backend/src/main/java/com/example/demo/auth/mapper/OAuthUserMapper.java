@@ -24,4 +24,6 @@ public interface OAuthUserMapper {
     int acceptTerms(@Param("email") String email);
 
     Boolean hasAcceptedTerms(@Param("email") String email);
+
+    int deleteById(@Param("uid") Long uid);
 }

@@ -254,13 +254,13 @@ describe('already-authenticated user landing on the sign-in page', () => {
     expect(window.history.length).toBe(historyLengthBeforeAuth)
   })
 
-  it('sends a user who has not accepted the terms to accept-terms instead', async () => {
+  it('does not show a second consent page after authentication', async () => {
     await primeSession({ ...onboardedUser, acceptedTerms: false })
 
     await router.push('/auth')
     await router.isReady()
 
-    expect(router.currentRoute.value.name).toBe('accept-terms')
+    expect(router.currentRoute.value.name).toBe('profile')
   })
 
   it('sends a user with no graduation year to onboarding instead', async () => {
@@ -282,15 +282,14 @@ describe('already-authenticated user landing on the sign-in page', () => {
   })
 })
 
-describe('terms enforcement', () => {
-  it('redirects a user who has not accepted the terms to accept-terms, preserving the requested route', async () => {
+describe('pre-login legal consent', () => {
+  it('allows an authenticated user through without a second consent gate', async () => {
     await primeSession({ ...onboardedUser, acceptedTerms: false })
 
     await router.push('/profile')
     await router.isReady()
 
-    expect(router.currentRoute.value.name).toBe('accept-terms')
-    expect(router.currentRoute.value.query.redirect).toBe('/profile')
+    expect(router.currentRoute.value.name).toBe('profile')
   })
 
   it('still allows a user who has not accepted the terms to reach the terms and privacy pages', async () => {
@@ -305,17 +304,16 @@ describe('terms enforcement', () => {
     expect(router.currentRoute.value.name).toBe('privacy')
   })
 
-  it('regression: after accepting the terms, a user with no graduation year is forwarded to onboarding, not the original redirect target', async () => {
+  it('redirects the retired post-login consent URL to the profile', async () => {
     await primeSession({ ...onboardedUser, acceptedTerms: true, graduationYear: null })
 
     await router.push('/accept-terms?redirect=/clubs/3')
     await router.isReady()
 
-    expect(router.currentRoute.value.name).toBe('onboarding')
-    expect(router.currentRoute.value.query.redirect).toBe('/clubs/3')
+    expect(router.currentRoute.value.name).toBe('profile')
   })
 
-  it('does not loop when the redirect target is accept-terms itself, terminating on the default landing path', async () => {
+  it('does not loop when the retired consent URL targets itself', async () => {
     await primeSession(onboardedUser)
 
     await router.push('/accept-terms?redirect=/accept-terms')

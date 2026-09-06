@@ -9,6 +9,7 @@ import com.example.demo.club.model.Club;
 import com.example.demo.club.model.ClubMemberView;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.user.mapper.UserProfileMapper;
+import com.example.demo.user.mapper.UserAccountMapper;
 import com.example.demo.user.model.UserProfile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,13 +23,16 @@ public class UserService {
     private final OAuthUserMapper oAuthUserMapper;
     private final UserProfileMapper userProfileMapper;
     private final ClubMapper clubMapper;
+    private final UserAccountMapper userAccountMapper;
 
     public UserService(OAuthUserMapper oAuthUserMapper,
                        UserProfileMapper userProfileMapper,
-                       ClubMapper clubMapper) {
+                       ClubMapper clubMapper,
+                       UserAccountMapper userAccountMapper) {
         this.oAuthUserMapper = oAuthUserMapper;
         this.userProfileMapper = userProfileMapper;
         this.clubMapper = clubMapper;
+        this.userAccountMapper = userAccountMapper;
     }
 
     public Integer findGraduationYearByEmail(String email) {
@@ -76,6 +80,22 @@ public class UserService {
     public List<ClubMembershipRequest> findUserPendingRequests(String email) {
         Long userId = requireUserId(email);
         return clubMapper.findPendingRequestsByOauthUserId(userId);
+    }
+
+    @Transactional
+    public void deleteAccount(String email) {
+        Long userId = requireUserId(email);
+        userAccountMapper.clearClubApprovalReferences(userId);
+        userAccountMapper.clearMembershipReviewReferences(userId);
+        userAccountMapper.clearPostPinReferences(userId);
+        userAccountMapper.deleteAuthoredComments(userId);
+        userAccountMapper.deleteAuthoredPosts(userId);
+        userAccountMapper.deleteMembershipRequests(userId);
+        userAccountMapper.deleteMemberships(userId);
+        userAccountMapper.deleteProfile(userId);
+        if (oAuthUserMapper.deleteById(userId) != 1) {
+            throw new IllegalStateException("User account could not be deleted");
+        }
     }
 
     private Long requireUserId(String email) {

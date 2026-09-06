@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import SkeletonLoader from '../components/SkeletonLoader.vue'
 import { fetchAllClubs, fetchClubs } from '../services/clubService'
 import type { Club } from '../types/club'
@@ -10,6 +10,8 @@ import { schoolTemplate } from '../config/schoolTemplate'
 const clubs = ref<Club[]>([])
 const loading = ref(true)
 const error = ref('')
+const route = useRoute()
+const accountDeleted = computed(() => route.query.accountDeleted === 'true')
 
 const schoolDisplayName = computed(() => schoolTemplate.schoolName)
 const schoolShortName = computed(() => schoolTemplate.shortName)
@@ -116,6 +118,9 @@ const changeHeroImage = (offset: number) => {
 
 <template>
   <div class="home">
+    <p v-if="accountDeleted" class="account-deleted-notice page-shell" role="status">
+      Your account has been permanently deleted.
+    </p>
     <section class="home-hero page-shell">
       <div class="hero-copy">
         <p class="section-label">{{ schoolShortName }} · Clubs</p>
@@ -220,9 +225,7 @@ const changeHeroImage = (offset: number) => {
       <div class="section-heading">
         <p class="section-label">Directory</p>
         <h2>All clubs</h2>
-        <p class="section-subtitle">
-          Browse clubs by name, advisor, meeting time, or keyword.
-        </p>
+        <p class="section-subtitle">Browse clubs by name, advisor, meeting time, or keyword.</p>
       </div>
       <div v-if="clubs.length" class="club-directory">
         <RouterLink
@@ -269,6 +272,15 @@ const changeHeroImage = (offset: number) => {
 </template>
 
 <style scoped>
+.account-deleted-notice {
+  margin-block: 1rem 0;
+  color: var(--mv-text);
+  background: var(--mv-surface-soft);
+  border: 1px solid var(--mv-border);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+}
+
 .home {
   display: flex;
   flex-direction: column;
