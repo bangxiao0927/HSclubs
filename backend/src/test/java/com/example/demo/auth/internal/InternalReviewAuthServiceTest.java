@@ -29,6 +29,16 @@ class InternalReviewAuthServiceTest {
             .hasMessageContaining("BCrypt");
     }
 
+    @Test
+    void rejectsAPartiallyConfiguredSecondaryAccountAtStartup() {
+        InternalReviewAccountProperties properties = new InternalReviewAccountProperties();
+        properties.setSecondaryEmail("review-2@example.edu");
+
+        assertThatThrownBy(() -> service(properties))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("APP_INTERNAL_REVIEW_SECONDARY_EMAIL");
+    }
+
     private static InternalReviewAuthService service(InternalReviewAccountProperties properties) {
         return new InternalReviewAuthService(
             properties, mock(OAuthUserService.class), new InternalLoginRateLimiter());

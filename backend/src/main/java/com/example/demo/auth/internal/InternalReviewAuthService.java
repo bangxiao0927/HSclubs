@@ -40,12 +40,22 @@ public class InternalReviewAuthService {
         this.properties = properties;
         this.oAuthUserService = oAuthUserService;
         this.rateLimiter = rateLimiter;
-        if (properties.isPartiallyConfigured() && !properties.isConfigured()) {
+        if (properties.isPrimaryPartiallyConfigured() && !properties.isPrimaryConfigured()) {
             throw new IllegalStateException(
                 "Set both APP_INTERNAL_REVIEW_EMAIL and APP_INTERNAL_REVIEW_PASSWORD_HASH, or neither");
         }
-        if (properties.isConfigured() && !isBcryptHash(properties.getPasswordHash())) {
-            throw new IllegalStateException("APP_INTERNAL_REVIEW_PASSWORD_HASH must be a BCrypt hash");
+        if (properties.isSecondaryPartiallyConfigured() && !properties.isSecondaryConfigured()) {
+            throw new IllegalStateException(
+                "Set both APP_INTERNAL_REVIEW_SECONDARY_EMAIL and APP_INTERNAL_REVIEW_SECONDARY_PASSWORD_HASH, or neither");
+        }
+        for (InternalReviewAccountProperties.Account account : properties.configuredAccounts()) {
+            if (!isBcryptHash(account.passwordHash())) {
+                throw new IllegalStateException("App Review account passwords must be BCrypt hashes");
+            }
+        }
+        if (properties.isPrimaryConfigured() && properties.isSecondaryConfigured()
+            && properties.getEmail().equalsIgnoreCase(properties.getSecondaryEmail())) {
+            throw new IllegalStateException("App Review account emails must be unique");
         }
     }
 
@@ -68,22 +78,29 @@ public class InternalReviewAuthService {
 
         String suppliedEmail = login == null ? null : login.email();
         String suppliedPassword = login == null ? null : login.password();
-        boolean passwordMatches = StringUtils.hasText(suppliedPassword)
-            && passwordEncoder.matches(suppliedPassword, properties.getPasswordHash());
-        boolean emailMatches = StringUtils.hasText(suppliedEmail)
-            && properties.getEmail().equalsIgnoreCase(suppliedEmail.trim());
-        if (!emailMatches || !passwordMatches) {
+        InternalReviewAccountProperties.Account matchedAccount = null;
+        for (InternalReviewAccountProperties.Account account : properties.configuredAccounts()) {
+            boolean passwordMatches = StringUtils.hasText(suppliedPassword)
+                && passwordEncoder.matches(suppliedPassword, account.passwordHash());
+            boolean emailMatches = StringUtils.hasText(suppliedEmail)
+                && account.email().equalsIgnoreCase(suppliedEmail.trim());
+            if (emailMatches && passwordMatches) {
+                matchedAccount = account;
+            }
+        }
+        if (matchedAccount == null) {
             rateLimiter.recordFailure(rateLimitKey);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
         rateLimiter.clear(rateLimitKey);
 
+        String accountEmail = matchedAccount.email();
         Map<String, Object> attributes = new LinkedHashMap<>();
-        attributes.put("sub", "internal-review:" + properties.getEmail().toLowerCase(Locale.ROOT));
-        attributes.put("email", properties.getEmail());
+        attributes.put("sub", "internal-review:" + accountEmail.toLowerCase(Locale.ROOT));
+        attributes.put("email", accountEmail);
         attributes.put("email_verified", true);
-        attributes.put("name", StringUtils.hasText(properties.getDisplayName())
-            ? properties.getDisplayName().trim()
+        attributes.put("name", StringUtils.hasText(matchedAccount.displayName())
+            ? matchedAccount.displayName().trim()
             : "App Review");
         oAuthUserService.recordLogin(REGISTRATION_ID, attributes);
 

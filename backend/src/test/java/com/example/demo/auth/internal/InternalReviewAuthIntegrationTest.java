@@ -21,6 +21,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(properties = {
     "app.security.internal-review-account.email=review@example.edu",
     "app.security.internal-review-account.display-name=App Review",
+    "app.security.internal-review-account.secondary-email=app-review-2@hsclubs.net",
+    "app.security.internal-review-account.secondary-display-name=App Review 2",
     "spring.datasource.url=jdbc:h2:mem:internal_review_auth;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE"
 })
 @AutoConfigureMockMvc
@@ -28,11 +30,14 @@ import org.springframework.test.web.servlet.MockMvc;
 class InternalReviewAuthIntegrationTest {
 
     private static final String PASSWORD = "test-review-password";
+    private static final String SECONDARY_PASSWORD = "secondary-review-password";
 
     @DynamicPropertySource
     static void passwordHash(DynamicPropertyRegistry registry) {
         registry.add("app.security.internal-review-account.password-hash",
             () -> new BCryptPasswordEncoder().encode(PASSWORD));
+        registry.add("app.security.internal-review-account.secondary-password-hash",
+            () -> new BCryptPasswordEncoder().encode(SECONDARY_PASSWORD));
     }
 
     @Autowired
@@ -61,6 +66,25 @@ class InternalReviewAuthIntegrationTest {
         mockMvc.perform(get("/api/auth/me").session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.provider").value("internal"));
+    }
+
+    @Test
+    void secondaryCredentialsCreateTheirOwnNormalProtectedSession() throws Exception {
+        var result = mockMvc.perform(post("/api/auth/internal/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"app-review-2@hsclubs.net\",\"password\":\""
+                    + SECONDARY_PASSWORD + "\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.email").value("app-review-2@hsclubs.net"))
+            .andExpect(jsonPath("$.displayName").value("App Review 2"))
+            .andExpect(jsonPath("$.provider").value("internal"))
+            .andReturn();
+
+        MockHttpSession session = (MockHttpSession) result.getRequest().getSession(false);
+        assertThat(session).isNotNull();
+        mockMvc.perform(get("/api/auth/me").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.email").value("app-review-2@hsclubs.net"));
     }
 
     @Test

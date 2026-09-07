@@ -61,6 +61,9 @@ app:
       email: ${APP_INTERNAL_REVIEW_EMAIL:}
       display-name: ${APP_INTERNAL_REVIEW_DISPLAY_NAME:App Review}
       password-hash: ${APP_INTERNAL_REVIEW_PASSWORD_HASH:}
+      secondary-email: ${APP_INTERNAL_REVIEW_SECONDARY_EMAIL:}
+      secondary-display-name: ${APP_INTERNAL_REVIEW_SECONDARY_DISPLAY_NAME:App Review 2}
+      secondary-password-hash: ${APP_INTERNAL_REVIEW_SECONDARY_PASSWORD_HASH:}
   upload:
     dir: ${APP_UPLOAD_DIR:uploads}
   avatar:

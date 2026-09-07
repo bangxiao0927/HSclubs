@@ -190,6 +190,9 @@ Then add the result to the server's private `backend/.env`:
 APP_INTERNAL_REVIEW_EMAIL=app-review@example.edu
 APP_INTERNAL_REVIEW_DISPLAY_NAME=App Review
 APP_INTERNAL_REVIEW_PASSWORD_HASH=$2y$12$...
+APP_INTERNAL_REVIEW_SECONDARY_EMAIL=app-review-2@example.edu
+APP_INTERNAL_REVIEW_SECONDARY_DISPLAY_NAME=App Review 2
+APP_INTERNAL_REVIEW_SECONDARY_PASSWORD_HASH=$2y$12$...
 ```
 
 Restart the backend. `GET /api/auth/providers` then includes `internal`, and `/auth` shows a
