@@ -113,6 +113,7 @@ const handleAccept = async () => {
           <li>We collect your name, email, and profile picture via Google</li>
           <li>Your data stays within the {{ brandName }} platform</li>
           <li>We do not sell or share your personal information</li>
+          <li>We do not use your data for advertising or cross-app tracking</li>
           <li>You can request account deletion anytime</li>
         </ul>
         <RouterLink to="/privacy" target="_blank" class="read-link">Read full policy →</RouterLink>

@@ -77,6 +77,29 @@ class ClubControllerTest {
     private ClubService clubService;
 
     @Test
+    void createClubRequiresPlatformOwner() throws Exception {
+        mockMvc.perform(post("/api/clubs")
+                .principal(oauthToken(STUDENT_EMAIL))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Robotics\",\"category\":\"STEM & Innovation\"}"))
+            .andExpect(status().isForbidden());
+
+        verify(clubService, never()).create(any());
+    }
+
+    @Test
+    void invalidCreateClubInputReturnsBadRequest() throws Exception {
+        Mockito.doThrow(new IllegalArgumentException("Club name is required"))
+            .when(clubService).create(any());
+
+        mockMvc.perform(post("/api/clubs")
+                .principal(oauthToken(OWNER_EMAIL))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"   \",\"category\":\"STEM & Innovation\"}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void deleteClubRequiresPlatformOwner() throws Exception {
         mockMvc.perform(delete("/api/clubs/1").principal(oauthToken(STUDENT_EMAIL)))
             .andExpect(status().isForbidden());

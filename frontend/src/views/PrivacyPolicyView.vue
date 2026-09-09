@@ -9,7 +9,7 @@ const brandName = schoolTemplate.brandName
     <header class="legal-hero">
       <p class="section-label">Legal</p>
       <h1>Privacy Policy</h1>
-      <p>Last updated: July 2026</p>
+      <p>Last updated: September 2026</p>
     </header>
 
     <section class="legal-content">
@@ -33,26 +33,33 @@ const brandName = schoolTemplate.brandName
         the {{ brandName }} platform and your school's instance.
       </p>
 
-      <h2>4. Data Retention</h2>
+      <h2>4. Advertising and Tracking</h2>
+      <p>
+        We do not use account information, profile information, club memberships, or interactions
+        for advertising. We do not show third-party advertising, share personal information with
+        advertisers, or track users across other companies' apps or websites.
+      </p>
+
+      <h2>5. Data Retention</h2>
       <p>
         Your account data is retained as long as your account is active. You can permanently delete
         your account in the app by opening Account, then Profile, then Delete account. Deletion
         removes your profile, memberships, applications, posts, and comments and cannot be undone.
       </p>
 
-      <h2>5. Security</h2>
+      <h2>6. Security</h2>
       <p>
         We use session-based authentication via Google OAuth 2.0. All API access requires
         authentication for protected operations. However, no online service is 100% secure.
       </p>
 
-      <h2>6. Children's Privacy</h2>
+      <h2>7. Children's Privacy</h2>
       <p>
         The Platform is designed for high school students. We comply with applicable student data
         privacy laws. Parents or guardians with concerns may contact the platform administrator.
       </p>
 
-      <h2>7. Contact</h2>
+      <h2>8. Contact</h2>
       <p>
         For privacy-related questions, contact the platform administrator through your school's club
         directory page.

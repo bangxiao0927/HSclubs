@@ -26,7 +26,7 @@ const sessionReady = computed(() => hasCheckedSession.value || !userLoading.valu
 const showCreateModal = ref(false)
 const createLoading = ref(false)
 const createError = ref('')
-const newClub = ref<Partial<Club>>({
+const emptyClubForm = () => ({
   name: '',
   aliasName: '',
   description: '',
@@ -36,23 +36,21 @@ const newClub = ref<Partial<Club>>({
   contactEmail: '',
   advisor: '',
 })
+const newClub = ref(emptyClubForm())
 
 const openCreateModal = () => {
+  if (loading.value || createLoading.value) return
   createError.value = ''
-  newClub.value = {
-    name: '',
-    aliasName: '',
-    description: '',
-    category: clubCategoryOptions[0]?.title ?? '',
-    meetingSchedule: '',
-    location: '',
-    contactEmail: '',
-    advisor: '',
-  }
+  newClub.value = emptyClubForm()
   showCreateModal.value = true
 }
 
+const closeCreateModal = () => {
+  if (!createLoading.value) showCreateModal.value = false
+}
+
 const handleCreateClub = async () => {
+  if (createLoading.value) return
   if (!newClub.value.name?.trim()) {
     createError.value = 'Club name is required.'
     return
@@ -64,9 +62,21 @@ const handleCreateClub = async () => {
   createLoading.value = true
   createError.value = ''
   try {
-    await createClub(newClub.value)
+    const createdClub = await createClub({
+      name: newClub.value.name.trim(),
+      aliasName: newClub.value.aliasName.trim() || null,
+      description: newClub.value.description.trim(),
+      category: newClub.value.category.trim(),
+      meetingSchedule: newClub.value.meetingSchedule.trim(),
+      location: newClub.value.location.trim() || null,
+      contactEmail: newClub.value.contactEmail.trim() || null,
+      advisor: newClub.value.advisor.trim() || null,
+    })
+    clubs.value = [...clubs.value, createdClub]
+    totalClubCount.value += 1
+    hasLoadedOnce.value = true
+    lastFetchedAt.value = new Date()
     showCreateModal.value = false
-    await loadClubs()
   } catch (err) {
     createError.value = err instanceof Error ? err.message : 'Failed to create club'
   } finally {
@@ -193,7 +203,7 @@ const resetFilters = () => {
         <button type="button" class="ghost-btn" @click="loadClubs" :disabled="loading">
           {{ loading ? 'Refreshing…' : 'Refresh data' }}
         </button>
-        <button type="button" class="primary-btn" @click="openCreateModal">+ Create Club</button>
+        <button type="button" class="primary-btn" :disabled="loading" @click="openCreateModal">+ Create Club</button>
       </div>
     </header>
 
@@ -225,7 +235,7 @@ const resetFilters = () => {
     <div v-else>
       <div v-if="!filteredClubs.length && !clubs.length" class="status-card muted">
         <p>No clubs yet. Create the first one to get started.</p>
-        <button type="button" class="primary-btn" @click="openCreateModal">+ Create Club</button>
+        <button type="button" class="primary-btn" :disabled="loading" @click="openCreateModal">+ Create Club</button>
       </div>
       <div v-else-if="filteredClubs.length" class="club-table">
         <article v-for="club in filteredClubs" :key="club.id" class="club-row">
@@ -264,11 +274,11 @@ const resetFilters = () => {
 
     <!-- Create Club Modal -->
     <Teleport to="body">
-      <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
+      <div v-if="showCreateModal" class="modal-overlay" @click.self="closeCreateModal">
         <div class="modal-card">
           <div class="modal-header">
             <h2>Create Club</h2>
-            <button type="button" class="ghost-btn small" @click="showCreateModal = false" aria-label="Close">&times;</button>
+            <button type="button" class="ghost-btn small" :disabled="createLoading" @click="closeCreateModal" aria-label="Close">&times;</button>
           </div>
           <form class="modal-body" @submit.prevent="handleCreateClub">
             <label>
@@ -307,7 +317,7 @@ const resetFilters = () => {
             </label>
             <div v-if="createError" class="status-card error">{{ createError }}</div>
             <div class="modal-actions">
-              <button type="button" class="ghost-btn" @click="showCreateModal = false">Cancel</button>
+              <button type="button" class="ghost-btn" :disabled="createLoading" @click="closeCreateModal">Cancel</button>
               <button type="submit" class="primary-btn" :disabled="createLoading">
                 {{ createLoading ? 'Creating…' : 'Create Club' }}
               </button>

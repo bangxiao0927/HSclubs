@@ -97,6 +97,61 @@ class ClubServiceTest {
         assertThat(captor.getValue()).hasSizeLessThanOrEqualTo(10);
     }
 
+    @Test
+    void createRejectsAMissingNameBeforeWriting() {
+        Club club = new Club();
+        club.setName("   ");
+        club.setCategory("STEM & Innovation");
+
+        assertThatThrownBy(() -> clubService.create(club))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Club name is required");
+
+        verify(clubMapper, never()).insert(any());
+    }
+
+    @Test
+    void createTrimsDetailsAndOverridesServerManagedFields() {
+        Club club = new Club();
+        club.setId(99L);
+        club.setName("  Robotics Club  ");
+        club.setCategory("  STEM & Innovation  ");
+        club.setAliasName("  RC  ");
+        club.setAdvisor("   ");
+        club.setSlug("crafted-slug");
+        club.setStatus("archived");
+        club.setVisibility("private");
+        club.setMemberCount(500);
+
+        clubService.create(club);
+
+        ArgumentCaptor<Club> captor = ArgumentCaptor.captor();
+        verify(clubMapper).insert(captor.capture());
+        Club written = captor.getValue();
+        assertThat(written.getId()).isNull();
+        assertThat(written.getName()).isEqualTo("Robotics Club");
+        assertThat(written.getCategory()).isEqualTo("STEM & Innovation");
+        assertThat(written.getAliasName()).isEqualTo("RC");
+        assertThat(written.getAdvisor()).isNull();
+        assertThat(written.getSlug()).isNull();
+        assertThat(written.getStatus()).isEqualTo("active");
+        assertThat(written.getVisibility()).isEqualTo("public");
+        assertThat(written.getMemberCount()).isNull();
+    }
+
+    @Test
+    void createRejectsFieldsThatExceedDatabaseColumnLengths() {
+        Club club = new Club();
+        club.setName("x".repeat(151));
+        club.setCategory("STEM & Innovation");
+
+        assertThatThrownBy(() -> clubService.create(club))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Club name must be 150 characters or fewer");
+
+        verify(clubMapper, never()).insert(any());
+    }
+
     // Only this dedicated method (backed by ClubMapper#updateImageUrl, a column-scoped SQL
     // statement -- see ClubMapperTest) may change a club's stored image URL. Ordinary update()
     // must never call it, and must never be the path that lets a caller-supplied imageUrl

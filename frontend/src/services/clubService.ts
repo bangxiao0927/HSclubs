@@ -1,5 +1,6 @@
 import type { Club, ClubMember, ClubMembershipRequest } from '../types/club'
 import { buildApiUrl, notifyIfUnauthorized } from './httpClient'
+import { resolveErrorMessage } from './httpErrorMessage'
 
 type FetchClubsOptions = {
   force?: boolean
@@ -31,8 +32,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers})
   if (!response.ok) {
     notifyIfUnauthorized(response)
-    const message = await response.text()
-    throw new Error(message || `Request failed with status ${response.status}`)
+    const message = await resolveErrorMessage(
+      response,
+      `Request failed with status ${response.status}`,
+    )
+    throw new Error(message)
   }
   const raw = await response.text()
   if (!raw) return undefined as T
@@ -230,7 +234,18 @@ export const rejectMembershipRequest = (
   request<void>(clubPath(`/${clubId}/membership-requests/${requestId}`), {
     method: 'DELETE'})
 
-export const createClub = async (data: Partial<Club>) => {
+export interface CreateClubInput {
+  name: string
+  category: string
+  aliasName?: string | null
+  description?: string
+  meetingSchedule?: string
+  location?: string | null
+  contactEmail?: string | null
+  advisor?: string | null
+}
+
+export const createClub = async (data: CreateClubInput) => {
   const club = await request<Club>(clubPath(''), {
     method: 'POST',
     body: JSON.stringify(data),

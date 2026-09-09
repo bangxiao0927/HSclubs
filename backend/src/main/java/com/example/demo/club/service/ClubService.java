@@ -182,8 +182,20 @@ public class ClubService {
     // ---- CRUD ----
 
     public Club create(Club club) {
+        if (club == null) {
+            throw new IllegalArgumentException("Request body must be a club");
+        }
         normalizeClub(club);
+        // Creation accepts club details, not server-managed publication metadata. In particular,
+        // a crafted request must not bypass the defaults used by the owner form.
         club.setId(null);
+        club.setSlug(null);
+        club.setImageUrl(null);
+        club.setMemberCount(null);
+        club.setStatus(ACTIVE_STATUS);
+        club.setVisibility("public");
+        club.setApprovedAt(null);
+        club.setApprovedByOauthUserId(null);
         clubMapper.insert(club);
         // member_count (and instagram_url) are derived columns that BaseColumnList computes
         // with correlated subqueries rather than reading back from the row this insert just
@@ -431,15 +443,24 @@ public class ClubService {
     // ---- Internal helpers ----
 
     private void normalizeClub(Club club) {
+        if (!StringUtils.hasText(club.getName())) {
+            throw new IllegalArgumentException("Club name is required");
+        }
+        club.setName(cleanRequiredField(club.getName(), "Club name", 150));
         if (!StringUtils.hasText(club.getCategory())) {
             throw new IllegalArgumentException("Category is required");
         }
-        String normalizedCategory = club.getCategory().trim();
+        String normalizedCategory = cleanRequiredField(club.getCategory(), "Category", 150);
         if (!ALLOWED_CATEGORIES.contains(normalizedCategory)) {
             throw new IllegalArgumentException("Invalid category");
         }
         club.setCategory(normalizedCategory);
+        club.setAliasName(cleanOptionalField(club.getAliasName(), "Alias name", 150));
+        club.setMeetingSchedule(cleanOptionalField(club.getMeetingSchedule(), "Meeting schedule", 150));
         club.setLocation(ClubLocationNormalizer.normalize(club.getLocation()));
+        club.setLocation(cleanOptionalField(club.getLocation(), "Location", 150));
+        club.setContactEmail(cleanOptionalField(club.getContactEmail(), "Contact email", 150));
+        club.setAdvisor(cleanOptionalField(club.getAdvisor(), "Advisor", 150));
         if (club.getAchievements() == null) {
             club.setAchievements(Collections.emptyList());
         }
@@ -449,6 +470,21 @@ public class ClubService {
         if (!StringUtils.hasText(club.getVisibility())) {
             club.setVisibility("public");
         }
+    }
+
+    private String cleanRequiredField(String value, String label, int maxLength) {
+        String cleaned = value.trim();
+        if (cleaned.length() > maxLength) {
+            throw new IllegalArgumentException(label + " must be " + maxLength + " characters or fewer");
+        }
+        return cleaned;
+    }
+
+    private String cleanOptionalField(String value, String label, int maxLength) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return cleanRequiredField(value, label, maxLength);
     }
 
     private String cleanSearchTerm(String value) {
