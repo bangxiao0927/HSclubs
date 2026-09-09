@@ -109,4 +109,4 @@ Additional rules for every update:
 
 ## License
 
-MIT
+Apache 2.0
