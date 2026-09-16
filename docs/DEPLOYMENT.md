@@ -428,6 +428,10 @@ Two things to check when adapting this for a new list: every club name has to be
 club the list renamed has to be added to `CLUB_RENAMES`, or it is treated as a new club and the
 old one is archived with its data still attached to it.
 
+CI enforces the other direction: `scripts/check-club-sql-sync.mjs` re-runs the generator against
+the committed CSV and fails if any of the three generated files disagrees with it, so a hand edit
+to one of them cannot quietly outlive the next regeneration.
+
 ### Verify
 
 ```sql
