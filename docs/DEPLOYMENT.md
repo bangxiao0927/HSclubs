@@ -393,6 +393,41 @@ not match a single-school deployment.
 mysql -u root -p mydb < docs/schema-migration.sql
 ```
 
+### Refreshing the club list for a new school year
+
+The official club list is re-exported every year, and the repository tracks the current one as
+`Official MVHS Clubs List <year> - Official list.csv`. A live database cannot be refreshed with
+`mvhs_clubs_seed.sql`: that script is the fresh-install path, it inserts explicit primary keys,
+and on a database that already holds a list it collides with the rows already there.
+
+Use the generated `mvhs_clubs_refresh.sql` at the repository root instead. Both files come out of
+the same CSV:
+
+```bash
+# Regenerate from the current list. Pass another export's path to use that instead.
+python3 scripts/generate_clubs_sql.py
+python3 scripts/generate_clubs_sql.py "Official MVHS Clubs List 2026-2027 - Official list.csv"
+
+# Apply to an existing database. Take a backup first (scripts/backup-mysql.sh).
+mysql -u root -p mydb < mvhs_clubs_refresh.sql
+```
+
+The refresh is non-destructive and safe to re-run. It:
+
+1. Renames the clubs the new list carried over under a different name, in place, so each keeps
+   its id and with it its roster, posts and join requests. The pairs live in `CLUB_RENAMES`.
+2. Upserts every club in the list by name, refreshing its description, category, meeting
+   schedule, location, contact email and advisor.
+3. Re-points each listed club's Instagram link, leaving other social rows alone.
+4. Archives the clubs that dropped off the list, rather than deleting them. Archiving is what the
+   platform-owner archive endpoints undo, and deleting would cascade into every child table.
+5. Collapses duplicate names, keeping the lowest id.
+
+Two things to check when adapting this for a new list: every club name has to be in
+`CLUB_CATEGORY_BY_NAME` (the generator fails loudly, naming the club, if one is missing), and any
+club the list renamed has to be added to `CLUB_RENAMES`, or it is treated as a new club and the
+old one is archived with its data still attached to it.
+
 ### Verify
 
 ```sql
