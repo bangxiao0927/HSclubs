@@ -48,6 +48,12 @@ jobs:
     - name: contract sync
       run: node scripts/check-contract-sync.mjs
 
+    # The club CSV feeds three generated SQL files, and one of them had already drifted from its
+    # generator before this guard existed. The generator is Python, so this uses the interpreter
+    # the image ships: setup-python's builds all need a newer glibc than this 22.04 container has.
+    - name: club sql sync
+      run: node scripts/check-club-sql-sync.mjs
+
     # Test frountend
     - name: frontend
       working-directory: frontend
