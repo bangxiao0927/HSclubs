@@ -50,10 +50,12 @@ jobs:
 
     # The club CSV feeds three generated SQL files, and one of them had already drifted from its
     # generator before this guard existed. The generator is Python, so it needs an interpreter.
+    # Pin the version: setup-python's newest builds need a newer glibc than this 22.04 container
+    # has, and '3.x' resolves to one of those.
     - name: Install Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.x'
+        python-version: '3.11'
 
     - name: club sql sync
       run: node scripts/check-club-sql-sync.mjs
