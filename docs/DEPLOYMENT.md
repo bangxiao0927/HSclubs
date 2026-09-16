@@ -762,6 +762,63 @@ With this single-origin layout the frontend build needs no absolute API base URL
 `VITE_API_BASE_URL` empty (or set it to `https://yourdomain.com`) and set
 `FRONTEND_ORIGIN=https://yourdomain.com`.
 
+#### Behind a CDN (Cloudflare)
+
+The requirements above assume the proxy sees the visitor's TCP connection. A CDN in front breaks
+that assumption, and Cloudflare is the case this deployment hit.
+
+Cloudflare sits a proxy tier *above* Caddy, so Caddy's peer becomes a Cloudflare edge address. With
+no `trusted_proxies` configured it still does the safe thing and replaces `X-Forwarded-For` with
+that edge address — but that address is then what the backend reports as the visitor, so every
+request appears to come from Cloudflare and the throttle on `POST /api/auth/internal/login` keys on
+a handful of shared edge IPs.
+
+Trusting `X-Forwarded-For` is not the fix, because Cloudflare *appends* the visitor address to
+whatever the client sent rather than replacing it, so the leftmost entry is client-chosen:
+
+```text
+X-Forwarded-For: 9.9.9.9,203.0.113.7     # 9.9.9.9 came from the caller
+```
+
+The backend reads that leftmost entry, so believing the header directly would let any caller pick
+their own rate-limit key. `CF-Connecting-IP` is the one Cloudflare overwrites itself, so that is
+the header worth trusting — and only once the peer is known to be Cloudflare.
+
+Caddy 2.7+ does both with two server-level options:
+
+```caddy
+{
+	servers {
+		# every range from https://www.cloudflare.com/ips/, space-separated
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 ... 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+	}
+}
+```
+
+Take the ranges from <https://www.cloudflare.com/ips/> (`ips-v4` and `ips-v6`) and refetch them when
+Cloudflare changes them. Join the two files carefully: `ips-v4` has no trailing newline, so a naive
+`cat` welds the last IPv4 range onto the first IPv6 one.
+
+Deploy this *before* flipping the DNS, which is the order that leaves no bad window: a direct peer
+is not in those ranges, so Caddy ignores the headers and keeps using the real peer address. The
+config is correct in both states.
+
+Verify it by comparing `client_ip` against `remote_ip` in the access log. Behind the proxy
+`remote_ip` is the edge and `client_ip` is the visitor; and if you send a forged
+`X-Forwarded-For: 9.9.9.9`, `client_ip` must still be the visitor's real address while
+`CF-Connecting-IP` stays authoritative.
+
+Two things the orange cloud does not do by itself:
+
+- **It does not hide the origin.** The host still answers on its own IP, so restrict 80/443 to the
+  ranges above, or the proxy buys latency and nothing else.
+- **It does not simplify certificates.** Caddy prefers the TLS-ALPN-01 challenge on :443, which
+  Cloudflare terminates before it can reach the origin; Caddy then falls back to HTTP-01 on :80,
+  which Cloudflare does pass through. That fallback is what renews the certificate, so keep :80
+  open to Cloudflare. If a renewal still fails, pin the challenge with `disable_tlsalpn_challenge`
+  in the site's `tls` block.
+
 #### Nginx (alternative)
 
 Only if the host already runs nginx for something else. Note the `X-Forwarded-For` line below:
