@@ -34,6 +34,11 @@ server:
 app:
   club-location-repair:
     enabled: ${APP_CLUB_LOCATION_REPAIR_ENABLED:true}
+  membership:
+    # Membership requests from these email domains are granted immediately, without waiting for a
+    # club president to approve them. Empty (the default) keeps every request manual, which is
+    # what a school copying this repo expects. Comma-separated, for example "mvla.net".
+    auto-approve-email-domains: ${APP_AUTO_APPROVE_EMAIL_DOMAINS:}
   security:
     frontend-origin: ${FRONTEND_ORIGIN}
     allowed-origins:

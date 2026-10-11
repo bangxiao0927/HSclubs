@@ -605,8 +605,27 @@ Applying is gated by the same `ClubVisibilityPolicy` as the detail endpoint, so 
 archived or still pending answers 404 here too rather than quietly queueing a request its
 president would see for a club nobody can open.
 
+A deployment can set `app.membership.auto-approve-email-domains` (comma-separated) to grant
+requests from those domains immediately, in the same transaction, instead of leaving them
+pending for a president. The domain is read from the address the identity provider asserted,
+never from anything the caller sent, which is what lets a school's own domain stand in for "is a
+student here". The list is empty by default, so a fresh deployment keeps every request manual.
+
 ### DELETE /api/clubs/{id}/members/apply
 Cancel own membership application. Requires: authenticated.
+
+### DELETE /api/clubs/{id}/members/{oauthUserId}
+Remove a member from a club. Requires: platform_owner, or club president.
+
+Status: 204 | 400 (not a member of this club) | 403 | 404 (club not found) | 409 (the club's
+only president)
+
+The last-president refusal answers 409 rather than 400: removing the only president would leave
+the club with nobody able to manage its roster, its requests or its posts, so it is refused
+instead of quietly orphaning the club. Assign another president first.
+
+There is no add-a-member endpoint to pair with this one, so a removal can only be undone by the
+removed member applying again.
 
 ---
 

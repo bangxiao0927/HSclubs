@@ -105,6 +105,9 @@ public interface ClubMapper {
                              @Param("oauthUserId") Long oauthUserId,
                              @Param("roleName") String roleName);
 
+    int deleteMember(@Param("clubId") Long clubId,
+                     @Param("oauthUserId") Long oauthUserId);
+
     List<ClubMembershipRequest> findPendingRequestsByClubId(@Param("clubId") Long clubId);
 
     ClubMembershipRequest findPendingRequestByClubAndUser(@Param("clubId") Long clubId,

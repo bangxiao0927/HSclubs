@@ -349,6 +349,12 @@
         ON DUPLICATE KEY UPDATE role_name = role_name
     </insert>
 
+    <delete id="deleteMember">
+        DELETE FROM club_member
+        WHERE club_id = #{clubId}
+          AND oauth_user_id = #{oauthUserId}
+    </delete>
+
     <!-- Membership requests -->
     <resultMap id="MembershipRequestViewMap" type="com.example.demo.club.model.ClubMembershipRequest">
         <id column="id" property="id" />

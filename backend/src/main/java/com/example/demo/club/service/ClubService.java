@@ -11,6 +11,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -19,7 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ClubService {
@@ -37,6 +40,11 @@ public class ClubService {
     // One wording for both ways the same conflict is detected: the check below, and the unique
     // constraint that catches whatever slips past it.
     private static final String DUPLICATE_REQUEST_MESSAGE = "You already have a pending request for this club";
+
+    // Removing a club's only president would leave nobody able to manage its roster, its pending
+    // requests or its posts, so the removal is refused rather than quietly orphaning the club.
+    private static final String LAST_PRESIDENT_MESSAGE =
+        "This is the club's only president. Assign another president before removing them.";
 
     // A search box, not a query language: ten words is far past anything a student types, and
     // bounds how many OR groups one statement can grow.
@@ -70,11 +78,21 @@ public class ClubService {
     private final ClubMapper clubMapper;
     private final OAuthUserMapper oAuthUserMapper;
     private final ObjectMapper objectMapper;
+    private final Set<String> autoApproveEmailDomains;
 
-    public ClubService(ClubMapper clubMapper, OAuthUserMapper oAuthUserMapper, ObjectMapper objectMapper) {
+    public ClubService(ClubMapper clubMapper, OAuthUserMapper oAuthUserMapper, ObjectMapper objectMapper,
+                       @Value("${app.membership.auto-approve-email-domains:}") List<String> autoApproveEmailDomains) {
         this.clubMapper = clubMapper;
         this.oAuthUserMapper = oAuthUserMapper;
         this.objectMapper = objectMapper;
+        // Empty unless the deployment configured a list, so the default behaviour -- every
+        // request waits for a club president -- is unchanged.
+        this.autoApproveEmailDomains = autoApproveEmailDomains == null
+                ? Set.of()
+                : autoApproveEmailDomains.stream()
+                        .filter(StringUtils::hasText)
+                        .map(domain -> domain.trim().toLowerCase(Locale.ROOT))
+                        .collect(Collectors.toUnmodifiableSet());
     }
 
     // ---- Listing ----
@@ -177,6 +195,41 @@ public class ClubService {
         if ("president".equals(normalizedRole)) {
             clubMapper.demoteOtherPresidents(clubId, oauthUserId);
         }
+    }
+
+    /**
+     * Removes a member from a club.
+     *
+     * <p>This is the counterpart to the automatic approval of a request from an auto-approve
+     * domain: without it, a membership granted by a click could never be taken back.
+     *
+     * <p>A club's last president cannot be removed. Letting one leave would leave the club with
+     * nobody who can manage it, so the caller is told to assign another president first.
+     */
+    @Transactional
+    public void removeMember(Long clubId, Long oauthUserId) {
+        List<ClubMemberView> members = clubMapper.findMembersByClubId(clubId);
+        ClubMemberView target = null;
+        int presidentCount = 0;
+        for (ClubMemberView member : members) {
+            if (isPresident(member.getRoleName())) {
+                presidentCount++;
+            }
+            if (oauthUserId != null && oauthUserId.equals(member.getOauthUserId())) {
+                target = member;
+            }
+        }
+        if (target == null) {
+            throw new IllegalArgumentException("Member not found for this club");
+        }
+        if (isPresident(target.getRoleName()) && presidentCount <= 1) {
+            throw new IllegalStateException(LAST_PRESIDENT_MESSAGE);
+        }
+        clubMapper.deleteMember(clubId, oauthUserId);
+    }
+
+    private static boolean isPresident(String roleName) {
+        return roleName != null && "president".equalsIgnoreCase(roleName.trim());
     }
 
     // ---- CRUD ----
@@ -335,6 +388,16 @@ public class ClubService {
             // leaves this service as the same exception rather than as a 500.
             throw new IllegalStateException(DUPLICATE_REQUEST_MESSAGE, e);
         }
+        if (isAutoApproveDomain(viewerEmail)) {
+            // Granted inside the same transaction, so an applicant from an auto-approve domain
+            // never observes a pending state. Re-read rather than trusting the insert to have
+            // produced the row we want: the mapper returns a row count, not the id the delete
+            // below needs.
+            ClubMembershipRequest created = clubMapper.findPendingRequestByClubAndUser(clubId, oauthUserId);
+            if (created != null) {
+                grantMembership(created);
+            }
+        }
     }
 
     public List<ClubMembershipRequest> findPendingRequests(Long clubId) {
@@ -347,10 +410,40 @@ public class ClubService {
         if (request == null || !clubId.equals(request.getClubId())) {
             throw new IllegalArgumentException("Pending request not found for this club");
         }
+        grantMembership(request);
+    }
+
+    /**
+     * Turns a pending request into a membership.
+     *
+     * <p>Shared by a club president's approval and by the automatic approval of an auto-approve
+     * domain, so both leave exactly the same state behind.
+     */
+    private void grantMembership(ClubMembershipRequest request) {
         // Never insertMember here: that statement overwrites role_name, so approving a request
         // from someone already in the club (the president, most damagingly) demoted them.
         clubMapper.insertMemberIfAbsent(request.getClubId(), request.getOauthUserId(), "member");
-        clubMapper.deleteMembershipRequest(requestId);
+        clubMapper.deleteMembershipRequest(request.getId());
+    }
+
+    /**
+     * Whether a request from this address is granted immediately instead of waiting for a club
+     * president to act.
+     *
+     * <p>The list is empty unless {@code app.membership.auto-approve-email-domains} is
+     * configured, so a deployment that says nothing keeps every request manual. The domain is
+     * taken from the address the identity provider asserted, never from anything the caller
+     * supplied, which is what lets a school's own domain stand in for "is a student here".
+     */
+    private boolean isAutoApproveDomain(String email) {
+        if (autoApproveEmailDomains.isEmpty() || !StringUtils.hasText(email)) {
+            return false;
+        }
+        int at = email.lastIndexOf('@');
+        if (at < 0 || at == email.length() - 1) {
+            return false;
+        }
+        return autoApproveEmailDomains.contains(email.substring(at + 1).trim().toLowerCase(Locale.ROOT));
     }
 
     @Transactional

@@ -9,6 +9,7 @@ import {
   fetchMembershipRequests,
   invalidateClubCache,
   rejectMembershipRequest,
+  removeClubMember,
   updateClub,
   updateClubMemberRole,
 } from '../services/clubService'
@@ -37,6 +38,10 @@ const membersLoading = ref(false)
 const membersError = ref('')
 const memberRoleError = ref('')
 const roleSavingMemberId = ref<number | null>(null)
+// Removing a member is the counterpart to auto-approval: a membership granted by a click has to
+// be revocable, so the roster carries a Remove action alongside the owner-only role select.
+const memberRemoveError = ref('')
+const removingMemberId = ref<number | null>(null)
 const memberRoleOptions = [
   { value: 'member', label: 'Member' },
   { value: 'president', label: 'President' },
@@ -356,6 +361,30 @@ const rejectRequest = async (requestId: number) => {
     approvalError.value = err instanceof Error ? err.message : 'Failed to decline request'
   } finally {
     decliningRequestId.value = null
+  }
+}
+
+const removeMember = async (member: ClubMember) => {
+  if (!club.value || !canManageClub.value || removingMemberId.value === member.oauthUserId) {
+    return
+  }
+  // There is no add-a-member endpoint to undo this with, so a member removed by a stray click
+  // can only come back by re-applying. Confirm before taking that step.
+  const label = member.displayName || member.email || 'this member'
+  if (!window.confirm(`Remove ${label} from this club?`)) {
+    return
+  }
+  memberRemoveError.value = ''
+  removingMemberId.value = member.oauthUserId
+  try {
+    await removeClubMember(club.value.id, member.oauthUserId)
+    // Removing drops the row and lowers the club's member count, so the roster, the pending
+    // list (the removed member may re-apply) and the count in the hero all need to catch up.
+    await Promise.all([refreshMembers(), refreshPendingRequests(), refreshClubSnapshot()])
+  } catch (err) {
+    memberRemoveError.value = err instanceof Error ? err.message : 'Failed to remove member'
+  } finally {
+    removingMemberId.value = null
   }
 }
 
@@ -693,6 +722,7 @@ watch(
           </div>
           <template v-else>
             <p v-if="memberRoleError" class="member-hint error" role="alert">{{ memberRoleError }}</p>
+            <p v-if="memberRemoveError" class="member-hint error" role="alert">{{ memberRemoveError }}</p>
             <ul v-if="members.length" class="member-list">
               <li v-for="member in members" :key="member.oauthUserId" class="member-entry">
                 <div class="member-avatar">
@@ -718,6 +748,15 @@ watch(
                   </select>
                 </label>
                 <a v-if="member.email" class="member-email" :href="`mailto:${member.email}`">{{ member.email }}</a>
+                <button
+                  v-if="canManageClub"
+                  type="button"
+                  class="ghost-btn danger"
+                  :disabled="removingMemberId === member.oauthUserId"
+                  @click="removeMember(member)"
+                >
+                  {{ removingMemberId === member.oauthUserId ? 'Removing…' : 'Remove' }}
+                </button>
               </li>
             </ul>
             <p v-else class="member-empty">No members have been linked yet.</p>

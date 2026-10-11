@@ -183,6 +183,20 @@ export const applyToClub = (id: number | string) =>
     method: 'POST',
     body: JSON.stringify({})})
 
+// Removing a member changes the club's memberCount exactly as approving a request does, and
+// there is no fresh club payload here to patch the cached lists with, so drop them instead.
+export const removeClubMember = async (
+  clubId: number | string,
+  oauthUserId: number | string,
+) => {
+  const result = await request<void>(
+    clubPath(`/${clubId}/members/${oauthUserId}`),
+    { method: 'DELETE' },
+  )
+  invalidateClubCache()
+  return result
+}
+
 export const cancelMembershipRequest = (id: number | string) =>
   request<void>(clubPath(`/${id}/members/apply`), {
     method: 'DELETE'})

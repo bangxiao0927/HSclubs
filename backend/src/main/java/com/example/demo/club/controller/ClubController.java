@@ -181,6 +181,25 @@ public class ClubController {
         }
     }
 
+    // A club president, or the platform owner, removes a member. requireManageAccess is the same
+    // guard the roster read uses, so whoever can see the member list is also who can act on it.
+    @DeleteMapping("/{clubSlugOrId}/members/{oauthUserId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeMember(@PathVariable String clubSlugOrId,
+                             @PathVariable Long oauthUserId,
+                             Authentication authentication) {
+        Club club = requireManageAccess(clubSlugOrId, authentication);
+        try {
+            clubService.removeMember(club.getId(), oauthUserId);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        } catch (IllegalStateException ex) {
+            // The last-president refusal is a conflict with the club's current state, not a
+            // malformed request, so it must not be reported as a 400.
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage());
+        }
+    }
+
     // ---- Membership application ----
 
     @PostMapping("/{clubSlugOrId}/members/apply")

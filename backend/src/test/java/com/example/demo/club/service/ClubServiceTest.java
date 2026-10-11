@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.example.demo.auth.mapper.OAuthUserMapper;
 import com.example.demo.club.mapper.ClubMapper;
 import com.example.demo.club.model.Club;
+import com.example.demo.club.model.ClubMemberView;
 import com.example.demo.club.model.ClubMembershipRequest;
 import com.example.demo.club.model.ViewerMembershipStatus;
 import tools.jackson.databind.JsonNode;
@@ -38,7 +39,7 @@ class ClubServiceTest {
         oAuthUserMapper = mock(OAuthUserMapper.class);
         when(clubMapper.findAllPaginated(anyInt(), anyInt())).thenReturn(List.of());
         when(clubMapper.search(any(), any(), any(), any(), any(), anyInt(), anyInt())).thenReturn(List.of());
-        clubService = new ClubService(clubMapper, oAuthUserMapper, objectMapper);
+        clubService = new ClubService(clubMapper, oAuthUserMapper, objectMapper, List.of());
     }
 
     @Test
@@ -432,6 +433,119 @@ class ClubServiceTest {
         verify(clubMapper).insertMemberIfAbsent(3L, 20L, "member");
         verify(clubMapper, never()).insertMember(any(), any(), any());
         verify(clubMapper).deleteMembershipRequest(5L);
+    }
+
+    // A request from a configured auto-approve domain is granted in the same call, so the
+    // applicant never observes a pending state and no club president has to act on it.
+    @Test
+    void applyForMembershipGrantsImmediatelyForAnAutoApproveDomain() {
+        ClubService autoApproving =
+            new ClubService(clubMapper, oAuthUserMapper, objectMapper, List.of("mvla.net"));
+        when(oAuthUserMapper.findIdByEmail("100029182@mvla.net")).thenReturn(21L);
+        when(clubMapper.findMembershipStatusByUserId(3L, 21L)).thenReturn(null);
+        when(clubMapper.findPendingRequestByClubAndUser(3L, 21L))
+            .thenReturn(null)
+            .thenReturn(pendingRequest(9L, 3L, 21L));
+
+        autoApproving.applyForMembership(3L, "100029182@mvla.net");
+
+        verify(clubMapper).insertMembershipRequest(3L, 21L);
+        verify(clubMapper).insertMemberIfAbsent(3L, 21L, "member");
+        verify(clubMapper).deleteMembershipRequest(9L);
+    }
+
+    // The domain is compared as a whole, so an address at a domain that merely ends with the
+    // configured text must not be auto-approved.
+    @Test
+    void applyForMembershipDoesNotAutoApproveALookalikeDomain() {
+        ClubService autoApproving =
+            new ClubService(clubMapper, oAuthUserMapper, objectMapper, List.of("mvla.net"));
+        when(oAuthUserMapper.findIdByEmail("student@notmvla.net")).thenReturn(22L);
+        when(clubMapper.findMembershipStatusByUserId(3L, 22L)).thenReturn(null);
+
+        autoApproving.applyForMembership(3L, "student@notmvla.net");
+
+        verify(clubMapper).insertMembershipRequest(3L, 22L);
+        verify(clubMapper, never()).insertMemberIfAbsent(any(), any(), any());
+        verify(clubMapper, never()).deleteMembershipRequest(any());
+    }
+
+    // No domain configured is the default, and it has to leave the old behaviour untouched: the
+    // request is created and waits for a president, exactly as before.
+    @Test
+    void applyForMembershipStaysPendingWhenNoDomainIsConfigured() {
+        when(oAuthUserMapper.findIdByEmail("student@mvla.net")).thenReturn(23L);
+        when(clubMapper.findMembershipStatusByUserId(3L, 23L)).thenReturn(null);
+
+        clubService.applyForMembership(3L, "student@mvla.net");
+
+        verify(clubMapper).insertMembershipRequest(3L, 23L);
+        verify(clubMapper, never()).insertMemberIfAbsent(any(), any(), any());
+        verify(clubMapper, never()).deleteMembershipRequest(any());
+    }
+
+    // The counterpart to auto-approval: a membership granted by a click has to be revocable, or
+    // a club can never take back a member it did not choose.
+    @Test
+    void removeMemberDeletesTheMembership() {
+        when(clubMapper.findMembersByClubId(3L))
+            .thenReturn(List.of(member(20L, "president"), member(21L, "member")));
+
+        clubService.removeMember(3L, 21L);
+
+        verify(clubMapper).deleteMember(3L, 21L);
+    }
+
+    // Removing the only president would leave nobody able to manage the club's roster, requests
+    // or posts, so it is refused rather than silently orphaning the club.
+    @Test
+    void removeMemberRefusesToRemoveTheOnlyPresident() {
+        when(clubMapper.findMembersByClubId(3L))
+            .thenReturn(List.of(member(20L, "president"), member(21L, "member")));
+
+        assertThatThrownBy(() -> clubService.removeMember(3L, 20L))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("only president");
+
+        verify(clubMapper, never()).deleteMember(any(), any());
+    }
+
+    // The role is stored as free text, so the last-president check has to compare it without
+    // regard to case: "President" is still a president.
+    @Test
+    void removeMemberAllowsRemovingAPresidentWhenAnotherRemains() {
+        when(clubMapper.findMembersByClubId(3L))
+            .thenReturn(List.of(member(20L, "president"), member(21L, "President")));
+
+        clubService.removeMember(3L, 20L);
+
+        verify(clubMapper).deleteMember(3L, 20L);
+    }
+
+    @Test
+    void removeMemberRejectsSomebodyWhoIsNotInTheClub() {
+        when(clubMapper.findMembersByClubId(3L)).thenReturn(List.of(member(20L, "member")));
+
+        assertThatThrownBy(() -> clubService.removeMember(3L, 99L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Member not found");
+
+        verify(clubMapper, never()).deleteMember(any(), any());
+    }
+
+    private static ClubMemberView member(Long oauthUserId, String roleName) {
+        ClubMemberView view = new ClubMemberView();
+        view.setOauthUserId(oauthUserId);
+        view.setRoleName(roleName);
+        return view;
+    }
+
+    private static ClubMembershipRequest pendingRequest(Long id, Long clubId, Long oauthUserId) {
+        ClubMembershipRequest request = new ClubMembershipRequest();
+        request.setId(id);
+        request.setClubId(clubId);
+        request.setOauthUserId(oauthUserId);
+        return request;
     }
 
     private static ViewerMembershipStatus membershipStatus() {
